@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 
-class SpeechTranscriber(Protocol):
+class Stt(Protocol):
     """Transcribe mono float32 audio into text for a given locale."""
 
     async def transcribe(

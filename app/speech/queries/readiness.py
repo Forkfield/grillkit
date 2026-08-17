@@ -3,10 +3,10 @@
 """Speech runtime readiness checks for cross-feature orchestration."""
 
 from app.shared.infrastructure.gateways.whisper_storage import is_installed
-from app.shared.speech_models import normalize_speech_model_size
+from app.shared.stt_models import normalize_stt_model_size
 
 
-class SpeechModelReadiness:
+class SttModelReadiness:
     """Check whether configured Whisper artifacts are available on disk."""
 
     @staticmethod
@@ -19,8 +19,8 @@ class SpeechModelReadiness:
         Returns:
             True when model files exist under ``data/whisper-models/``.
         """
-        size = normalize_speech_model_size(speech_model_size)
+        size = normalize_stt_model_size(speech_model_size)
         return is_installed(size)
 
 
-WhisperReadinessService = SpeechModelReadiness
+WhisperReadinessService = SttModelReadiness

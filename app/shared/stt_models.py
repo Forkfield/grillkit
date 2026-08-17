@@ -5,9 +5,9 @@
 from dataclasses import dataclass
 from typing import Final, Literal
 
-SpeechModelSize = Literal["small", "medium", "large"]
-DEFAULT_SPEECH_MODEL_SIZE: Final[SpeechModelSize] = "small"
-SPEECH_MODEL_SIZES: Final[tuple[SpeechModelSize, ...]] = (
+SttModelSize = Literal["small", "medium", "large"]
+DEFAULT_STT_MODEL_SIZE: Final[SttModelSize] = "small"
+STT_MODEL_SIZES: Final[tuple[SttModelSize, ...]] = (
     "small",
     "medium",
     "large",
@@ -15,7 +15,7 @@ SPEECH_MODEL_SIZES: Final[tuple[SpeechModelSize, ...]] = (
 
 
 @dataclass(frozen=True)
-class SpeechModelSpec:
+class SttModelSpec:
     """Published faster-whisper model for one size tier.
 
     Attributes:
@@ -28,7 +28,7 @@ class SpeechModelSpec:
         quality_hint: Relative transcription quality.
     """
 
-    size: SpeechModelSize
+    size: SttModelSize
     display_name: str
     hf_repo_id: str
     approx_download_mb: int
@@ -37,8 +37,8 @@ class SpeechModelSpec:
     quality_hint: str
 
 
-SPEECH_MODEL_BY_SIZE: Final[dict[SpeechModelSize, SpeechModelSpec]] = {
-    "small": SpeechModelSpec(
+STT_MODEL_BY_SIZE: Final[dict[SttModelSize, SttModelSpec]] = {
+    "small": SttModelSpec(
         size="small",
         display_name="Whisper small",
         hf_repo_id="Systran/faster-whisper-small",
@@ -47,7 +47,7 @@ SPEECH_MODEL_BY_SIZE: Final[dict[SpeechModelSize, SpeechModelSpec]] = {
         speed_hint="Fastest on CPU",
         quality_hint="Good for short answers",
     ),
-    "medium": SpeechModelSpec(
+    "medium": SttModelSpec(
         size="medium",
         display_name="Whisper medium",
         hf_repo_id="Systran/faster-whisper-medium",
@@ -56,7 +56,7 @@ SPEECH_MODEL_BY_SIZE: Final[dict[SpeechModelSize, SpeechModelSpec]] = {
         speed_hint="Slower on CPU",
         quality_hint="Better accuracy and noise handling",
     ),
-    "large": SpeechModelSpec(
+    "large": SttModelSpec(
         size="large",
         display_name="Whisper large",
         hf_repo_id="Systran/faster-whisper-large-v3",
@@ -68,32 +68,32 @@ SPEECH_MODEL_BY_SIZE: Final[dict[SpeechModelSize, SpeechModelSpec]] = {
 }
 
 
-def normalize_speech_model_size(size: str) -> SpeechModelSize:
-    """Return a supported speech model size or raise ``ValueError``.
+def normalize_stt_model_size(size: str) -> SttModelSize:
+    """Return a supported stt model size or raise ``ValueError``.
 
     Args:
         size: Requested size (e.g. ``small``, ``medium``).
 
     Returns:
-        Normalized size present in ``SPEECH_MODEL_BY_SIZE``.
+        Normalized size present in ``STT_MODEL_BY_SIZE``.
 
     Raises:
         ValueError: If the size is not supported.
     """
     code = size.strip().lower()
-    if code not in SPEECH_MODEL_BY_SIZE:
-        supported = ", ".join(SPEECH_MODEL_SIZES)
+    if code not in STT_MODEL_BY_SIZE:
+        supported = ", ".join(STT_MODEL_SIZES)
         raise ValueError(
-            f"Unsupported speech model size '{size}'. Choose one of: {supported}"
+            f"Unsupported stt model size '{size}'. Choose one of: {supported}"
         )
     return code
 
 
-def speech_model_spec_for_size(size: str) -> SpeechModelSpec:
-    """Return speech model metadata for a supported size.
+def stt_model_spec_for_size(size: str) -> SttModelSpec:
+    """Return stt model metadata for a supported size.
 
     Args:
-        size: Speech model size identifier.
+        size: Stt model size identifier.
 
     Returns:
         Model metadata for the size.
@@ -101,5 +101,5 @@ def speech_model_spec_for_size(size: str) -> SpeechModelSpec:
     Raises:
         ValueError: If the size is not supported.
     """
-    code = normalize_speech_model_size(size)
-    return SPEECH_MODEL_BY_SIZE[code]
+    code = normalize_stt_model_size(size)
+    return STT_MODEL_BY_SIZE[code]

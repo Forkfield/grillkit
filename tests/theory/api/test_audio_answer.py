@@ -14,7 +14,7 @@ from app.interview.queries.session_page import SessionPageRender
 from app.interview.schemas.interview import AnswerRead, InterviewRead
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import QuestionVoicePageContext
-from app.speech.schemas.page import SpeechModelPageContext
+from app.speech.schemas.page import SttModelPageContext
 from app.speech.schemas.status import WhisperModelStatusRead
 from tests.fakes import answer_evaluation_json
 from tests.helpers.interview_seed import seed_two_question_interview
@@ -41,10 +41,10 @@ def _ready_speech_status() -> WhisperModelStatusRead:
     )
 
 
-def _speech_model_page_context() -> SpeechModelPageContext:
-    """Build speech model page context for interview page tests."""
+def _speech_model_page_context() -> SttModelPageContext:
+    """Build stt model page context for interview page tests."""
     status = _ready_speech_status()
-    return SpeechModelPageContext(
+    return SttModelPageContext(
         speech_model_status=status,
         speech_model_banner=False,
         status=status,
@@ -100,7 +100,7 @@ def audio_api_client(client, override_ws_ai_provider):
     override_ws_ai_provider(client, [])
     fake = FakeTranscriber("spoken via api")
     with patch(
-        "app.interview.api.deps.resolve_speech_transcriber",
+        "app.interview.api.deps.resolve_stt",
         new=AsyncMock(return_value=fake),
     ):
         yield client
@@ -211,7 +211,7 @@ class TestAudioAnswerApi:
         wav_bytes = minimal_wav_bytes()
 
         with patch(
-            "app.interview.api.deps.resolve_speech_transcriber",
+            "app.interview.api.deps.resolve_stt",
             new=AsyncMock(return_value=None),
         ):
             response = client.post(

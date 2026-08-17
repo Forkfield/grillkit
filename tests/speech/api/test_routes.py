@@ -7,14 +7,14 @@ from unittest.mock import patch
 import pytest
 
 from app.platform.domain.config import AppConfig
-from app.shared.infrastructure.gateways.whisper import WhisperRuntime
+from app.shared.infrastructure.gateways.whisper import WhisperSttRuntime
 from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 
 
 @pytest.fixture(autouse=True)
 def reset_download_state():
     """Reset in-memory download state between tests."""
-    WhisperRuntime.unload()
+    WhisperSttRuntime.unload()
     WhisperModelService.reset_download_state()
     yield
 

@@ -12,7 +12,7 @@ from huggingface_hub import hf_hub_download
 from app.question_voice.schemas import PiperVoiceStatusRead
 from app.shared.infrastructure.artifact_download import ArtifactDownloadService
 from app.shared.infrastructure.artifact_status import ArtifactStatusBuilder
-from app.shared.infrastructure.gateways.piper import PiperRuntime
+from app.shared.infrastructure.gateways.piper import PiperTtsRuntime
 from app.shared.infrastructure.gateways.piper_storage import (
     is_valid_voice_dir,
     is_voice_installed,
@@ -67,8 +67,8 @@ class PiperVoiceService(ArtifactDownloadService):
             key=code,
             service=PiperVoiceService,
             is_installed=lambda: is_voice_installed(code),
-            is_loaded=lambda: PiperRuntime.is_loaded(code),
-            load_error=PiperRuntime.load_error,
+            is_loaded=lambda: PiperTtsRuntime.is_loaded(code),
+            load_error=PiperTtsRuntime.load_error,
             downloading_message="Downloading question voice…",
             missing_message="Question voice is not installed.",
             ready_loaded_message=f"Question voice ready for {locale_label}.",
@@ -104,8 +104,8 @@ class PiperVoiceService(ArtifactDownloadService):
         code = normalize_tts_voice_id(voice_id)
         locale_code = normalize_locale(locale)
         if is_voice_installed(code):
-            if not PiperRuntime.is_loaded(code):
-                await PiperRuntime.load_voice(code)
+            if not PiperTtsRuntime.is_loaded(code):
+                await PiperTtsRuntime.load_voice(code)
             return PiperVoiceService.get_status(code, locale_code)
 
         await PiperVoiceService.schedule_download(
@@ -118,7 +118,7 @@ class PiperVoiceService(ArtifactDownloadService):
     async def _run_download(voice_id: str) -> None:
         """Execute download and installation, updating shared progress state."""
         await PiperVoiceService._download_and_install(voice_id)
-        await PiperRuntime.load_voice(voice_id)
+        await PiperTtsRuntime.load_voice(voice_id)
 
     @staticmethod
     async def _download_and_install(voice_id: str) -> None:

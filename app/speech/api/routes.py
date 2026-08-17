@@ -9,13 +9,13 @@ from app.platform.api.deps import ConfigServiceDep
 from app.platform.domain.config import AppConfig
 from app.shared.api.negotiated_response import negotiated_response
 from app.shared.locales import DEFAULT_LOCALE, normalize_locale
-from app.shared.speech_models import (
-    DEFAULT_SPEECH_MODEL_SIZE,
-    SPEECH_MODEL_BY_SIZE,
-    normalize_speech_model_size,
+from app.shared.stt_models import (
+    DEFAULT_STT_MODEL_SIZE,
+    STT_MODEL_BY_SIZE,
+    normalize_stt_model_size,
 )
 from app.speech.api.deps import WhisperModelServiceDep
-from app.speech.schemas.options import SpeechModelOptionRead
+from app.speech.schemas.options import SttModelOptionRead
 
 router = APIRouter(prefix="/speech", tags=["speech"])
 
@@ -37,11 +37,11 @@ def _resolve_speech_model_target(
         Normalized speech model size and locale codes.
     """
     if size is not None:
-        resolved_size = normalize_speech_model_size(size)
+        resolved_size = normalize_stt_model_size(size)
     elif config is not None:
-        resolved_size = normalize_speech_model_size(config.speech_model_size)
+        resolved_size = normalize_stt_model_size(config.speech_model_size)
     else:
-        resolved_size = DEFAULT_SPEECH_MODEL_SIZE
+        resolved_size = DEFAULT_STT_MODEL_SIZE
 
     if locale is not None:
         resolved_locale = normalize_locale(locale)
@@ -134,7 +134,7 @@ async def speech_model_options() -> JSONResponse:
         JSON list of size options with download and performance hints.
     """
     options = [
-        SpeechModelOptionRead(
+        SttModelOptionRead(
             size=spec.size,
             display_name=spec.display_name,
             approx_download_mb=spec.approx_download_mb,
@@ -142,6 +142,6 @@ async def speech_model_options() -> JSONResponse:
             speed_hint=spec.speed_hint,
             quality_hint=spec.quality_hint,
         ).model_dump()
-        for spec in SPEECH_MODEL_BY_SIZE.values()
+        for spec in STT_MODEL_BY_SIZE.values()
     ]
     return JSONResponse({"options": options})

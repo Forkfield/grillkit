@@ -9,15 +9,15 @@ import pytest
 from app.platform.domain.config import AppConfig, ConfigService
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.speech.domain.stt_loader import SttModelLoader
-from app.speech.domain.transcriber_resolver import (
-    resolve_speech_transcriber,
-    speech_transcriber_unavailable_message,
+from app.speech.domain.stt_resolver import (
+    resolve_stt,
+    stt_unavailable_message,
 )
 from app.speech.domain.tts_engine import TtsEngine
 
 
 class FakeTranscriber:
-    """Fake transcriber implementing SpeechTranscriber protocol."""
+    """Fake transcriber implementing Stt protocol."""
 
     async def transcribe(self, audio, locale):
         return "fake transcript"
@@ -44,8 +44,8 @@ class MockConfigServiceWithModel(ConfigService):
         )
 
 
-class TestResolveSpeechTranscriber:
-    """Tests for resolve_speech_transcriber."""
+class TestResolveStt:
+    """Tests for resolve_stt."""
 
     def _coordinator(
         self,
@@ -73,7 +73,7 @@ class TestResolveSpeechTranscriber:
         fake = FakeTranscriber()
         coordinator, _ = self._coordinator(transcriber=fake)
 
-        result = await resolve_speech_transcriber(coordinator)
+        result = await resolve_stt(coordinator)
 
         assert result is fake
 
@@ -86,7 +86,7 @@ class TestResolveSpeechTranscriber:
             config_service=MockConfigServiceWithModel,
         )
 
-        result = await resolve_speech_transcriber(coordinator)
+        result = await resolve_stt(coordinator)
 
         assert result is fake
         loader.load_size.assert_awaited_once_with("small")
@@ -96,7 +96,7 @@ class TestResolveSpeechTranscriber:
         """Returns None when there is no saved config."""
         coordinator, _ = self._coordinator(get_side_effect=[None, None])
 
-        result = await resolve_speech_transcriber(coordinator)
+        result = await resolve_stt(coordinator)
 
         assert result is None
 
@@ -108,7 +108,7 @@ class TestResolveSpeechTranscriber:
             config_service=MockConfigServiceWithModel,
         )
 
-        result = await resolve_speech_transcriber(coordinator)
+        result = await resolve_stt(coordinator)
 
         assert result is None
         loader.load_size.assert_awaited_once_with("small")
@@ -121,13 +121,13 @@ class TestResolveSpeechTranscriber:
             config_service=MockConfigServiceWithModel,
         )
 
-        await resolve_speech_transcriber(coordinator)
+        await resolve_stt(coordinator)
 
         loader.load_size.assert_awaited_once_with("small")
 
 
-class TestSpeechTranscriberUnavailableMessage:
-    """Tests for speech_transcriber_unavailable_message."""
+class TestSttUnavailableMessage:
+    """Tests for stt_unavailable_message."""
 
     def _coordinator(self, *, load_error=None) -> SpeechRuntimeCoordinator:
         loader = MagicMock(spec=SttModelLoader)
@@ -141,7 +141,7 @@ class TestSpeechTranscriberUnavailableMessage:
         """Returns the standard unavailable message."""
         coordinator = self._coordinator(load_error=None)
 
-        msg = speech_transcriber_unavailable_message(coordinator)
+        msg = stt_unavailable_message(coordinator)
 
         assert "not loaded" in msg
         assert "Download it in Configuration" in msg
@@ -150,6 +150,6 @@ class TestSpeechTranscriberUnavailableMessage:
         """Appends the runtime load error when one exists."""
         coordinator = self._coordinator(load_error="Out of memory")
 
-        msg = speech_transcriber_unavailable_message(coordinator)
+        msg = stt_unavailable_message(coordinator)
 
         assert "Speech model load error: Out of memory" in msg

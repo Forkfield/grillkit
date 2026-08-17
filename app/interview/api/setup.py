@@ -24,7 +24,7 @@ from app.platform.api.deps import ConfigServiceDep
 from app.shared import coding as coding_bank
 from app.shared.questions import list_categories, list_levels, list_tracks
 from app.speech.api.deps import WhisperModelServiceDep
-from app.speech.queries.speech_page import SpeechModelPageService
+from app.speech.queries.speech_page import SttModelPageService
 from app.templating import templates
 
 router = APIRouter(prefix="/setup", tags=["setup"])
@@ -79,7 +79,7 @@ async def setup_page(
         "setup.html",
         {
             **setup_form_context(locale=config.locale),
-            **SpeechModelPageService.build_page_context(
+            **SttModelPageService.build_page_context(
                 config,
                 whisper_model_service=whisper_model_service,
             ).model_dump(),
@@ -258,7 +258,7 @@ async def create_interview(
                     min_coding_task_count=min_coding,
                     initial_wizard_step="review",
                 ),
-                **SpeechModelPageService.build_page_context(
+                **SttModelPageService.build_page_context(
                     config,
                     whisper_model_service=whisper_model_service,
                 ).model_dump(),

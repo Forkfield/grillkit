@@ -5,9 +5,9 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.question_voice.schemas import PiperVoiceStatusRead
-from app.shared.speech_models import (
-    SPEECH_MODEL_BY_SIZE,
-    SpeechModelSpec,
+from app.shared.stt_models import (
+    STT_MODEL_BY_SIZE,
+    SttModelSpec,
 )
 from app.speech.schemas.status import WhisperModelStatusRead
 
@@ -189,11 +189,11 @@ def speech_model_specs_for_config() -> dict[str, SpeechModelSpecRead]:
     """
     return {
         size: speech_model_spec_read_from(spec)
-        for size, spec in SPEECH_MODEL_BY_SIZE.items()
+        for size, spec in STT_MODEL_BY_SIZE.items()
     }
 
 
-def speech_model_spec_read_from(spec: SpeechModelSpec) -> SpeechModelSpecRead:
+def speech_model_spec_read_from(spec: SttModelSpec) -> SpeechModelSpecRead:
     """Map a speech model spec to a read model.
 
     Args:

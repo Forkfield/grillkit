@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from app.speech.schemas.status import WhisperModelStatusRead
 
 
-class SpeechModelPageContext(BaseModel):
+class SttModelPageContext(BaseModel):
     """Keys shared by config, setup, and interview templates for Whisper status.
 
     Attributes:

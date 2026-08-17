@@ -14,7 +14,7 @@ from app.platform.schemas import (
 from app.question_voice.queries.voice_page import QuestionVoicePageService
 from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 from app.shared.locales import SUPPORTED_LOCALES
-from app.speech.queries.speech_page import SpeechModelPageService
+from app.speech.queries.speech_page import SttModelPageService
 
 
 async def build_page_context(
@@ -39,7 +39,7 @@ async def build_page_context(
     Returns:
         Frozen page context for the configuration template.
     """
-    speech_ctx = SpeechModelPageService.build_page_context(
+    speech_ctx = SttModelPageService.build_page_context(
         config,
         whisper_model_service=whisper_model_service,
     )

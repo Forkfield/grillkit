@@ -20,7 +20,7 @@ from app.interview.api.deps import (
     AIProviderDep,
     CompleteSessionDep,
     InterviewLoaderDep,
-    SpeechTranscriberDep,
+    SttDep,
     TheorySubmissionServiceDep,
 )
 from app.shared.api.negotiated_response import safe_send_json
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 async def submit_theory_audio_answer(
     interview_id: str,
     provider: AIProviderDep,
-    transcriber: SpeechTranscriberDep,
+    transcriber: SttDep,
     submission_service: TheorySubmissionServiceDep,
     question_id: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],

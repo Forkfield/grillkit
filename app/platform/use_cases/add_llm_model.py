@@ -8,7 +8,7 @@ from app.platform.domain.config import AppConfig, ConfigService
 from app.platform.domain.llm_catalog import LLMCatalogService
 from app.platform.schemas import NewLLMModel
 from app.shared.locales import DEFAULT_LOCALE
-from app.shared.speech_models import DEFAULT_SPEECH_MODEL_SIZE
+from app.shared.stt_models import DEFAULT_STT_MODEL_SIZE
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class AddLLMModelUseCase:
             speech_model_size = (
                 config.speech_model_size
                 if config is not None
-                else DEFAULT_SPEECH_MODEL_SIZE
+                else DEFAULT_STT_MODEL_SIZE
             )
             probe_config = AppConfig(
                 provider_type="openai-compatible",

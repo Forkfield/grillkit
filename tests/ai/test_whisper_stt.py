@@ -1,13 +1,13 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for FasterWhisperTranscriber."""
+"""Tests for WhisperStt."""
 
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from app.ai.faster_whisper_transcriber import FasterWhisperTranscriber
+from app.ai.whisper_stt import WhisperStt
 
 
 class FakeSegment:
@@ -17,7 +17,7 @@ class FakeSegment:
         self.text = text
 
 
-class TestFasterWhisperTranscriber:
+class TestWhisperStt:
     """Tests for the faster-whisper adapter."""
 
     @pytest.mark.asyncio
@@ -27,7 +27,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = ([segment], None)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(16000, dtype=np.float32)
         text = await transcriber.transcribe(audio, "en")
 
@@ -45,7 +45,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = ([segment], None)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(8000, dtype=np.float32)
         await transcriber.transcribe(audio, "ru")
 
@@ -59,7 +59,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = ([segment], None)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(8000, dtype=np.float32)
         text = await transcriber.transcribe(audio, " RU ")
 
@@ -74,7 +74,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = (segments, None)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(8000, dtype=np.float32)
         text = await transcriber.transcribe(audio, "en")
 
@@ -86,7 +86,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = ([], None)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(8000, dtype=np.float32)
         text = await transcriber.transcribe(audio, "en")
 
@@ -102,7 +102,7 @@ class TestFasterWhisperTranscriber:
         with patch(
             "asyncio.to_thread", side_effect=lambda f, *a, **k: f(*a, **k)
         ) as mock_to_thread:  # noqa: E501
-            transcriber = FasterWhisperTranscriber(model)
+            transcriber = WhisperStt(model)
             audio = np.zeros(8000, dtype=np.float32)
             await transcriber.transcribe(audio, "en")
 
@@ -115,7 +115,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = (segments, None)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(8000, dtype=np.float32)
         text = await transcriber.transcribe(audio, "en")
 
@@ -130,7 +130,7 @@ class TestFasterWhisperTranscriber:
         model = MagicMock()
         model.transcribe.return_value = ([segment], info)
 
-        transcriber = FasterWhisperTranscriber(model)
+        transcriber = WhisperStt(model)
         audio = np.zeros(8000, dtype=np.float32)
         text = await transcriber.transcribe(audio, "en")
 

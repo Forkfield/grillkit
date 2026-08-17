@@ -29,7 +29,7 @@ from app.shared.locales import (
     TIMEOUT_CHAT_LABELS,
     localized_string,
 )
-from app.speech.queries.speech_page import SpeechModelPageService
+from app.speech.queries.speech_page import SttModelPageService
 from app.theory.queries.task_page import ActiveTheoryTaskPage as TheoryPageService
 from app.theory.schemas.page import TheoryPageContext
 
@@ -221,7 +221,7 @@ class ActiveSessionPage:
             theory=theory,
             uow=self._uow,
         ).model_dump()
-        speech = SpeechModelPageService.build_page_context(
+        speech = SttModelPageService.build_page_context(
             config,
             whisper_model_service=whisper_model_service,
         ).model_dump()

@@ -7,7 +7,7 @@ import json
 import logging
 
 from app.ai.base import AIProvider
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.interview.domain.exceptions import InterviewDomainError
 from app.interview.support.ai_errors import ai_error_message_for_client
 from app.shared.infrastructure.audio_wav import validate_wav_bytes
@@ -53,7 +53,7 @@ class TheoryAudioAnswerAdapter:
         question_id: str,
         wav_bytes: bytes,
         provider: AIProvider,
-        transcriber: SpeechTranscriber,
+        transcriber: Stt,
         submission_service: TheorySubmissionService,
     ) -> AsyncIterator[str]:
         """Map audio answer service events to NDJSON response lines.

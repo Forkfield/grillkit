@@ -18,9 +18,9 @@ from app.speech.api.dictation_protocol import (
     DICTATION_SERVER_READY,
     dictation_message,
 )
-from app.speech.domain.transcriber_resolver import (
-    resolve_speech_transcriber,
-    speech_transcriber_unavailable_message,
+from app.speech.domain.stt_resolver import (
+    resolve_stt,
+    stt_unavailable_message,
 )
 from app.speech.use_cases.dictation import DictationSession
 
@@ -77,11 +77,11 @@ async def interview_dictation_ws(
         await _reject_dictation(websocket, "Interview is not active")
         return
 
-    transcriber = await resolve_speech_transcriber(coordinator)
-    if transcriber is None:
+    stt = await resolve_stt(coordinator)
+    if stt is None:
         await _reject_dictation(
             websocket,
-            speech_transcriber_unavailable_message(coordinator),
+            stt_unavailable_message(coordinator),
         )
         return
 
@@ -119,7 +119,7 @@ async def interview_dictation_ws(
                             )
                         )
                         continue
-                    final_text = await session.finalize(transcriber, interview.locale)
+                    final_text = await session.finalize(stt, interview.locale)
                     await websocket.send_json(
                         dictation_message(
                             DICTATION_SERVER_FINAL,

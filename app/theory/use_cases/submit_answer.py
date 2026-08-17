@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 import logging
 
 from app.ai.base import AIProvider
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.interview.domain.events import (
     AnswerSavedEvent,
     EvaluatingEvent,
@@ -296,7 +296,7 @@ class SubmitTheoryAnswer:
         question_id: str,
         round_num: int,
         wav_bytes: bytes,
-        transcriber: SpeechTranscriber,
+        transcriber: Stt,
         locale: str,
     ) -> str:
         """Transcribe WAV audio and persist the task answer text.
@@ -547,7 +547,7 @@ class SubmitTheoryAnswer:
         question_id: str,
         wav_bytes: bytes,
         provider: AIProvider,
-        transcriber: SpeechTranscriber,
+        transcriber: Stt,
     ) -> AsyncIterator[InterviewEvent]:
         """Submit an audio answer and yield NDJSON-compatible service events.
 
@@ -581,7 +581,7 @@ class SubmitTheoryAnswer:
         question_id: str,
         wav_bytes: bytes,
         provider: AIProvider,
-        transcriber: SpeechTranscriber,
+        transcriber: Stt,
     ) -> AsyncIterator[InterviewEvent]:
         self.require_audio_answer_enabled()
         validate_wav_bytes(wav_bytes)
@@ -726,7 +726,7 @@ class SubmitTheoryAnswer:
         question_id: str,
         wav_bytes: bytes,
         provider: AIProvider,
-        transcriber: SpeechTranscriber,
+        transcriber: Stt,
     ) -> list[InterviewEvent]:
         """Submit an audio answer and collect all stream events.
 

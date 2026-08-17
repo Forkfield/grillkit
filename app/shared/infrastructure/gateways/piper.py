@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class PiperGateway(InProcessArtifactRuntime):
+class PiperTtsGateway(InProcessArtifactRuntime):
     """Hold a loaded :class:`PiperVoice` for the configured question voice.
 
     Satisfies the :class:`TtsEngine` protocol, so it can be injected into the
@@ -113,4 +113,4 @@ class PiperGateway(InProcessArtifactRuntime):
 
 
 # Single in-process runtime instance shared by the coordinator and status services.
-PiperRuntime = PiperGateway()
+PiperTtsRuntime = PiperTtsGateway()

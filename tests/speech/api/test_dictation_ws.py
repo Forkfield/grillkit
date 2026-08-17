@@ -48,7 +48,7 @@ class TestDictationWebSocket:
                 return_value=_active_interview(),
             ),
             patch(
-                "app.speech.api.dictation.resolve_speech_transcriber",
+                "app.speech.api.dictation.resolve_stt",
                 new=AsyncMock(return_value=None),
             ),
             client.websocket_connect("/interview/test-session/dictation") as ws,
@@ -69,7 +69,7 @@ class TestDictationWebSocket:
                 return_value=_active_interview(),
             ),
             patch(
-                "app.speech.api.dictation.resolve_speech_transcriber",
+                "app.speech.api.dictation.resolve_stt",
                 new=AsyncMock(return_value=mock_transcriber),
             ),
             patch(

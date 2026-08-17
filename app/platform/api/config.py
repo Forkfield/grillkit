@@ -20,7 +20,7 @@ from app.platform.queries.platform_page import build_page_context
 from app.platform.schemas import NewLLMModel
 from app.platform.use_cases.add_llm_model import AddLLMModelResult
 from app.shared.locales import DEFAULT_LOCALE
-from app.shared.speech_models import DEFAULT_SPEECH_MODEL_SIZE
+from app.shared.stt_models import DEFAULT_STT_MODEL_SIZE
 from app.speech.api.deps import WhisperModelServiceDep
 from app.templating import templates
 
@@ -33,7 +33,7 @@ async def _config_from_form(
     api_key: str = Form(""),
     timeout: float = Form(60.0),
     locale: str = Form(DEFAULT_LOCALE),
-    speech_model_size: str = Form(DEFAULT_SPEECH_MODEL_SIZE),
+    speech_model_size: str = Form(DEFAULT_STT_MODEL_SIZE),
     question_voice_enabled: bool = Form(False),
 ) -> tuple[AppConfig, bool, str]:
     """Parse the config form, build AppConfig, and test the connection."""

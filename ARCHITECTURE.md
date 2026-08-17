@@ -42,12 +42,8 @@ grillkit/
 │   │       └── base.py         # Repository[T], SqlAlchemyRepository[T]
 │   ├── ai/
 │   │   ├── base.py             # AIProvider protocol
-│   │   ├── speech_transcriber.py  # SpeechTranscriber protocol (offline dictation)
-│   │   ├── audio_probe.py      # Minimal WAV bytes for connectivity / audio tests
-│   │   ├── factory.py          # ProviderFactory.from_config()
-│   │   ├── llm_models.py       # Catalog types; slugify_model_id(), generate_model_id()
-│   │   ├── openai_compatible.py
-│   │   └── faster_whisper_transcriber.py
+│   │   ├── stt.py               # Stt protocol (speech-to-text / offline dictation)
+│   │   ├── whisper_stt.py        # WhisperStt implementation of the Stt protocol
 │   ├── platform/
 │   │   ├── schemas.py          # Config page read models, NewLLMModel (display_name only), mappers
 │   │   ├── api/
@@ -253,7 +249,7 @@ grillkit/
 | `interview/queries/results_page.py` | Completed session hub context (`CompletedSessionResults`) |
 | `theory/queries/review_page.py`, `coding/queries/review_page.py` | Post-session section review page builders |
 | `shared/infrastructure/models.py` | ORM models |
-| `ai/` | Provider adapters (`AIProvider`, `SpeechTranscriber`) |
+| `ai/` | Provider adapters (`AIProvider`, `Stt`) |
 | `shared/questions.py` | Read-only YAML question bank access |
 
 Workflow use cases (submit, create, complete, section creation, evaluation persistence, navigation) are **instance classes** constructed with `InterviewUnitOfWork`. FastAPI dependencies in `interview/api/deps.py` yield scoped UoW instances. Read-only helpers live in `*/queries/` and may remain static until migrated.
@@ -263,14 +259,14 @@ Workflow use cases (submit, create, complete, section creation, evaluation persi
 Dependencies flow **downward** (caller → callee). Plain-text diagram for editors that do not render Mermaid.
 
 ```
-main.py ──► lifespan: init_db(), SpeechRuntimeCoordinator.startup() (Whisper + Piper when configured)
+main.py ──► lifespan: init_db(), SpeechRuntimeCoordinator.startup() (WhisperStt + PiperTts when configured)
   ├── interview/api/  (dashboard, setup, routes)
   │     ├── routes.py ──► ws_protocol, errors, page (full template context)
   │     └── deps.py ──► interview/use_cases/*, interview/queries/*
   ├── platform/api/config.py ──► platform/use_cases/config, platform/queries/*
   ├── question_voice/api/routes.py ──► question_voice/use_cases/*
   └── speech/api/  (routes, dictation)
-        ├── dictation.py ──► dictation_protocol, transcriber_resolver, dictation session
+        ├── dictation.py ──► dictation_protocol, stt_resolver, dictation session
         └── routes.py ──► speech/queries/speech_page
 
 interview/api/routes.py ──► question_voice/use_cases/generate_question_audio, interview/api/deps (AIProvider)
@@ -356,9 +352,9 @@ flowchart TB
   interview_deps --> ai_context
   dictation --> dictation_protocol
   dictation --> dictation_svc[dictation session]
-  dictation_svc --> speech_transcriber_proto[speech_transcriber]
+  dictation_svc --> stt_proto[stt]
   speech_router --> whisper_model
-  whisper_runtime --> faster_whisper_transcriber
+  whisper_runtime --> whisper_stt
   subgraph interview_uc [interview/use_cases]
     interview_creation[create_session]
     interview_completion[complete_session]
@@ -398,7 +394,7 @@ flowchart TB
   subgraph speech_q [speech/queries]
     speech_page[speech_page]
   end
-  faster_whisper_transcriber --> speech_transcriber_proto
+  whisper_stt --> stt_proto
   whisper_model --> whisper_runtime
   whisper_model --> whisper_storage
   whisper_runtime --> whisper_storage
@@ -418,7 +414,7 @@ flowchart TB
   subgraph ai_layer [ai]
     factory
     openai_compatible
-    faster_whisper_transcriber
+    whisper_stt
   end
   uow --> repos
   subgraph interview_repos [interview/repositories]
@@ -642,7 +638,7 @@ Client → binary PCM (16-bit LE mono, 16 kHz)
   → DictationSession.append_pcm()
 
 Client → {"type":"stop"}
-  → DictationSession.finalize(speech_transcriber, interview.locale)
+  → DictationSession.finalize(stt, interview.locale)
   → {"type":"final","text":"..."} → connection closes
 ```
 
@@ -655,7 +651,7 @@ User → GET /config (speech_model_size, locale)
 User → POST /speech/model/download
   → WhisperModelService.start_download(size from config)
        → Hugging Face snapshot → data/whisper-models/<size>/
-       → WhisperRuntime.load_size(size) → transcriber in the in-process runtime
+       → WhisperSttRuntime.load_size(size) → STT engine in the in-process runtime
 User → GET /speech/model/status (HTMX poll while downloading)
 ```
 
@@ -815,7 +811,7 @@ Optional offline Piper synthesis in the main app process.
 | Config gate | `question_voice_enabled` in `data/config.json` |
 | Voice id | `tts_voice_id` on `AppConfig` (default per locale in `app/shared/tts_voices.py`) |
 | Voice files | `data/piper-voices/<voice_id>/` via `POST /speech/tts/voice/download` on `/config` |
-| Synthesis | `PiperRuntime` in-process (`piper-tts` dependency) |
+| Synthesis | `PiperTtsRuntime` in-process (`piper-tts` dependency) |
 | App cache | `data/tts-cache/v2/{locale}/{sha256}.wav` via `TtsCacheService` |
 | Audio route | `GET /interview/{id}/question-audio` — `question_text` snapshot only, never `question_code` |
 | Status | `GET /speech/tts/status` — banners when voice is missing, downloading, or not loaded |

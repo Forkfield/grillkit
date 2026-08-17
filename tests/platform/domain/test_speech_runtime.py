@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.platform.domain.config import AppConfig
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.speech.domain.stt_loader import SttModelLoader
@@ -41,7 +41,7 @@ def make_loader(
     *,
     installed: bool = True,
     loaded: bool = False,
-    transcriber: SpeechTranscriber | None = None,
+    transcriber: Stt | None = None,
 ) -> MagicMock:
     """Build a spec'd STT loader mock with predictable defaults."""
     loader = MagicMock(spec=SttModelLoader)

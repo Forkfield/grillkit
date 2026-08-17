@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.speech.queries.readiness import SpeechModelReadiness as WhisperReadinessService
+from app.speech.queries.readiness import SttModelReadiness as WhisperReadinessService
 
 
 class TestWhisperReadinessService:
@@ -44,5 +44,5 @@ class TestWhisperReadinessService:
 
     def test_invalid_size_raises(self):
         """Raises ValueError for unsupported model sizes."""
-        with pytest.raises(ValueError, match="Unsupported speech model size"):
+        with pytest.raises(ValueError, match="Unsupported stt model size"):
             WhisperReadinessService.is_model_installed("huge")

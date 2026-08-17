@@ -5,7 +5,7 @@
 from pydantic import BaseModel, ConfigDict
 
 
-class SpeechModelOptionRead(BaseModel):
+class SttModelOptionRead(BaseModel):
     """Speech model size metadata for setup and config UI.
 
     Attributes:

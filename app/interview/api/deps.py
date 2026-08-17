@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException
 
 from app.ai.base import AIProvider
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.coding.queries.loader import CodingTaskLoader as CodingStateService
 from app.coding.queries.review_page import CodingReviewPage as CodingReviewService
 from app.coding.use_cases.create_section import CreateCodingSection
@@ -24,9 +24,9 @@ from app.interview.use_cases.create_session import CreateInterviewSession
 from app.platform.api.deps import SpeechRuntimeDep
 from app.shared.application.uow_deps import UoWAutoCommitDep, UoWDep
 from app.shared.infrastructure.gateways.ai_context import ai_provider_from_config
-from app.speech.domain.transcriber_resolver import (
-    resolve_speech_transcriber,
-    speech_transcriber_unavailable_message,
+from app.speech.domain.stt_resolver import (
+    resolve_stt,
+    stt_unavailable_message,
 )
 from app.theory.queries.review_page import TheoryReviewPage as TheoryReviewService
 from app.theory.use_cases.create_section import CreateTheorySection
@@ -215,27 +215,27 @@ CodingReviewServiceDep = Annotated[
 AIProviderDep = Annotated[AIProvider, Depends(get_ai_provider)]
 
 
-async def get_speech_transcriber(
+async def get_stt(
     coordinator: SpeechRuntimeDep,
-) -> SpeechTranscriber:
-    """Resolve a loaded speech transcriber through the speech runtime.
+) -> Stt:
+    """Resolve a loaded STT engine through the speech runtime.
 
     Args:
         coordinator: App-lifetime speech runtime coordinator.
 
     Returns:
-        Loaded speech transcriber.
+        Loaded STT engine.
 
     Raises:
         HTTPException: When a speech model is not installed or loaded.
     """
-    transcriber = await resolve_speech_transcriber(coordinator)
-    if transcriber is None:
+    stt = await resolve_stt(coordinator)
+    if stt is None:
         raise HTTPException(
             status_code=503,
-            detail=speech_transcriber_unavailable_message(coordinator),
+            detail=stt_unavailable_message(coordinator),
         )
-    return transcriber
+    return stt
 
 
-SpeechTranscriberDep = Annotated[SpeechTranscriber, Depends(get_speech_transcriber)]
+SttDep = Annotated[Stt, Depends(get_stt)]

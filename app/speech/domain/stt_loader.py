@@ -4,11 +4,11 @@
 
 from typing import Protocol
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 
 
 class SttModelLoader(Protocol):
-    """Load and hold a single in-memory :class:`SpeechTranscriber`.
+    """Load and hold a single in-memory :class:`Stt`.
 
     A loader is the concrete bridge between a vendor's model (e.g. faster-whisper)
     and the rest of the application. The :class:`SpeechRuntimeCoordinator` treats
@@ -36,6 +36,6 @@ class SttModelLoader(Protocol):
         """Load or reload the model for ``size``, returning success."""
         ...
 
-    def get(self) -> SpeechTranscriber | None:
+    def get(self) -> Stt | None:
         """Return the currently loaded transcriber, if any."""
         ...

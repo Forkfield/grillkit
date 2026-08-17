@@ -2,15 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Resolve a loaded speech transcriber through the speech runtime coordinator."""
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 
 _UNLOADED_MESSAGE = "Speech model is not loaded. Download it in Configuration."
 
 
-async def resolve_speech_transcriber(
+async def resolve_stt(
     coordinator: SpeechRuntimeCoordinator,
-) -> SpeechTranscriber | None:
+) -> Stt | None:
     """Return a loaded speech transcriber, attempting runtime load when needed.
 
     Args:
@@ -28,7 +28,7 @@ async def resolve_speech_transcriber(
     return transcriber
 
 
-def speech_transcriber_unavailable_message(
+def stt_unavailable_message(
     coordinator: SpeechRuntimeCoordinator,
 ) -> str:
     """Build a user-facing message when no speech transcriber is loaded.

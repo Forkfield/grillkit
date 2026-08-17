@@ -1,6 +1,6 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""faster-whisper implementation of :class:`~app.ai.speech_transcriber.SpeechTranscriber`."""
+"""faster-whisper implementation of :class:`~app.ai.stt.Stt`."""
 
 import asyncio
 import logging
@@ -14,7 +14,7 @@ from app.shared.locales import normalize_locale
 logger = logging.getLogger(__name__)
 
 
-class FasterWhisperTranscriber:
+class WhisperStt:
     """Transcribe audio using an in-memory ``WhisperModel``."""
 
     def __init__(self, model: WhisperModel) -> None:

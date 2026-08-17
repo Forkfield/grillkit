@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Coordinate in-process speech runtimes (STT and TTS) across the app lifecycle."""
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.platform.domain.config import AppConfig, ConfigService
 from app.platform.domain.speech_settings import (
     question_voice_settings_from_config,
@@ -30,7 +30,7 @@ class SpeechRuntimeCoordinator:
         """Initialize the coordinator with STT and TTS backends.
 
         Args:
-            stt_loader: Backend that loads a :class:`SpeechTranscriber` into memory.
+            stt_loader: Backend that loads a :class:`Stt` into memory.
             tts_engine: Backend that holds a voice and synthesizes WAV bytes.
             config_service: Provider configuration service class.
         """
@@ -146,8 +146,8 @@ class SpeechRuntimeCoordinator:
         ) and not self._stt.is_loaded(settings.speech_model_size):
             _ = await self._stt.load_size(settings.speech_model_size)
 
-    def get_transcriber(self) -> SpeechTranscriber | None:
-        """Return the currently loaded speech transcriber, if any."""
+    def get_transcriber(self) -> Stt | None:
+        """Return the currently loaded STT engine, if any."""
         return self._stt.get()
 
     def load_error(self) -> str | None:

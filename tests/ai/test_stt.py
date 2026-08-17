@@ -1,6 +1,6 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for SpeechTranscriber protocol."""
+"""Tests for Stt protocol."""
 
 import inspect
 from typing import Protocol, get_type_hints
@@ -8,24 +8,24 @@ from typing import Protocol, get_type_hints
 import numpy as np
 import pytest
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 
 
-class TestSpeechTranscriber:
-    """Tests for the SpeechTranscriber protocol structure."""
+class TestStt:
+    """Tests for the Stt protocol structure."""
 
     def test_is_protocol(self):
-        """SpeechTranscriber is a typing Protocol."""
-        assert issubclass(SpeechTranscriber, Protocol)
+        """Stt is a typing Protocol."""
+        assert issubclass(Stt, Protocol)
 
     def test_has_transcribe_method(self):
         """Protocol defines a transcribe method."""
-        assert hasattr(SpeechTranscriber, "transcribe")
-        assert inspect.isfunction(SpeechTranscriber.transcribe)
+        assert hasattr(Stt, "transcribe")
+        assert inspect.isfunction(Stt.transcribe)
 
     def test_transcribe_signature(self):
         """transcribe accepts audio and locale parameters."""
-        hints = get_type_hints(SpeechTranscriber.transcribe)
+        hints = get_type_hints(Stt.transcribe)
         assert "audio" in hints
         assert "locale" in hints
         assert "return" in hints

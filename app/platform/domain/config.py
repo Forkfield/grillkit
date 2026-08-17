@@ -17,9 +17,9 @@ from app.platform.domain.llm_catalog import LLMCatalogService
 from app.platform.schemas import AppConfigRead
 from app.shared.locales import DEFAULT_LOCALE, normalize_locale
 from app.shared.paths import CONFIG_PATH, DATA_DIR
-from app.shared.speech_models import (
-    DEFAULT_SPEECH_MODEL_SIZE,
-    normalize_speech_model_size,
+from app.shared.stt_models import (
+    DEFAULT_STT_MODEL_SIZE,
+    normalize_stt_model_size,
 )
 from app.shared.tts_voices import (
     DEFAULT_TTS_VOICE_ID,
@@ -57,7 +57,7 @@ class AppConfig:
     api_key: str | None = None
     timeout: float = 60.0
     locale: str = DEFAULT_LOCALE
-    speech_model_size: str = DEFAULT_SPEECH_MODEL_SIZE
+    speech_model_size: str = DEFAULT_STT_MODEL_SIZE
     question_voice_enabled: bool = False
     tts_voice_id: str = DEFAULT_TTS_VOICE_ID
     llm_preset_id: str | None = None
@@ -126,8 +126,8 @@ class AppConfig:
             model="",
             timeout=data.get("timeout", 60.0),
             locale=locale,
-            speech_model_size=normalize_speech_model_size(
-                data.get("speech_model_size", DEFAULT_SPEECH_MODEL_SIZE)
+            speech_model_size=normalize_stt_model_size(
+                data.get("speech_model_size", DEFAULT_STT_MODEL_SIZE)
             ),
             question_voice_enabled=bool(data.get("question_voice_enabled", False)),
             tts_voice_id=tts_voice_id,
@@ -279,7 +279,7 @@ class ConfigService:
         Returns:
             Tuple of success flag and error message when not ready.
         """
-        size = normalize_speech_model_size(speech_model_size)
+        size = normalize_stt_model_size(speech_model_size)
         if WhisperReadinessService.is_model_installed(size):
             return True, ""
         return (

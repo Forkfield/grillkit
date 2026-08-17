@@ -6,7 +6,7 @@ from app.ai.llm_models import normalize_model_id
 from app.platform.domain.config import AppConfig, ConfigService
 from app.platform.domain.llm_catalog import LLMCatalogService
 from app.shared.locales import normalize_locale
-from app.shared.speech_models import normalize_speech_model_size
+from app.shared.stt_models import normalize_stt_model_size
 from app.shared.tts_voices import default_voice_for_locale
 
 
@@ -45,7 +45,7 @@ async def parse_and_test(
             base_url="",
             model="",
             locale=normalize_locale(locale),
-            speech_model_size=normalize_speech_model_size(speech_model_size),
+            speech_model_size=normalize_stt_model_size(speech_model_size),
             question_voice_enabled=question_voice_enabled,
         )
         return fallback, False, str(exc)
@@ -79,7 +79,7 @@ async def parse_and_test(
         api_key=AppConfig.resolve_api_key_from_form(api_key, normalized_preset_id),
         timeout=timeout,
         locale=normalized_locale,
-        speech_model_size=normalize_speech_model_size(speech_model_size),
+        speech_model_size=normalize_stt_model_size(speech_model_size),
         question_voice_enabled=question_voice_enabled,
         tts_voice_id=tts_voice_id,
         llm_preset_id=normalized_preset_id,
