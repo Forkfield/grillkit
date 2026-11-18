@@ -5,22 +5,27 @@
 import asyncio
 import json
 
-from app.coding.queries.task_page import ActiveCodingTaskPage
-from app.interview.queries.session_page import ActiveSessionPage as SessionPageService
+from app.coding.queries.task_page import build_coding_context
+from app.interview.queries.projection import load_session_snapshot
+from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.repositories.uow import InterviewUnitOfWork
 from tests.helpers.coding_seed import seed_active_coding_interview
 
 
-def test_build_context_returns_none_without_section(isolated_db):
+def test_build_context_returns_none_without_section():
     """Coding page context is absent when the session has no coding section."""
-    del isolated_db
-    assert ActiveCodingTaskPage.build_context_for("missing-session") is None
+    assert build_coding_context(None) is None
 
 
 def test_build_context_exposes_current_task(isolated_db):
     """Coding page context includes the active task and progress fields."""
+    del isolated_db
     interview_id, task_id = seed_active_coding_interview("coding-page-1")
-    context = ActiveCodingTaskPage.build_context_for(interview_id)
+    with InterviewUnitOfWork() as uow:
+        snapshot = load_session_snapshot(uow, interview_id)
+        assert snapshot is not None
+        context = build_coding_context(snapshot.coding)
+
     assert context is not None
     assert context.task_count == 1
     assert context.completed_tasks == 0
@@ -31,22 +36,20 @@ def test_build_context_exposes_current_task(isolated_db):
 
 
 def test_full_template_context_includes_coding_key(isolated_db):
-    """Session page merges coding context for interview.html."""
+    """Session page merges coding context for the interview SPA."""
+    del isolated_db
     interview_id, _task_id = seed_active_coding_interview("coding-page-2")
-    from app.interview.queries.loader import InterviewLoader as InterviewQuery
 
-    interview = InterviewQuery.load(interview_id)
-    assert interview is not None
     with InterviewUnitOfWork() as uow:
-        template_context = asyncio.run(
-            SessionPageService(uow).build_full_template_context(
-                interview,
-                config=None,
-            )
+        render = asyncio.run(
+            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
         )
-    assert template_context["coding"] is not None
-    assert template_context["coding"]["task_count"] == 1
-    assert template_context["session_mode_label"]
+
+    context = render.context
+    assert context is not None
+    assert context["coding"] is not None
+    assert context["coding"]["task_count"] == 1
+    assert context["session_mode_label"]
 
 
 def test_interview_route_uses_coding_template(client, isolated_db):

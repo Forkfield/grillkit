@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.use_cases.advance_phase import SessionPhaseOrchestrator
+from app.interview.use_cases.advance_phase import AdvanceSessionPhase
 from app.theory.domain.entities import TheorySection, TheoryTask
 from app.theory.domain.exceptions import TheorySectionNotFoundError
 
@@ -98,7 +98,7 @@ class TheoryTaskNavigation:
             section: Theory section after the latest navigation update.
         """
         if section.is_complete():
-            SessionPhaseOrchestrator(self._uow).notify_section_complete(
+            AdvanceSessionPhase(self._uow).notify_section_complete(
                 interview_id,
                 "theory",
             )

@@ -150,6 +150,13 @@ class Section[TTask: _TaskLike](ABC):
         )
         return replace(self, tasks=tasks)  # type: ignore[type-var]  # pyright: ignore[reportArgumentType]
 
+    def start_next_task_timer(self: Self) -> Self:
+        """Start the timer on the first pending task when one is configured."""
+        current = self.find_first_pending()
+        if current is None or current.started_at is not None:
+            return self
+        return self.start_timer_for_task(current.id)
+
     def with_evaluation(
         self: Self,
         task_id: str,

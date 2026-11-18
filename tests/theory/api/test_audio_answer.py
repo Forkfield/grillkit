@@ -255,7 +255,7 @@ class TestInterviewAudioAnswerPage:
                 new=AsyncMock(
                     return_value=SessionPageRender(
                         redirect_url=None,
-                        template_context=_full_template_context(page_context),
+                        context=_full_template_context(page_context),
                     )
                 ),
             ),
@@ -286,7 +286,7 @@ class TestInterviewAudioAnswerPage:
                 new=AsyncMock(
                     return_value=SessionPageRender(
                         redirect_url=None,
-                        template_context=_full_template_context(page_context),
+                        context=_full_template_context(page_context),
                     )
                 ),
             ),

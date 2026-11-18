@@ -83,15 +83,23 @@ class TestInterviewPageJson:
 
         monkeypatch.setattr(ActiveSessionPage, "prepare_page", fake_prepare_page)
 
-    def _get(self, client, monkeypatch, context=None, redirect_url=None):
+    def _get(
+        self,
+        client,
+        monkeypatch,
+        *,
+        context=None,
+        redirect_url=None,
+        not_found=False,
+    ):
         from app.interview.queries.session_page import SessionPageRender
 
         self._mock_page(
             monkeypatch,
             SessionPageRender(
+                context=context,
                 redirect_url=redirect_url,
-                template_context=context,
-                interview_active=True,
+                not_found=not_found,
             ),
         )
         return client.get("/api/interview/test-id")
@@ -126,17 +134,14 @@ class TestInterviewPageJson:
             response = self._get(
                 client,
                 monkeypatch,
-                context={
-                    "interview": {"status": "completed"},
-                    "active_phase": "theory",
-                },
+                redirect_url="/interview/test-id/results",
             )
         assert response.status_code == 200
         assert response.json() == {"redirect": "/interview/test-id/results"}
 
     def test_missing_session_returns_404(self, client, monkeypatch):
         """GET /api/interview/{id} returns 404 JSON for an unknown session."""
-        response = self._get(client, monkeypatch, redirect_url="/")
+        response = self._get(client, monkeypatch, not_found=True)
         assert response.status_code == 404
         body = response.json()
         assert body["redirect"] == "/"

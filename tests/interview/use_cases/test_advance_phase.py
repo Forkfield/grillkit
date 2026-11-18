@@ -7,16 +7,14 @@ from unittest.mock import AsyncMock, patch
 
 from app.coding.domain.value_objects import CodingRunResult
 from app.coding.queries.section_state import CodingSectionState as CodingSectionService
-from app.coding.queries.task_page import ActiveCodingTaskPage as CodingPageService
 from app.interview.domain.value_objects import (
     SectionBranchSpec,
     SessionSelection,
     TrackSelection,
 )
+from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.use_cases.advance_phase import (
-    AdvanceSessionPhase as SessionPhaseOrchestrator,
-)
+from app.interview.use_cases.advance_phase import AdvanceSessionPhase
 from app.theory.queries.section_state import TheorySectionState as TheorySectionService
 from tests.helpers.session_creation import create_session
 
@@ -183,7 +181,7 @@ def test_notify_theory_complete_activates_pending_coding(
         patch.object(TheorySectionService, "on_phase_complete"),
         InterviewUnitOfWork(auto_commit=True) as uow,
     ):
-        SessionPhaseOrchestrator(uow).notify_section_complete(
+        AdvanceSessionPhase(uow).notify_section_complete(
             interview.id,
             "theory",
         )
@@ -207,7 +205,7 @@ def test_coding_run_works_after_theory_phase_activation(
     )
     _complete_theory_section(interview.id)
     with InterviewUnitOfWork(auto_commit=True) as uow:
-        CodingPageService(uow).activate_timer(interview.id)
+        _ = ActiveSessionPage(uow).load(interview.id)
 
     with InterviewUnitOfWork() as uow:
         section = uow.coding_sections.get_aggregate(interview.id)

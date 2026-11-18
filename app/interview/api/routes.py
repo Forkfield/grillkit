@@ -47,27 +47,25 @@ async def interview_page_json(
         sessions that are missing or already completed.
     """
     config, model = config_service.load_active()
-    page = await page_service.prepare_page(
+    render = await page_service.prepare_page(
         interview_id,
         config=config,
         accepts_audio_input=model is not None and model.accepts_audio_input,
         whisper_model_service=whisper_model_service,
     )
-    if page.redirect_url is not None:
+    if render.not_found:
         return JSONResponse(
-            {"redirect": page.redirect_url, "not_found": True},
+            {"redirect": "/", "not_found": True},
             status_code=404,
         )
-
-    context = page.template_context or {}
-    if context.get("interview", {}).get("status") == "completed":
-        return {"redirect": f"/interview/{interview_id}/results"}
+    if render.redirect_url is not None:
+        return {"redirect": render.redirect_url}
 
     await coordinator.preload_whisper_for_active_interview(
         config,
-        interview_active=page.interview_active,
+        interview_active=True,
     )
-    return context
+    return render.context or {}
 
 
 @router.get("/{interview_id}/question-audio")
