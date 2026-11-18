@@ -99,13 +99,6 @@ def test_is_complete_returns_false_when_no_section() -> None:
     assert service.is_complete("iv-1") is False
 
 
-def test_activate_if_pending_always_returns_false() -> None:
-    """Theory sections are created active, so activate_if_pending is always False."""
-    service = TheorySectionState(_mock_uow(_section()))
-
-    assert service.activate_if_pending("iv-1") is False
-
-
 def test_get_evaluation_summary_delegates_to_query_service() -> None:
     """get_evaluation_summary delegates to the injected TheorySectionLoader."""
     summary = SectionEvaluationSummary(

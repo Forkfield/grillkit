@@ -102,18 +102,6 @@ class TheorySectionState:
             return False
         return section.is_complete()
 
-    def activate_if_pending(self, interview_id: str) -> bool:
-        """Theory sections are created active; nothing to promote.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            Always False.
-        """
-        del interview_id
-        return False
-
     def get_evaluation_summary(
         self,
         interview_id: str,

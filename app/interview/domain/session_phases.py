@@ -42,9 +42,6 @@ class SectionService(Protocol):
     def is_complete(self, interview_id: str) -> bool:
         """Return whether the section has no remaining user tasks."""
 
-    def activate_if_pending(self, interview_id: str) -> bool:
-        """Promote a pending section to active when prerequisites are met."""
-
     def get_evaluation_summary(
         self,
         interview_id: str,
@@ -123,32 +120,3 @@ def section_services(
             "coding": CodingSectionService(uow, query=coding_query),
         },
     )
-
-
-def prior_sections_complete_for(
-    interview_id: str,
-    section: SectionKind,
-    uow: InterviewUnitOfWork,
-) -> bool:
-    """Return whether every section before ``section`` in phase order is complete.
-
-    Args:
-        interview_id: Parent interview UUID.
-        section: Target section kind to check prerequisites for.
-        uow: Shared application unit of work for the caller scope.
-
-    Returns:
-        True when all prior sections are finished or absent from the phase order.
-    """
-    services = section_services(uow)
-    aggregate = uow.interviews.get_aggregate(interview_id)
-    if aggregate is None:
-        return False
-    order = phase_order_for_mode(aggregate.session_mode)
-    if section not in order:
-        return False
-    target_index = order.index(section)
-    for kind in order[:target_index]:
-        if not services[kind].is_complete(interview_id):
-            return False
-    return True

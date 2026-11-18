@@ -6,15 +6,19 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 from app.coding.domain.value_objects import CodingRunResult
-from app.coding.queries.section_state import CodingSectionState as CodingSectionService
 from app.interview.domain.value_objects import (
     SectionBranchSpec,
     SessionSelection,
     TrackSelection,
 )
+from app.interview.queries.projection import load_session_snapshot
 from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.use_cases.advance_phase import AdvanceSessionPhase
+from app.interview.use_cases.advance_phase import (
+    AdvanceSessionPhase,
+    activate_current_section,
+    active_section,
+)
 from app.theory.queries.section_state import TheorySectionState as TheorySectionService
 from tests.helpers.session_creation import create_session
 
@@ -128,7 +132,7 @@ def test_coding_then_theory_defers_theory_timer_until_theory_phase(
     assert coding.tasks[0].started_at is not None
 
 
-def test_activate_pending_promotes_coding_after_theory_complete(
+def test_activate_current_section_promotes_coding_after_theory_complete(
     isolated_db, temp_questions_dir, monkeypatch
 ) -> None:
     """Pending coding sections become active once theory is finished."""
@@ -140,22 +144,23 @@ def test_activate_pending_promotes_coding_after_theory_complete(
         locale="en",
     )
 
+    with InterviewUnitOfWork(auto_commit=True) as uow:
+        snapshot = load_session_snapshot(uow, interview.id)
+        assert snapshot is not None
+        assert active_section(snapshot) == "theory"
+        _ = activate_current_section(uow, snapshot)
+
     with InterviewUnitOfWork() as uow:
         section = uow.coding_sections.get_aggregate(interview.id)
     assert section is not None
     assert section.status == "pending"
-    with InterviewUnitOfWork(auto_commit=True) as uow:
-        coding = CodingSectionService(uow)
-        assert coding.activate_pending(interview.id) is False
 
     _complete_theory_section(interview.id)
-    with InterviewUnitOfWork() as uow:
-        theory = TheorySectionService(uow)
-        assert theory.is_complete(interview.id) is True
-
     with InterviewUnitOfWork(auto_commit=True) as uow:
-        coding = CodingSectionService(uow)
-        assert coding.activate_pending(interview.id) is True
+        snapshot = load_session_snapshot(uow, interview.id)
+        assert snapshot is not None
+        assert active_section(snapshot) == "coding"
+        _ = activate_current_section(uow, snapshot)
 
     with InterviewUnitOfWork() as uow:
         section = uow.coding_sections.get_aggregate(interview.id)

@@ -9,7 +9,7 @@ from app.interview.domain.session_phases import (
     section_services,
 )
 from app.interview.domain.value_objects import SectionKind
-from app.interview.queries.projection import SessionSnapshot
+from app.interview.queries.projection import SessionSnapshot, load_session_snapshot
 from app.interview.repositories.uow import InterviewUnitOfWork
 
 
@@ -103,7 +103,7 @@ class AdvanceSessionPhase:
         interview_id: str,
         section_kind: SectionKind,
     ) -> None:
-        """Invoke section prefetch hooks when a phase finishes.
+        """Run section hooks and promote the next phase when a phase finishes.
 
         Runs on the orchestrator's unit of work so phase transitions do not open
         a second SQLite connection while the caller still holds a write lock.
@@ -114,4 +114,6 @@ class AdvanceSessionPhase:
         """
         services = section_services(self._uow)
         services[section_kind].on_phase_complete(interview_id)
-        _ = services["coding"].activate_if_pending(interview_id)
+        snapshot = load_session_snapshot(self._uow, interview_id)
+        if snapshot is not None:
+            _ = activate_current_section(self._uow, snapshot)

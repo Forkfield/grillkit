@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 from app.coding.domain.evaluator_models import CodingAnswerEvaluation
 from app.coding.domain.value_objects import CodingRunResult
-from app.interview.domain.serialization import selection_to_spec
+from app.interview.domain.serialization import selection_to_spec, session_to_spec
 from app.interview.domain.value_objects import (
     SectionBranchSpec,
     SessionSelection,
@@ -21,7 +21,6 @@ from tests.helpers.coding_seed import (
     create_coding_section_for_interview,
 )
 from tests.helpers.interview_seed import persist_interview_with_answers
-from tests.helpers.selection import minimal_selection_spec
 
 
 def _success_run_result() -> CodingRunResult:
@@ -44,11 +43,34 @@ class TestCombinedPhaseSwitch:
         self, client, isolated_db, override_ws_ai_provider
     ):
         """When theory completes, coding section activates."""
+        session = SessionSelection(
+            session_mode="theory_then_coding",
+            theory=SectionBranchSpec(
+                enabled=True,
+                question_count=1,
+                task_time_limit_seconds=None,
+                sources=(
+                    TrackSelection(
+                        track="python", level="junior", categories=("basics",)
+                    ),
+                ),
+            ),
+            coding=SectionBranchSpec(
+                enabled=True,
+                question_count=1,
+                task_time_limit_seconds=None,
+                sources=(
+                    TrackSelection(
+                        track="python", level="junior", categories=("basics",)
+                    ),
+                ),
+            ),
+        )
         interview_id = persist_interview_with_answers(
             Interview(
                 id="combined-tc-1",
                 locale="en",
-                selection_spec=minimal_selection_spec(categories=["basics"]),
+                selection_spec=session_to_spec(session),
                 status="active",
                 session_mode="theory_then_coding",
             ),
@@ -63,27 +85,7 @@ class TestCombinedPhaseSwitch:
             question_count=1,
         )
         # Attach coding section in pending state
-        coding_selection_spec = selection_to_spec(
-            SessionSelection(
-                session_mode="theory_then_coding",
-                theory=SectionBranchSpec(
-                    enabled=True,
-                    question_count=1,
-                    task_time_limit_seconds=None,
-                    sources=(),
-                ),
-                coding=SectionBranchSpec(
-                    enabled=True,
-                    question_count=1,
-                    task_time_limit_seconds=None,
-                    sources=(
-                        TrackSelection(
-                            track="python", level="junior", categories=("basics",)
-                        ),
-                    ),
-                ),
-            ).coding_selection
-        )
+        coding_selection_spec = selection_to_spec(session.coding_selection)
         with InterviewUnitOfWork(auto_commit=True) as uow:
             from app.shared.infrastructure.models import Interview as InterviewModel
 
@@ -135,27 +137,30 @@ class TestCombinedPhaseSwitch:
     ):
         """When coding completes, theory section activates."""
         interview_id = "combined-ct-1"
-        coding_selection_spec = selection_to_spec(
-            SessionSelection(
-                session_mode="coding_then_theory",
-                theory=SectionBranchSpec(
-                    enabled=True,
-                    question_count=1,
-                    task_time_limit_seconds=None,
-                    sources=(),
-                ),
-                coding=SectionBranchSpec(
-                    enabled=True,
-                    question_count=1,
-                    task_time_limit_seconds=None,
-                    sources=(
-                        TrackSelection(
-                            track="python", level="junior", categories=("basics",)
-                        ),
+        session = SessionSelection(
+            session_mode="coding_then_theory",
+            theory=SectionBranchSpec(
+                enabled=True,
+                question_count=1,
+                task_time_limit_seconds=None,
+                sources=(
+                    TrackSelection(
+                        track="python", level="junior", categories=("basics",)
                     ),
                 ),
-            ).coding_selection
+            ),
+            coding=SectionBranchSpec(
+                enabled=True,
+                question_count=1,
+                task_time_limit_seconds=None,
+                sources=(
+                    TrackSelection(
+                        track="python", level="junior", categories=("basics",)
+                    ),
+                ),
+            ),
         )
+        coding_selection_spec = selection_to_spec(session.coding_selection)
         with InterviewUnitOfWork(auto_commit=True) as uow:
             from app.shared.infrastructure.models import Answer as AnswerModel
             from app.shared.infrastructure.models import Interview as InterviewModel
@@ -166,7 +171,7 @@ class TestCombinedPhaseSwitch:
             db_interview = InterviewModel(
                 id=interview_id,
                 locale="en",
-                selection_spec=minimal_selection_spec(categories=["basics"]),
+                selection_spec=session_to_spec(session),
                 status="active",
                 session_mode="coding_then_theory",
             )
