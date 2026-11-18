@@ -6,7 +6,27 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.coding.domain.entities import CodingTask
+from app.coding.domain.task_spec import client_task_spec_from_stored
 from app.interview.schemas.ws import EvaluatingMessage, server_message_to_dict
+
+
+def next_task_payload(task: CodingTask) -> dict[str, Any]:
+    """Build WebSocket/API payload for the next unsubmitted coding task.
+
+    Args:
+        task: Next unsubmitted coding task round.
+
+    Returns:
+        Dict with task fields for the client.
+    """
+    return {
+        "task_id": task.task_id,
+        "order": task.order,
+        "round": task.round,
+        "prompt_text": task.prompt_text,
+        "task_spec": client_task_spec_from_stored(task.task_spec),
+    }
 
 
 class CodingSavedMessage(BaseModel):

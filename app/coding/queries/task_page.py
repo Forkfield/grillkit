@@ -4,7 +4,7 @@
 
 from app.coding.domain.entities import CodingSection
 from app.coding.schemas.page import CodingPageContext
-from app.coding.use_cases.navigate_tasks import next_task_payload
+from app.coding.schemas.ws import next_task_payload
 
 
 def build_coding_context(section: CodingSection | None) -> CodingPageContext | None:
