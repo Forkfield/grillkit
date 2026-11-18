@@ -11,7 +11,11 @@ from app.interview.domain.rules.selection import (
     session_display_title,
 )
 from app.interview.domain.serialization import parse_session_spec
-from app.interview.domain.value_objects import InterviewSelection, session_mode_label
+from app.interview.domain.value_objects import (
+    InterviewSelection,
+    SessionSelection,
+    session_mode_label,
+)
 from app.interview.queries.projection import (
     load_recent_interview_reads,
 )
@@ -45,16 +49,22 @@ class InterviewDashboard:
         return dt.astimezone().strftime("%d %b %Y, %H:%M")
 
     @staticmethod
-    def interview_display_title(interview: InterviewRead) -> str:
+    def interview_display_title(
+        interview: InterviewRead,
+        *,
+        session: SessionSelection | None = None,
+    ) -> str:
         """Build dashboard/interview page title from selection.
 
         Args:
             interview: Interview read model.
+            session: Parsed selection; parsed from the read model when omitted.
 
         Returns:
             Title such as ``Python Interview`` or ``Multi-topic Interview``.
         """
-        session = parse_session_spec(interview.selection_spec)
+        if session is None:
+            session = parse_session_spec(interview.selection_spec)
         return session_display_title(session)
 
     @staticmethod
@@ -83,6 +93,7 @@ class InterviewDashboard:
         *,
         uow: InterviewUnitOfWork | None = None,
         coding_section: CodingSection | None = None,
+        session: SessionSelection | None = None,
     ) -> int:
         """Compute maximum achievable score for a session.
 
@@ -95,6 +106,7 @@ class InterviewDashboard:
             uow: Unit of work used to load the coding section on demand.
             coding_section: Pre-loaded coding section that takes precedence over
                 ``uow`` (used to avoid per-row queries in batched contexts).
+            session: Parsed selection; parsed from the read model when omitted.
 
         Returns:
             Maximum possible score for the session.
@@ -106,11 +118,12 @@ class InterviewDashboard:
             if breakdown_total > 0:
                 return breakdown_total
 
-        session = parse_session_spec(
-            interview.selection_spec,
-            question_count=interview.question_count,
-            task_time_limit_seconds=interview.question_time_limit_seconds,
-        )
+        if session is None:
+            session = parse_session_spec(
+                interview.selection_spec,
+                question_count=interview.question_count,
+                task_time_limit_seconds=interview.question_time_limit_seconds,
+            )
 
         if session.theory.enabled:
             theory_max = (
@@ -160,6 +173,7 @@ class InterviewDashboard:
 
         rows: list[DashboardRowRead] = []
         for interview in interviews:
+            session = parse_session_spec(interview.selection_spec)
             if interview.status == "completed":
                 feedback = interview.overall_feedback
                 breakdown = feedback.get("score_breakdown") if feedback else None
@@ -167,6 +181,7 @@ class InterviewDashboard:
                     interview,
                     breakdown,
                     coding_section=coding_sections.get(interview.id),
+                    session=session,
                 )
                 score = interview.score if interview.score is not None else 0
                 score_display = f"{score} / {max_score}"
@@ -177,11 +192,12 @@ class InterviewDashboard:
                 status_label = "Active"
                 when = interview.started_at
 
-            session = parse_session_spec(interview.selection_spec)
             rows.append(
                 DashboardRowRead(
                     id=interview.id,
-                    title=InterviewDashboard.interview_display_title(interview),
+                    title=InterviewDashboard.interview_display_title(
+                        interview, session=session
+                    ),
                     question_count=interview.question_count,
                     session_mode_label=session_mode_label(session.session_mode),
                     score_display=score_display,

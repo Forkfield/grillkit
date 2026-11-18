@@ -144,8 +144,14 @@ class ActiveSessionPage:
         Returns:
             Frozen page context for the interview SPA.
         """
+        if session is None:
+            session = parse_session_spec(
+                interview.selection_spec,
+                question_count=interview.question_count,
+                task_time_limit_seconds=interview.question_time_limit_seconds,
+            )
         if theory is None:
-            theory = build_theory_context(interview)
+            theory = build_theory_context(interview, session=session)
         current_question: AnswerRead | None = (
             theory.current_question if theory is not None else None
         )
@@ -159,11 +165,7 @@ class ActiveSessionPage:
             interview,
             score_breakdown if isinstance(score_breakdown, dict) else None,
             coding_section=coding,
-        )
-        session = session or parse_session_spec(
-            interview.selection_spec,
-            question_count=interview.question_count,
-            task_time_limit_seconds=interview.question_time_limit_seconds,
+            session=session,
         )
 
         return InterviewPageContext(
@@ -209,7 +211,7 @@ class ActiveSessionPage:
         Returns:
             Flat dict for SPA rendering.
         """
-        theory = build_theory_context(snapshot.interview)
+        theory = build_theory_context(snapshot.interview, session=snapshot.session)
         coding = build_coding_context(snapshot.coding)
         base = ActiveSessionPage.build_page_context(
             snapshot.interview,

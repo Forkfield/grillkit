@@ -102,7 +102,9 @@ def shared_review_fields(
     interview = snapshot.interview
     return {
         "interview_id": interview_id,
-        "interview_title": DashboardBuilder.interview_display_title(interview),
+        "interview_title": DashboardBuilder.interview_display_title(
+            interview, session=snapshot.session
+        ),
         "selection_lines": session_selection_summary_lines(snapshot.session),
         "locale_label": SUPPORTED_LOCALES.get(interview.locale, interview.locale),
         "results_url": f"/interview/{interview_id}/results",

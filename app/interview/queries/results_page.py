@@ -142,6 +142,7 @@ class CompletedSessionResults:
             interview,
             breakdown if isinstance(breakdown, dict) else None,
             uow=self._uow,
+            session=session,
         )
 
         services = section_services(self._uow)
@@ -167,7 +168,9 @@ class CompletedSessionResults:
 
         return SessionResultsContext(
             interview=interview,
-            interview_title=DashboardBuilder.interview_display_title(interview),
+            interview_title=DashboardBuilder.interview_display_title(
+                interview, session=session
+            ),
             selection_lines=session_selection_summary_lines(session),
             session_mode_label=session_mode_label(session.session_mode),
             locale_label=SUPPORTED_LOCALES.get(interview.locale, interview.locale),
