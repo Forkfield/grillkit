@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, Self, TypeVar
+from typing import Any, ClassVar, Protocol, Self, TypeVar
 
 
 class _TaskLike(Protocol):
@@ -46,12 +46,10 @@ class Section[TTask: _TaskLike](ABC):
     """
 
     # ------------------------------------------------------------------
-    # Abstract hooks expected from concrete subclasses
+    # Concrete hooks expected from concrete subclasses
     # ------------------------------------------------------------------
-    @property
-    @abstractmethod
-    def MAX_SCORE_PER_ROUND(self) -> int:  # noqa: N802
-        """Maximum points achievable per round."""
+    MAX_SCORE_PER_ROUND: ClassVar[int]
+    """Maximum points achievable per round."""
 
     @property
     @abstractmethod

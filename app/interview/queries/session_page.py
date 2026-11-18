@@ -21,7 +21,7 @@ from app.interview.use_cases.advance_phase import (
     AdvanceSessionPhase as SessionPhaseOrchestrator,
 )
 from app.platform.domain.config import AppConfig
-from app.platform.domain.llm_catalog import LLMCatalogService
+from app.platform.repo.config_composition import get_default_catalog_service
 from app.question_voice.queries.voice_page import VoicePage as QuestionVoicePageService
 from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 from app.shared.locales import (
@@ -36,11 +36,11 @@ from app.theory.schemas.page import TheoryPageContext
 
 @dataclass(frozen=True)
 class SessionPageRender:
-    """Result of preparing the interview HTML page.
+    """Result of preparing the interview page.
 
     Attributes:
         redirect_url: Redirect target when the session is missing.
-        template_context: Jinja context when the page should render.
+        template_context: Page context when the session should render.
         interview_active: Whether the loaded session is still active.
     """
 
@@ -54,7 +54,7 @@ class ActiveSessionPage:
 
     def __init__(self, uow: InterviewUnitOfWork) -> None:
         """Initialize with the active unit of work."""
-        self._uow = uow
+        self._uow: InterviewUnitOfWork = uow
 
     def load_interview(self, interview_id: str) -> InterviewRead | None:
         """Load a session and start the active section timer when applicable.
@@ -78,17 +78,17 @@ class ActiveSessionPage:
         interview_id: str,
         *,
         config: AppConfig | None,
-        whisper_model_service: type[WhisperModelService] = WhisperModelService,
+        whisper_model_service: WhisperModelService | None = None,
     ) -> SessionPageRender:
-        """Load a session and build template context for the interview page.
+        """Load a session and build context for the interview page.
 
         Args:
             interview_id: The session UUID.
             config: Saved provider configuration, if any.
-            whisper_model_service: Whisper model service class (injectable in tests).
+            whisper_model_service: Whisper model service instance (injectable).
 
         Returns:
-            Redirect URL or template context for ``interview.html``.
+            Redirect URL or JSON context for the interview page.
         """
         interview = self.load_interview(interview_id)
         if interview is None:
@@ -114,9 +114,9 @@ class ActiveSessionPage:
         theory: TheoryPageContext | None = None,
         uow: InterviewUnitOfWork | None = None,
     ) -> InterviewPageContext:
-        """Assemble shell template context for ``interview.html``.
+        """Assemble the full shell context for the interview SPA.
 
-        Theory-specific fields are merged from ``TheoryPageService`` for template
+        Theory-specific fields are merged from ``TheoryPageService`` for context
         compatibility while ``theory`` exposes the structured section context.
 
         Args:
@@ -127,7 +127,7 @@ class ActiveSessionPage:
             uow: Optional active unit of work for coding score fallback.
 
         Returns:
-            Frozen page context for the interview template.
+            Frozen page context for the interview SPA.
         """
         if theory is None:
             theory = TheoryPageService.build_context_for(interview)
@@ -161,7 +161,7 @@ class ActiveSessionPage:
         interview_title = session_display_title(session)
         interview_model_accepts_audio = False
         if config is not None and config.llm_preset_id:
-            entry = LLMCatalogService.get_model(config.llm_preset_id)
+            entry = get_default_catalog_service().get_model(config.llm_preset_id)
             interview_model_accepts_audio = (
                 entry is not None and entry.accepts_audio_input
             )
@@ -191,17 +191,17 @@ class ActiveSessionPage:
         interview: InterviewRead,
         *,
         config: AppConfig | None,
-        whisper_model_service: type[WhisperModelService] = WhisperModelService,
+        whisper_model_service: WhisperModelService | None = None,
     ) -> dict[str, Any]:
-        """Merge session shell, theory section, and audio keys for ``interview.html``.
+        """Merge session shell, theory section, and audio keys for the interview SPA.
 
         Args:
             interview: Loaded interview read model.
             config: Application config, if configured.
-            whisper_model_service: Whisper model service class (injectable in tests).
+            whisper_model_service: Whisper model service instance (injectable).
 
         Returns:
-            Flat dict for Jinja template rendering.
+            Flat dict for SPA rendering.
         """
         session = parse_session_spec(
             interview.selection_spec,

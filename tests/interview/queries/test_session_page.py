@@ -46,11 +46,17 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
     """Page context reflects whether the configured LLM accepts audio input."""
     del isolated_db
     monkeypatch.setattr(
-        "app.interview.queries.session_page.LLMCatalogService.get_model",
-        lambda preset_id: type(
-            "Entry",
+        "app.interview.queries.session_page.get_default_catalog_service",
+        lambda: type(
+            "Catalog",
             (),
-            {"accepts_audio_input": preset_id == "audio-model"},
+            {
+                "get_model": lambda self, preset_id: type(
+                    "Entry",
+                    (),
+                    {"accepts_audio_input": preset_id == "audio-model"},
+                )()
+            },
         )(),
     )
 
@@ -58,9 +64,6 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
         _session(),
         config=AppConfig(
             llm_preset_id="audio-model",
-            provider_type="openai-compatible",
-            base_url="http://localhost:11434/v1",
-            model="test",
             timeout=60,
         ),
         question_voice_enabled=False,
@@ -69,9 +72,6 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
         _session(),
         config=AppConfig(
             llm_preset_id="text-model",
-            provider_type="openai-compatible",
-            base_url="http://localhost:11434/v1",
-            model="test",
             timeout=60,
         ),
         question_voice_enabled=False,

@@ -37,9 +37,6 @@ class MockConfigServiceWithModel(ConfigService):
     @staticmethod
     def get_config():
         return AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="small",
         )
 

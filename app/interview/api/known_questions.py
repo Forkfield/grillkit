@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """HTTP API for known bank-item exclusions."""
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, Response
+from dataclasses import asdict
+
+from fastapi import APIRouter
 
 from app.interview.schemas.known_questions import KnownItemMutation, KnownItemsResponse
-from app.interview.support.bank_text import resolve_known_views
+from app.interview.support.bank_text import KnownQuestionView, resolve_known_views
 from app.shared.application.uow_deps import UoWAutoCommitDep
-from app.templating import templates
 
 router = APIRouter(prefix="/known-questions", tags=["known-questions"])
 
@@ -53,19 +53,29 @@ def unmark_known_item(
     )
 
 
-@router.get("/manage", response_class=HTMLResponse)
-async def manage_known_questions_page(
-    request: Request,
-    uow: UoWAutoCommitDep,
-) -> Response:
-    """Render the known bank items management page."""
+def _known_view_dict(item: KnownQuestionView) -> dict[str, str]:
+    """Convert a display row into a JSON-serializable dict."""
+    return asdict(item)
+
+
+api_router = APIRouter(prefix="/api/known-questions", tags=["known-questions"])
+
+
+@api_router.get("/manage")
+def manage_known_questions(uow: UoWAutoCommitDep) -> dict[str, object]:
+    """Return known bank-item views (with bank text) for the SPA manage page.
+
+    Args:
+        uow: Auto-commit unit of work for the request scope.
+
+    Returns:
+        JSON payload with ``theory_items``, ``coding_items`` and ``total_count``.
+    """
     known = resolve_known_views(uow.known_questions.list_all_grouped())
-    return templates.TemplateResponse(
-        request,
-        "known_questions.html",
-        {
-            "theory_items": known.get("theory", []),
-            "coding_items": known.get("coding", []),
-            "total_count": uow.known_questions.count(),
-        },
-    )
+    theory = [_known_view_dict(item) for item in known.get("theory", [])]
+    coding = [_known_view_dict(item) for item in known.get("coding", [])]
+    return {
+        "theory_items": theory,
+        "coding_items": coding,
+        "total_count": uow.known_questions.count(),
+    }

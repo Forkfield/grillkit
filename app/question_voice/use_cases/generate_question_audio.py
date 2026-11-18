@@ -6,8 +6,8 @@ from pathlib import Path
 
 from app.interview.queries.loader import InterviewQuery
 from app.interview.schemas.interview import AnswerRead, InterviewRead
-from app.platform.domain.config import ConfigService
 from app.platform.domain.speech_settings import question_voice_settings_from_config
+from app.platform.repo.config_composition import get_default_config_service
 from app.shared.infrastructure.gateways.tts_cache import TtsCacheService
 from app.shared.infrastructure.gateways.tts_exceptions import QuestionVoiceDisabledError
 from app.speech.domain.tts_engine import TtsEngine
@@ -48,7 +48,7 @@ class GenerateQuestionAudio:
             ValueError: When no suitable unanswered answer exists.
             QuestionVoiceSynthesisError: When synthesis cannot complete.
         """
-        config = ConfigService.get_config()
+        config = get_default_config_service().get_config()
         if config is None:
             raise QuestionVoiceDisabledError()
         voice_settings = question_voice_settings_from_config(config)

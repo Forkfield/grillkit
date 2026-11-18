@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.ai.base import AIProvider
-from app.platform.domain.config import ConfigService
+from app.platform.repo.config_composition import get_default_config_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ async def ai_provider_from_config() -> AsyncIterator[AIProvider]:
     Raises:
         ValueError: If provider configuration is missing.
     """
-    provider = ConfigService.create_provider_from_config()
+    provider = get_default_config_service().create_provider_from_config()
     try:
         yield provider
     finally:

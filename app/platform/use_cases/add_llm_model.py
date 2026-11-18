@@ -4,11 +4,10 @@
 
 from dataclasses import dataclass
 
-from app.platform.domain.config import AppConfig, ConfigService
+from app.platform.domain.config import ConfigService
+from app.platform.domain.effective_config import EffectiveModelConfig
 from app.platform.domain.llm_catalog import LLMCatalogService
 from app.platform.schemas import NewLLMModel
-from app.shared.locales import DEFAULT_LOCALE
-from app.shared.stt_models import DEFAULT_STT_MODEL_SIZE
 
 
 @dataclass(frozen=True)
@@ -36,15 +35,15 @@ class AddLLMModelUseCase:
 
     def __init__(
         self,
-        config_service: type[ConfigService],
-        llm_catalog_service: type[LLMCatalogService],
+        config_service: ConfigService,
+        llm_catalog_service: LLMCatalogService,
     ) -> None:
-        self._config_service: type[ConfigService] = config_service
-        self._catalog_service: type[LLMCatalogService] = llm_catalog_service
+        self._config_service: ConfigService = config_service
+        self._catalog_service: LLMCatalogService = llm_catalog_service
 
     async def execute(
         self,
-        payload: NewLLMModel,
+        payload: NewLLMModel, #TODO use case использует pydantic модель, нарушение слоев
     ) -> AddLLMModelResult:
         """Run the add-model flow.
 
@@ -56,27 +55,19 @@ class AddLLMModelUseCase:
         """
         config = self._config_service.get_config()
         try:
-            speech_model_size = (
-                config.speech_model_size
-                if config is not None
-                else DEFAULT_STT_MODEL_SIZE
-            )
-            probe_config = AppConfig(
+            probe = EffectiveModelConfig(
                 provider_type="openai-compatible",
                 base_url=payload.base_url,
                 model=payload.model,
                 api_key=payload.api_key,
-                speech_model_size=speech_model_size,
-                locale=config.locale if config is not None else DEFAULT_LOCALE,
+                timeout=config.timeout if config is not None else 60.0,
+                accepts_audio_input=payload.accepts_audio_input,
             )
             if payload.api_key_required and not payload.api_key:
                 raise ValueError(
                     "API key is required for this model but none was provided."
                 )
-            success, test_message = await self._config_service.test_catalog_model(
-                probe_config,
-                accepts_audio_input=payload.accepts_audio_input,
-            )
+            success, test_message = await self._config_service.test_model(probe)
             if not success:
                 raise ValueError(test_message)
             entry = self._catalog_service.add_user_model(payload)

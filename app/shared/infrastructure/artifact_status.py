@@ -35,7 +35,7 @@ class ArtifactStatusBuilder:
     def build(
         *,
         key: str,
-        service: type[ArtifactDownloadService],
+        service: ArtifactDownloadService,
         is_installed: Callable[[], bool],
         is_loaded: Callable[[], bool],
         load_error: Callable[[], str | None],
@@ -49,7 +49,7 @@ class ArtifactStatusBuilder:
 
         Args:
             key: Artifact identifier (model size, voice id, etc.).
-            service: Download service class for this artifact family.
+            service: Download service instance for this artifact family.
             is_installed: Return whether files exist on disk.
             is_loaded: Return whether the in-process runtime is loaded.
             load_error: Return runtime load error text, if any.

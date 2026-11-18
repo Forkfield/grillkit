@@ -15,37 +15,50 @@ class TestResultsApi:
     """Tests for completed session results endpoints."""
 
     def test_results_renders_for_completed_theory(self, client, isolated_db):
-        """GET /results shows evaluation for completed theory session."""
+        """GET /api/interview/{id}/results shows overall feedback."""
         interview_id = seed_completed_theory_interview("results-t-1")
-        response = client.get(f"/interview/{interview_id}/results")
+        response = client.get(f"/api/interview/{interview_id}/results")
         assert response.status_code == 200
-        assert "Overall Evaluation" in response.text
-        assert "Good theory performance." in response.text
+        payload = response.json()
+        assert (
+            payload["overall_feedback"]["overall_feedback"]
+            == "Good theory performance."
+        )
 
     def test_results_renders_for_completed_coding(self, client, isolated_db):
-        """GET /results shows evaluation for completed coding session."""
+        """GET /api/interview/{id}/results shows overall feedback."""
         interview_id = seed_completed_coding_interview("results-c-1")
-        response = client.get(f"/interview/{interview_id}/results")
+        response = client.get(f"/api/interview/{interview_id}/results")
         assert response.status_code == 200
-        assert "Good coding performance." in response.text
+        payload = response.json()
+        assert (
+            payload["overall_feedback"]["overall_feedback"]
+            == "Good coding performance."
+        )
 
     def test_theory_review_shows_chat_history(self, client, isolated_db):
-        """GET /theory shows full Q&A history for completed sessions."""
+        """GET /api/interview/{id}/theory shows Q&A history."""
         interview_id = seed_completed_theory_interview("review-t-1")
-        response = client.get(f"/interview/{interview_id}/theory")
+        response = client.get(f"/api/interview/{interview_id}/theory")
         assert response.status_code == 200
-        assert "What is Python?" in response.text
-        assert "A programming language" in response.text
+        payload = response.json()
+        answers = payload["answers"]
+        assert answers[0]["question_text"] == "What is Python?"
+        assert answers[0]["answer_text"] == "A programming language"
 
     def test_coding_review_shows_tasks_and_code(self, client, isolated_db):
-        """GET /coding shows per-task accordion with code."""
+        """GET /api/interview/{id}/coding shows per-task code."""
         interview_id = seed_completed_coding_interview("review-c-1")
-        response = client.get(f"/interview/{interview_id}/coding")
+        response = client.get(f"/api/interview/{interview_id}/coding")
         assert response.status_code == 200
-        assert "def solve()" in response.text
+        payload = response.json()
+        assert (
+            payload["tasks"][0]["rounds"][0]["submitted_code"]
+            == "def solve():\n    return 1"
+        )
 
     def test_theory_review_active_session_redirects(self, client, isolated_db):
-        """Theory review for active sessions redirects to results."""
+        """Theory review for active sessions returns a redirect payload."""
         interview_id = persist_interview_with_answers(
             Interview(
                 id="review-active-1",
@@ -56,19 +69,15 @@ class TestResultsApi:
             [Answer(question_id="q1", order=1, round=0, question_text="Q?")],
             question_count=1,
         )
-        response = client.get(
-            f"/interview/{interview_id}/theory", follow_redirects=False
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == f"/interview/{interview_id}/results"
+        response = client.get(f"/api/interview/{interview_id}/theory")
+        assert response.status_code == 404
+        assert response.json()["redirect"] == f"/interview/{interview_id}/results"
 
     def test_coding_review_active_session_redirects(self, client, isolated_db):
-        """Coding review for active sessions redirects to results."""
+        """Coding review for active sessions returns a redirect payload."""
         from tests.helpers.coding_seed import seed_active_coding_interview
 
         interview_id, _ = seed_active_coding_interview("review-active-c")
-        response = client.get(
-            f"/interview/{interview_id}/coding", follow_redirects=False
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == f"/interview/{interview_id}/results"
+        response = client.get(f"/api/interview/{interview_id}/coding")
+        assert response.status_code == 404
+        assert response.json()["redirect"] == f"/interview/{interview_id}/results"

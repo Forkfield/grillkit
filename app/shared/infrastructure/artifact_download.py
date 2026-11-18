@@ -5,7 +5,6 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 import logging
-from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -13,53 +12,50 @@ logger = logging.getLogger(__name__)
 class ArtifactDownloadService:
     """Download lock, progress, and background task orchestration for artifacts.
 
-    Subclasses must redefine the ``ClassVar`` state fields below so Whisper,
-    Piper, and other artifacts do not share one download lock or progress.
+    Each instance carries its own download lock, progress, and error state, so
+    Whisper, Piper, and other artifacts never share one download lock or
+    progress stream.
     """
 
-    _download_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
-    _active_key: ClassVar[str | None] = None
-    _percent: ClassVar[int] = 0
-    _error_key: ClassVar[str | None] = None
-    _error_message: ClassVar[str | None] = None
+    def __init__(self) -> None:
+        """Initialize per-instance download tracking state."""
+        self._download_lock = asyncio.Lock()
+        self._active_key: str | None = None
+        self._percent = 0
+        self._error_key: str | None = None
+        self._error_message: str | None = None
 
-    @classmethod
-    def reset_download_state(cls) -> None:
+    def reset_download_state(self) -> None:
         """Clear in-memory download progress (for tests)."""
-        cls._active_key = None
-        cls._percent = 0
-        cls._error_key = None
-        cls._error_message = None
+        self._active_key = None
+        self._percent = 0
+        self._error_key = None
+        self._error_message = None
 
-    @classmethod
-    def active_download_error(cls, key: str) -> str | None:
+    def active_download_error(self, key: str) -> str | None:
         """Return a stored error message for ``key`` when no download is active."""
         if (
-            cls._error_key == key
-            and cls._error_message is not None
-            and cls._active_key is None
+            self._error_key == key
+            and self._error_message is not None
+            and self._active_key is None
         ):
-            return cls._error_message
+            return self._error_message
         return None
 
-    @classmethod
-    def is_downloading(cls, key: str) -> bool:
+    def is_downloading(self, key: str) -> bool:
         """Return whether ``key`` is the artifact currently being downloaded."""
-        return cls._active_key == key
+        return self._active_key == key
 
-    @classmethod
-    def download_percent(cls) -> int:
+    def download_percent(self) -> int:
         """Return the current download percent for the active artifact."""
-        return cls._percent
+        return self._percent
 
-    @classmethod
-    def set_download_percent(cls, percent: int) -> None:
+    def set_download_percent(self, percent: int) -> None:
         """Update in-memory download percent from progress callbacks."""
-        cls._percent = percent
+        self._percent = percent
 
-    @classmethod
     async def schedule_download(
-        cls,
+        self,
         key: str,
         runner: Callable[[str], Awaitable[None]],
     ) -> bool:
@@ -72,43 +68,40 @@ class ArtifactDownloadService:
         Returns:
             True when a new download task was scheduled.
         """
-        async with cls._download_lock:
-            if cls._active_key is not None:
+        async with self._download_lock:
+            if self._active_key is not None:
                 return False
-            cls._active_key = key
-            cls._percent = 0
-            cls._error_key = None
-            cls._error_message = None
+            self._active_key = key
+            self._percent = 0
+            self._error_key = None
+            self._error_message = None
 
-        asyncio.create_task(cls._run_download_task(key, runner))
+        asyncio.create_task(self._run_download_task(key, runner))
         return True
 
-    @classmethod
     async def _run_download_task(
-        cls,
+        self,
         key: str,
         runner: Callable[[str], Awaitable[None]],
     ) -> None:
         """Execute ``runner`` and update shared error/active state."""
         try:
             await runner(key)
-            cls.clear_download_error()
+            self.clear_download_error()
         except Exception as exc:
             logger.exception("Artifact download failed for %s", key)
-            cls.record_download_error(key, str(exc))
+            self.record_download_error(key, str(exc))
         finally:
-            async with cls._download_lock:
-                cls._active_key = None
-                cls._percent = 0
+            async with self._download_lock:
+                self._active_key = None
+                self._percent = 0
 
-    @classmethod
-    def record_download_error(cls, key: str, message: str) -> None:
+    def record_download_error(self, key: str, message: str) -> None:
         """Store the last download failure for status reporting."""
-        cls._error_key = key
-        cls._error_message = message
+        self._error_key = key
+        self._error_message = message
 
-    @classmethod
-    def clear_download_error(cls) -> None:
+    def clear_download_error(self) -> None:
         """Clear the last download error after a successful install."""
-        cls._error_key = None
-        cls._error_message = None
+        self._error_key = None
+        self._error_message = None

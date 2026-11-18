@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Speech model option read models for JSON APIs."""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -17,7 +19,7 @@ class SttModelOptionRead(BaseModel):
         quality_hint: Quality trade-off hint.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     size: str
     display_name: str

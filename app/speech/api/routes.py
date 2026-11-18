@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Speech model download and status endpoints."""
 
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import JSONResponse, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 
 from app.platform.api.deps import ConfigServiceDep
 from app.platform.domain.config import AppConfig
-from app.shared.api.negotiated_response import negotiated_response
 from app.shared.locales import DEFAULT_LOCALE, normalize_locale
 from app.shared.stt_models import (
     DEFAULT_STT_MODEL_SIZE,
@@ -55,23 +56,21 @@ def _resolve_speech_model_target(
 
 @router.get("/model/status")
 async def speech_model_status(
-    request: Request,
     config_service: ConfigServiceDep,
     whisper_model_service: WhisperModelServiceDep,
-    size: str | None = Query(default=None),
-    locale: str | None = Query(default=None),
-) -> Response:
+    size: Annotated[str | None, Query()] = None,
+    locale: Annotated[str | None, Query()] = None,
+) -> JSONResponse:
     """Return installation status for the configured Whisper model size.
 
     Args:
-        request: FastAPI request object.
         config_service: Provider configuration service.
         whisper_model_service: Whisper model download service.
         size: Whisper size when provider config is not saved yet.
         locale: Interview locale when provider config is not saved yet.
 
     Returns:
-        HTML partial or JSON status payload.
+        JSON status payload.
     """
     config = config_service.get_config()
     speech_model_size, speech_locale = _resolve_speech_model_target(
@@ -80,33 +79,26 @@ async def speech_model_status(
         locale=locale,
     )
     status = whisper_model_service.get_status(speech_model_size, speech_locale)
-    return negotiated_response(
-        request,
-        status.model_dump(),
-        "speech_model_status.html",
-        {"status": status},
-    )
+    return JSONResponse(status.model_dump())
 
 
 @router.post("/model/download")
 async def speech_model_download(
-    request: Request,
     config_service: ConfigServiceDep,
     whisper_model_service: WhisperModelServiceDep,
-    size: str | None = Query(default=None),
-    locale: str | None = Query(default=None),
-) -> Response:
+    size: Annotated[str | None, Query()] = None,
+    locale: Annotated[str | None, Query()] = None,
+) -> JSONResponse:
     """Start downloading the Whisper model for the configured size.
 
     Args:
-        request: FastAPI request object.
         config_service: Provider configuration service.
         whisper_model_service: Whisper model download service.
         size: Whisper size when provider config is not saved yet.
         locale: Interview locale when provider config is not saved yet.
 
     Returns:
-        HTML partial or JSON status payload after scheduling work.
+        JSON status payload after scheduling work.
     """
     config = config_service.get_config()
     speech_model_size, speech_locale = _resolve_speech_model_target(
@@ -118,12 +110,7 @@ async def speech_model_download(
         speech_model_size,
         speech_locale,
     )
-    return negotiated_response(
-        request,
-        status.model_dump(),
-        "speech_model_status.html",
-        {"status": status},
-    )
+    return JSONResponse(status.model_dump())
 
 
 @router.get("/model/options")

@@ -133,7 +133,7 @@ def test_websocket_answer_ai_failure_returns_error(client, isolated_db):
         client.app.dependency_overrides.pop(get_ai_provider, None)
 
     assert err["type"] == "error"
-    assert "/config" in err["message"].lower()
+    assert "configuration" in err["message"].lower()
 
 
 def test_websocket_timeout_scores_zero(client, isolated_db, override_ws_ai_provider):

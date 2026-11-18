@@ -17,8 +17,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY data/questions ./data/questions
-COPY templates ./templates
-COPY static ./static
 
 RUN uv sync --frozen --no-dev
 
@@ -41,8 +39,6 @@ RUN apt-get update \
 COPY --from=builder --chown=root:root /app/.venv /app/.venv
 COPY --from=builder --chown=root:root /app/app /app/app
 COPY --from=builder --chown=root:root /app/data/questions /app/data/questions
-COPY --from=builder --chown=root:root /app/templates /app/templates
-COPY --from=builder --chown=root:root /app/static /app/static
 COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 
@@ -54,6 +50,6 @@ EXPOSE 8000
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

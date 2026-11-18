@@ -26,7 +26,7 @@ def _assemble_interview_read(
         coding: Coding section aggregate, if present.
 
     Returns:
-        Immutable interview read model for services, API, and templates.
+        Immutable interview read model for services and API.
     """
     read_model = compose_interview_read(shell, theory, coding)
     score = resolve_completed_read_score(shell, theory, coding)
@@ -48,7 +48,7 @@ def assemble_interview_read(
         coding: Coding section aggregate, if present.
 
     Returns:
-        Immutable interview read model for services, API, and templates.
+        Immutable interview read model for services and API.
     """
     read_model = compose_interview_read(shell, theory, coding)
     score = resolve_completed_read_score(shell, theory, coding)
@@ -117,7 +117,7 @@ class InterviewProjection:
         Args:
             uow: Shared application unit of work for this read scope.
         """
-        self._uow = uow
+        self._uow: InterviewUnitOfWork = uow
 
     def load(self, interview_id: str) -> InterviewRead | None:
         """Load a composed interview read model for one session.
@@ -177,6 +177,6 @@ class InterviewProjection:
             coding: Coding section aggregate, if present.
 
         Returns:
-            Immutable interview read model for services, API, and templates.
+            Immutable interview read model for services and API.
         """
         return _assemble_interview_read(shell, theory, coding)

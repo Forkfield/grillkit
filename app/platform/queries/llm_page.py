@@ -1,9 +1,8 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""LLM catalog read models for configuration templates."""
+"""LLM catalog read models for the configuration page."""
 
-from app.platform.domain.config import AppConfig
-from app.platform.domain.llm_catalog import LLMCatalogService
+from app.platform.repo.config_composition import get_default_catalog_service
 from app.platform.schemas import LLMPresetOptionRead
 
 
@@ -11,7 +10,7 @@ def list_preset_options() -> list[LLMPresetOptionRead]:
     """Load catalog entries for the interview model selector.
 
     Returns:
-        Preset read models for ``config_form.html``.
+        Preset read models for the config form.
     """
     return [
         LLMPresetOptionRead(
@@ -23,20 +22,6 @@ def list_preset_options() -> list[LLMPresetOptionRead]:
             api_key_required=entry.api_key_required,
             accepts_audio_input=entry.accepts_audio_input,
         )
-        for entry in LLMCatalogService.list_models()
+        for entry in get_default_catalog_service().list_models()
     ]
 
-
-def resolve_selected_preset_id(config: AppConfig | None) -> str | None:
-    """Return the active catalog model id for the configuration form.
-
-    Args:
-        config: Saved provider configuration, if any.
-
-    Returns:
-        Selected preset id from config or catalog storage.
-    """
-    selected_id = LLMCatalogService.get_selected_model_id()
-    if config is not None and config.llm_preset_id:
-        return config.llm_preset_id
-    return selected_id

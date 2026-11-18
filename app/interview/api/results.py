@@ -2,96 +2,106 @@
 # SPDX-License-Identifier: Apache-2.0
 """Completed session results and section review pages."""
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from typing import Any
+
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.interview.api.deps import (
     CodingReviewServiceDep,
     CompletedSessionResultsDep,
     TheoryReviewServiceDep,
 )
-from app.templating import templates
 
-router = APIRouter(prefix="/interview", tags=["interview-results"])
+api_router = APIRouter(prefix="/api/interview", tags=["interview-results"])
 
 
-@router.get("/{interview_id}/results", response_class=HTMLResponse)
-async def session_results_page(
-    request: Request,
-    interview_id: str,
-    service: CompletedSessionResultsDep,
-) -> Response:
-    """Render the completed session results hub.
+def _redirect_payload(url: str, *, not_found: bool = False) -> JSONResponse:
+    """Build a JSON redirect response for the SPA.
 
     Args:
-        request: FastAPI request object.
+        url: Target route the SPA should navigate to.
+        not_found: True when the target session does not exist.
+
+    Returns:
+        JSON response with a ``redirect`` field, using 404 for missing sessions
+        so the SPA can distinguish genuine 404s from ordinary redirects.
+    """
+    status = 404 if not_found else 200
+    body: dict[str, Any] = {"redirect": url}
+    if not_found:
+        body["not_found"] = True
+    return JSONResponse(body, status_code=status)
+
+
+@api_router.get("/{interview_id}/results", response_model=None)
+async def session_results_json(
+    interview_id: str,
+    service: CompletedSessionResultsDep,
+) -> dict[str, Any] | JSONResponse:
+    """Return the completed session results hub JSON payload for the SPA.
+
+    Args:
         interview_id: Session UUID.
         service: Session results page service for the request scope.
 
     Returns:
-        HTML response with session results, or redirect when unavailable.
+        JSON with the full results context, or a ``redirect`` payload when the
+        session is missing or not completed.
     """
     page = service.prepare_page(interview_id)
     if page.redirect_url is not None:
-        return RedirectResponse(url=page.redirect_url, status_code=303)
-    return templates.TemplateResponse(
-        request,
-        "session_results.html",
-        page.template_context or {},
-    )
+        # A redirect to "/" means the session does not exist at all.
+        return _redirect_payload(
+            page.redirect_url,
+            not_found=page.redirect_url == "/",
+        )
+    return page.template_context or {}
 
 
-@router.get("/{interview_id}/theory", response_class=HTMLResponse)
-async def theory_review_page(
-    request: Request,
+@api_router.get("/{interview_id}/theory", response_model=None)
+async def theory_review_json(
     interview_id: str,
     service: TheoryReviewServiceDep,
-) -> Response:
-    """Render the completed theory section review with chat history.
+) -> dict[str, Any] | JSONResponse:
+    """Return the completed theory section review JSON payload for the SPA.
 
     Args:
-        request: FastAPI request object.
         interview_id: Session UUID.
         service: Theory review service for the request scope.
 
     Returns:
-        HTML response with theory review, or redirect when unavailable.
+        JSON with the theory review context, or a ``redirect`` to results when
+        the session or theory section is unavailable.
     """
     context = service.build_context_for(interview_id)
     if context is None:
-        return RedirectResponse(
-            url=f"/interview/{interview_id}/results", status_code=303
+        return _redirect_payload(
+            f"/interview/{interview_id}/results",
+            not_found=True,
         )
-    return templates.TemplateResponse(
-        request,
-        "theory_review.html",
-        context.model_dump(),
-    )
+    return context.model_dump()
 
 
-@router.get("/{interview_id}/coding", response_class=HTMLResponse)
-async def coding_review_page(
-    request: Request,
+@api_router.get("/{interview_id}/coding", response_model=None)
+async def coding_review_json(
     interview_id: str,
     service: CodingReviewServiceDep,
-) -> Response:
-    """Render the completed coding section review with per-task feedback.
+) -> dict[str, Any] | JSONResponse:
+    """Return the completed coding section review JSON payload for the SPA.
 
     Args:
-        request: FastAPI request object.
         interview_id: Session UUID.
         service: Coding review service for the request scope.
 
     Returns:
-        HTML response with coding review, or redirect when unavailable.
+        JSON with the coding review context, or a ``redirect`` to results when
+        the session or coding section is unavailable.
     """
     context = service.build_context_for(interview_id)
     if context is None:
-        return RedirectResponse(
-            url=f"/interview/{interview_id}/results", status_code=303
+        return _redirect_payload(
+            f"/interview/{interview_id}/results",
+            not_found=True,
         )
-    return templates.TemplateResponse(
-        request,
-        "coding_review.html",
-        context.model_dump(),
-    )
+    return context.model_dump()

@@ -1,6 +1,6 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Setup form template context helpers."""
+"""Setup form JSON context helpers."""
 
 from collections.abc import Callable
 
@@ -25,7 +25,7 @@ def _build_track_sections(
         list_categories_fn: Callable ``(track, level) -> categories``.
 
     Returns:
-        Track section dicts for ``setup.html``.
+        Track section dicts for the setup SPA.
     """
     track_sections: list[dict[str, object]] = []
     for slug in tracks:
@@ -54,7 +54,7 @@ def setup_form_context(
     min_coding_task_count: int = 1,
     initial_wizard_step: str = "mode",
 ) -> dict[str, object]:
-    """Build template context for the multi-track setup form.
+    """Build the JSON context for the multi-track setup form.
 
     Args:
         locale: Configured interview locale from provider config.
@@ -64,7 +64,7 @@ def setup_form_context(
         initial_wizard_step: Wizard step id to open on load (``mode``, ``review``, etc.).
 
     Returns:
-        Context dict for ``setup.html``.
+        Context dict for the setup SPA.
     """
     locale_code = normalize_locale(locale)
     locale_label = SUPPORTED_LOCALES[locale_code]

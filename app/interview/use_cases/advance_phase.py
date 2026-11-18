@@ -19,7 +19,7 @@ class AdvanceSessionPhase:
         Args:
             uow: Shared application unit of work for this phase scope.
         """
-        self._uow = uow
+        self._uow: InterviewUnitOfWork = uow
 
     def active_phase(self, interview_id: str) -> SectionKind | None:
         """Return the section kind the user should interact with now.
@@ -37,7 +37,7 @@ class AdvanceSessionPhase:
 
         services = section_services(self._uow)
         for kind in order:
-            services[kind].activate_if_pending(interview_id)
+            _ = services[kind].activate_if_pending(interview_id)
             if services[kind].is_user_facing(interview_id):
                 return kind
             if not services[kind].is_complete(interview_id):
@@ -60,7 +60,7 @@ class AdvanceSessionPhase:
         """
         services = section_services(self._uow)
         services[section_kind].on_phase_complete(interview_id)
-        services["coding"].activate_if_pending(interview_id)
+        _ = services["coding"].activate_if_pending(interview_id)
 
 
 # Alias for backward compatibility

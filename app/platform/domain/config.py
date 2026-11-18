@@ -6,43 +6,91 @@ This module provides service layer for managing application settings
 stored in data/config.json and LLM selection via data/llm_models.json.
 """
 
-from dataclasses import dataclass, replace
-import json
-from typing import Any
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Protocol
 
 from app.ai.audio_probe import minimal_wav_bytes
 from app.ai.base import AIProvider, AudioCapableProvider
 from app.ai.factory import ProviderFactory
+from app.ai.llm_models import LLMModelEntry
+from app.platform.domain.effective_config import EffectiveModelConfig
 from app.platform.domain.llm_catalog import LLMCatalogService
-from app.platform.schemas import AppConfigRead
-from app.shared.locales import DEFAULT_LOCALE, normalize_locale
-from app.shared.paths import CONFIG_PATH, DATA_DIR
-from app.shared.stt_models import (
-    DEFAULT_STT_MODEL_SIZE,
-    normalize_stt_model_size,
-)
-from app.shared.tts_voices import (
-    DEFAULT_TTS_VOICE_ID,
-    default_voice_for_locale,
-    normalize_tts_voice_id,
-)
-from app.speech.queries.readiness import WhisperReadinessService
+from app.shared.locales import DEFAULT_LOCALE
+from app.shared.stt_models import DEFAULT_STT_MODEL_SIZE
+from app.shared.tts_voices import DEFAULT_TTS_VOICE_ID, default_voice_for_locale
 
 MASKED_API_KEY_PLACEHOLDER = "***"
+CLEAR_API_KEY_MARKER = "__clear__"
+
+
+class ApiKeyKind(StrEnum):
+    """State of an API key after saving a config form."""
+
+    KEEP = "keep"  # leave the stored catalog key untouched
+    SET = "set"  # replace the stored catalog key with a submitted value
+    CLEAR = "clear"  # remove the stored catalog key
+
+
+@dataclass(frozen=True)
+class ApiKeyDecision:
+    """How the submitted API-key field should affect the stored catalog key.
+
+    Attributes:
+        kind: Whether to keep, set, or clear the stored key.
+        value: Effective key for provider/test use; meaningful for ``KEEP``
+            (existing key) and ``SET`` (submitted value), ``None`` for ``CLEAR``.
+    """
+
+    kind: ApiKeyKind
+    value: str | None = None
+
+
+def resolve_api_key_from_form(
+    submitted: str,
+    entry: LLMModelEntry | None,
+) -> ApiKeyDecision:
+    """Resolve the API key given a submitted form value into a decision.
+
+    Domain rule for how a raw ``api_key`` form value affects the key persisted
+    on the selected catalog model:
+
+    - an explicit clear marker (:data:`CLEAR_API_KEY_MARKER`) removes the stored
+      key (:attr:`ApiKeyKind.CLEAR`);
+    - any other non-empty value that is not the display mask
+      (:data:`MASKED_API_KEY_PLACEHOLDER`) replaces the stored key
+      (:attr:`ApiKeyKind.SET`);
+    - an empty value or the display mask keeps the stored catalog key
+      (:attr:`ApiKeyKind.KEEP`), carrying the existing key (or ``None``) as
+      ``value`` for provider/test use.
+
+    Args:
+        submitted: Raw ``api_key`` form value (may be empty, masked, or the
+            clear marker).
+        entry: The selected catalog entry, used to look up a stored key when
+            ``submitted`` is empty or masked.
+
+    Returns:
+        The API key decision for this form submission.
+    """
+    value = submitted.strip()
+    if value == CLEAR_API_KEY_MARKER:
+        return ApiKeyDecision(ApiKeyKind.CLEAR)
+    if value and value != MASKED_API_KEY_PLACEHOLDER:
+        return ApiKeyDecision(ApiKeyKind.SET, value)
+    if entry and entry.api_key:
+        return ApiKeyDecision(ApiKeyKind.KEEP, entry.api_key)
+    return ApiKeyDecision(ApiKeyKind.KEEP)
 
 
 @dataclass
 class AppConfig:
-    """Runtime provider and application configuration.
+    """Application settings plus a reference to the active catalog model.
 
-    LLM endpoint details are loaded from ``data/llm_models.json``.
-    ``config.json`` stores application settings only.
+    LLM provider details (:class:`EffectiveModelConfig`) are derived from the
+    selected catalog entry and are never stored on ``AppConfig`` directly.
 
     Attributes:
-        provider_type: Type of AI provider (e.g., "openai-compatible").
-        base_url: API endpoint URL.
-        model: Model name to use.
-        api_key: API key for authentication (optional for local providers).
         timeout: Request timeout in seconds.
         locale: Interview language for AI feedback and voice input.
         speech_model_size: Whisper model size for offline dictation.
@@ -51,10 +99,6 @@ class AppConfig:
         llm_preset_id: Active catalog model id from ``llm_models.json``.
     """
 
-    provider_type: str
-    base_url: str
-    model: str
-    api_key: str | None = None
     timeout: float = 60.0
     locale: str = DEFAULT_LOCALE
     speech_model_size: str = DEFAULT_STT_MODEL_SIZE
@@ -62,205 +106,187 @@ class AppConfig:
     tts_voice_id: str = DEFAULT_TTS_VOICE_ID
     llm_preset_id: str | None = None
 
-    def to_dict(self, mask_secret: bool = False) -> dict[str, Any]:
-        """Convert to dictionary for UI display.
 
-        Args:
-            mask_secret: If True, mask api_key as "***".
+def resolve_tts_voice_id(
+    existing: AppConfig | None,
+    normalized_locale: str,
+) -> str:
+    """Choose the effective TTS voice for a config save.
 
-        Returns:
-            Dictionary representation of the configuration.
-        """
-        return {
-            **self._shared_fields(),
-            "provider_type": self.provider_type,
-            "base_url": self.base_url,
-            "model": self.model,
-            "api_key": self._serialized_api_key(mask_secret),
-            "llm_preset_id": self.llm_preset_id,
-        }
+    Domain rule: if a config already exists for the same (already-normalized)
+    locale, keep the user-selected voice; otherwise fall back to the default
+    voice for the new locale. Preserving the user's voice across unrelated
+    saves is intentional.
 
-    def to_storage_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for persistence in ``config.json``.
+    Args:
+        existing: Previously persisted config, if any.
+        normalized_locale: The submitted locale, already normalized.
 
-        Returns:
-            Application settings only.
-        """
-        return self._shared_fields()
+    Returns:
+        The TTS voice id to persist.
+    """
+    if existing is not None and existing.locale == normalized_locale:
+        return existing.tts_voice_id
+    return default_voice_for_locale(normalized_locale)
 
-    def _shared_fields(self) -> dict[str, Any]:
-        """Return application settings persisted in ``config.json``."""
-        return {
-            "timeout": self.timeout,
-            "locale": self.locale,
-            "speech_model_size": self.speech_model_size,
-            "question_voice_enabled": self.question_voice_enabled,
-            "tts_voice_id": self.tts_voice_id,
-        }
 
-    def _serialized_api_key(self, mask_secret: bool) -> str | None:
-        """Serialize api_key for UI output."""
-        if mask_secret and self.api_key:
-            return MASKED_API_KEY_PLACEHOLDER
-        return self.api_key
+def provider_config_changed(
+    previous: EffectiveModelConfig | None,
+    proposed: EffectiveModelConfig,
+) -> bool:
+    """Return True when a save requires a fresh live provider probe.
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
-        """Create from ``config.json`` application settings.
+    The provider endpoint only needs re-testing when fields that affect
+    connectivity changed (provider type, base URL, model, API key), or when
+    nothing is saved yet. Purely cosmetic changes (locale, speech model size,
+    TTS voice) do not warrant a network round-trip.
 
-        Args:
-            data: Dictionary with configuration values.
+    Args:
+        previous: Effective provider settings of the currently saved state, or
+            ``None`` when no config is saved yet.
+        proposed: Effective provider settings being saved.
 
-        Returns:
-            AppConfig instance without LLM fields populated yet.
-        """
-        locale = normalize_locale(data.get("locale", DEFAULT_LOCALE))
-        raw_voice_id = data.get("tts_voice_id")
-        if raw_voice_id:
-            tts_voice_id = normalize_tts_voice_id(str(raw_voice_id))
-        else:
-            tts_voice_id = default_voice_for_locale(locale)
-        return cls(
-            provider_type="openai-compatible",
-            base_url="",
-            model="",
-            timeout=data.get("timeout", 60.0),
-            locale=locale,
-            speech_model_size=normalize_stt_model_size(
-                data.get("speech_model_size", DEFAULT_STT_MODEL_SIZE)
-            ),
-            question_voice_enabled=bool(data.get("question_voice_enabled", False)),
-            tts_voice_id=tts_voice_id,
-        )
+    Returns:
+        True to probe the provider endpoint before persisting; otherwise False.
+    """
+    if previous is None:
+        return True
+    return (
+        previous.provider_type != proposed.provider_type
+        or previous.base_url != proposed.base_url
+        or previous.model != proposed.model
+        or previous.api_key != proposed.api_key
+    )
 
-    @staticmethod
-    def resolve_api_key_from_form(
-        submitted: str,
-        preset_id: str,
-    ) -> str | None:
-        """Use a new API key from the form or keep the stored catalog key.
 
-        Args:
-            submitted: Raw ``api_key`` form value (may be empty or the mask placeholder).
-            preset_id: Selected catalog model id.
+class ConfigRepositoryProtocol(Protocol):
+    """Port for reading and persisting application configuration.
 
-        Returns:
-            New key from the form, stored catalog key when blank, or ``None``.
-        """
-        value = submitted.strip()
-        if value and value != MASKED_API_KEY_PLACEHOLDER:
-            return value
-        entry = LLMCatalogService.get_model(preset_id)
-        if entry and entry.api_key:
-            return entry.api_key
-        return None
+    The concrete implementation lives in the infrastructure layer and is
+    injected into :class:`ConfigService`, so the domain never depends on a
+    specific filesystem repository.
+    """
+
+    def exists(self) -> bool: ...
+
+    def load(self) -> AppConfig | None: ...
+
+    def save(self, config: AppConfig) -> None: ...
+
+    def delete(self) -> None: ...
 
 
 class ConfigService:
-    """Service for managing provider configuration."""
+    """Service for managing provider configuration.
 
-    @staticmethod
-    def get_config() -> AppConfig | None:
-        """Load configuration from disk.
+    The service depends only on :class:`ConfigRepositoryProtocol` (a domain
+    port); the concrete repository is injected by the composition root.
+    """
 
-        Returns:
-            AppConfig if ``config.json`` exists, None otherwise.
-        """
-        if not CONFIG_PATH.exists():
-            return None
-        data = json.loads(CONFIG_PATH.read_text())
-        app_config = AppConfig.from_dict(data)
-        selected_id = LLMCatalogService.get_selected_model_id()
-        if selected_id is None:
-            return app_config
-        app_config = replace(app_config, llm_preset_id=selected_id)
-        if LLMCatalogService.get_model(selected_id) is not None:
-            app_config = ConfigService.resolve_effective_config(app_config)
-        return app_config
-
-    @staticmethod
-    def _config_for_provider_test(config: AppConfig) -> AppConfig:
-        """Return settings used for connectivity probes.
+    def __init__(
+        self,
+        repo: ConfigRepositoryProtocol,
+        catalog_service: LLMCatalogService,
+    ) -> None:
+        """Initialize the service with its config repository and catalog service.
 
         Args:
-            config: Submitted or catalog-backed configuration.
+            repo: Config repository (port) used for ``config.json`` I/O.
+            catalog_service: LLM catalog service for ``llm_models.json`` lookups.
+        """
+        self._repo = repo
+        self._catalog_service = catalog_service
+
+    def get_config(self) -> AppConfig | None:
+        """Load configuration from disk via the config repository.
 
         Returns:
-            Configuration with catalog fields applied when ``llm_preset_id`` is set.
-
-        Raises:
-            ValueError: When provider settings are incomplete.
+            AppConfig with shared settings and the active model id, or None.
         """
-        if config.llm_preset_id:
-            return ConfigService.resolve_effective_config(config)
-        if not config.base_url.strip() or not config.model.strip():
-            raise ValueError("No interview model selected")
+        config = self._repo.load()
+        if config is None:
+            return None
+        selected = self._catalog_service.get_selected_model()
+        if selected is None:
+            return config
+        config.llm_preset_id = selected.id
         return config
 
-    @staticmethod
-    def resolve_effective_config(config: AppConfig) -> AppConfig:
-        """Apply catalog entry fields to a configuration copy.
+    def resolve_effective_config(self, config: AppConfig) -> EffectiveModelConfig:
+        """Resolve the selected catalog entry into an effective provider config.
 
         Args:
             config: Stored or submitted provider configuration.
 
         Returns:
-            Configuration ready for provider creation and connection tests.
+            Aggregate of provider fields and request timeout.
+
+        Raises:
+            ValueError: When no interview model is selected.
         """
-        entry = LLMCatalogService.get_model(config.llm_preset_id)
+        entry = self._catalog_service.get_model(config.llm_preset_id)
         if entry is None:
             raise ValueError("No interview model selected")
-        api_key = entry.api_key or config.api_key
-        return replace(
-            config,
-            provider_type=entry.provider_type,
-            model=entry.model,
-            base_url=entry.base_url,
-            api_key=api_key,
-        )
+        return EffectiveModelConfig.from_entry(entry, timeout=config.timeout)
 
-    @staticmethod
-    def save_config(config: AppConfig) -> None:
+    def save_config(
+        self, config: AppConfig, api_key_decision: ApiKeyDecision | None = None
+    ) -> None:
         """Save application settings and LLM selection.
 
         Args:
             config: Configuration to save.
+            api_key_decision: How to update the stored catalog key. ``None`` or
+                :attr:`ApiKeyKind.KEEP` leaves the stored key untouched;
+                :attr:`ApiKeyKind.SET` stores ``value``; :attr:`ApiKeyKind.CLEAR`
+                removes the stored key.
         """
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
         if config.llm_preset_id:
-            LLMCatalogService.save_model_selection(config.llm_preset_id, config.api_key)
-        CONFIG_PATH.write_text(json.dumps(config.to_storage_dict(), indent=2))
+            if api_key_decision is None or api_key_decision.kind is ApiKeyKind.KEEP:
+                self._catalog_service.set_selected_model(config.llm_preset_id)
+            else:
+                api_key = (
+                    api_key_decision.value
+                    if api_key_decision.kind is ApiKeyKind.SET
+                    else None
+                )
+                self._catalog_service.save_model_selection(config.llm_preset_id, api_key)
+        self._repo.save(config)
 
-    @staticmethod
-    def delete_config() -> None:
-        """Remove configuration file."""
-        if CONFIG_PATH.exists():
-            CONFIG_PATH.unlink()
+    def delete_config(self) -> None:
+        """Remove configuration file via the config repository."""
+        self._repo.delete()
 
-    @staticmethod
-    async def test_connection(config: AppConfig) -> tuple[bool, str]:
-        """Test provider connection without saving.
+    async def test_model(self, probe: EffectiveModelConfig) -> tuple[bool, str]:
+        """Probe a model's provider connection in a single pass.
+
+        Runs the text/provider validation and, when the model supports audio input
+        (``probe.accepts_audio_input``), the audio probe — reusing one provider
+        instance and one error/cleanup path (no nested test calls).
 
         Args:
-            config: Configuration to test.
+            probe: Effective provider settings, carrying the model's
+                audio-input capability flag.
 
         Returns:
             Tuple of (success: bool, message: str).
         """
         provider: AIProvider | None = None
         try:
-            probe = ConfigService._config_for_provider_test(config)
-            provider = ProviderFactory.from_config(
-                api_type=probe.provider_type,
-                base_url=probe.base_url,
-                model=probe.model,
-                api_key=probe.api_key,
-                timeout=probe.timeout,
-            )
+            provider = self._provider_from_effective(probe)
             is_valid = await provider.validate()
-            if is_valid:
+            if not is_valid:
+                return False, "Invalid API key or unreachable endpoint"
+            if not probe.accepts_audio_input:
                 return True, "Connection successful"
-            return False, "Invalid API key or unreachable endpoint"
+            if not isinstance(provider, AudioCapableProvider):
+                return False, "Provider does not support audio input."
+            audio_ok = await provider.probe_audio_input(minimal_wav_bytes())
+            if audio_ok:
+                return True, "Audio connection successful"
+            return False, (
+                "Model does not accept audio input or rejected the audio probe."
+            )
         except ValueError as exc:
             return False, str(exc)
         except Exception as exc:
@@ -269,119 +295,7 @@ class ConfigService:
             if provider is not None:
                 await provider.close()
 
-    @staticmethod
-    def check_whisper_ready(speech_model_size: str) -> tuple[bool, str]:
-        """Return whether the configured Whisper model is installed on disk.
-
-        Args:
-            speech_model_size: Whisper size slug from application settings.
-
-        Returns:
-            Tuple of success flag and error message when not ready.
-        """
-        size = normalize_stt_model_size(speech_model_size)
-        if WhisperReadinessService.is_model_installed(size):
-            return True, ""
-        return (
-            False,
-            f"Whisper model '{size}' is not installed. Download it on Configuration "
-            "before saving a model that accepts audio input.",
-        )
-
-    @staticmethod
-    async def test_audio_connection(config: AppConfig) -> tuple[bool, str]:
-        """Probe multimodal audio support via the configured provider.
-
-        Args:
-            config: Configuration to test (text settings must already be valid).
-
-        Returns:
-            Tuple of (success: bool, message: str).
-        """
-        provider: AIProvider | None = None
-        try:
-            probe = ConfigService._config_for_provider_test(config)
-            provider = ProviderFactory.from_config(
-                api_type=probe.provider_type,
-                base_url=probe.base_url,
-                model=probe.model,
-                api_key=probe.api_key,
-                timeout=probe.timeout,
-            )
-            if not isinstance(provider, AudioCapableProvider):
-                return (
-                    False,
-                    "Provider does not support audio input.",
-                )
-            is_valid = await provider.probe_audio_input(minimal_wav_bytes())
-            if is_valid:
-                return True, "Audio connection successful"
-            return (
-                False,
-                "Model does not accept audio input or rejected the audio probe.",
-            )
-        except ValueError as exc:
-            return False, str(exc)
-        except Exception as exc:
-            return False, f"Audio connection failed: {exc}"
-        finally:
-            if provider is not None:
-                await provider.close()
-
-    @staticmethod
-    async def test_catalog_model(
-        config: AppConfig,
-        *,
-        accepts_audio_input: bool,
-    ) -> tuple[bool, str]:
-        """Probe a catalog entry before it is saved to the interview model list.
-
-        Args:
-            config: Effective provider settings to probe.
-            accepts_audio_input: Whether the catalog entry supports audio answers.
-
-        Returns:
-            Tuple of (success: bool, message: str).
-        """
-        success, message = await ConfigService.test_connection(config)
-        if not success:
-            return False, message
-        if not accepts_audio_input:
-            return True, message
-        return await ConfigService.test_audio_connection(config)
-
-    @staticmethod
-    async def test_interview_model(
-        config: AppConfig,
-        *,
-        accepts_audio_input: bool,
-    ) -> tuple[bool, str]:
-        """Run text and optional audio readiness checks for an interview model.
-
-        Args:
-            config: Effective provider settings to probe.
-            accepts_audio_input: Whether the catalog entry supports audio answers.
-
-        Returns:
-            Tuple of (success: bool, message: str).
-        """
-        # test_catalog_model already performs the text (and optional audio)
-        # readiness probes; only the Whisper check is specific to interview models.
-        success, message = await ConfigService.test_catalog_model(
-            config,
-            accepts_audio_input=accepts_audio_input,
-        )
-        if not success or not accepts_audio_input:
-            return success, message
-        whisper_ok, whisper_message = ConfigService.check_whisper_ready(
-            config.speech_model_size
-        )
-        if not whisper_ok:
-            return False, whisper_message
-        return True, message
-
-    @staticmethod
-    def create_provider_from_config() -> AIProvider:
+    def create_provider_from_config(self) -> AIProvider:
         """Create AI provider from saved configuration.
 
         Returns:
@@ -390,43 +304,19 @@ class ConfigService:
         Raises:
             ValueError: If no configuration exists.
         """
-        config = ConfigService.get_config()
+        config = self.get_config()
         if not config:
             raise ValueError("No configuration found")
-        effective = ConfigService.resolve_effective_config(config)
-        return ProviderFactory.from_config(
-            api_type=effective.provider_type,
-            base_url=effective.base_url,
-            model=effective.model,
-            api_key=effective.api_key,
-            timeout=effective.timeout,
-        )
+        effective = self.resolve_effective_config(config)
+        return self._provider_from_effective(effective)
 
+    def _provider_from_effective(self, probe: EffectiveModelConfig) -> AIProvider:
+        """Create an AI provider from an effective model config.
 
-def app_config_read_from(
-    config: AppConfig,
-    *,
-    mask_secret: bool = False,
-) -> AppConfigRead:
-    """Map a ``AppConfig`` service entity to a template read model.
+        Args:
+            probe: Aggregate of provider fields and timeout.
 
-    Args:
-        config: Loaded or submitted provider configuration.
-        mask_secret: Whether to mask the API key for display.
-
-    Returns:
-        Immutable read model for templates.
-    """
-    data = config.to_dict(mask_secret=mask_secret)
-    return AppConfigRead(
-        provider_type=str(data["provider_type"]),
-        base_url=str(data["base_url"]),
-        model=str(data["model"]),
-        api_key=data.get("api_key"),
-        timeout=float(data["timeout"]),
-        locale=str(data["locale"]),
-        speech_model_size=str(data["speech_model_size"]),
-        question_voice_enabled=bool(data["question_voice_enabled"]),
-        tts_voice_id=str(data["tts_voice_id"]),
-        llm_preset_id=data.get("llm_preset_id"),
-    )
+        Returns:
+            Configured AI provider instance.
+        """
+        return ProviderFactory.from_effective(probe)

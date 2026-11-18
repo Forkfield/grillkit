@@ -34,11 +34,11 @@ _SECTION_LABELS: dict[SectionKind, str] = {
 
 @dataclass(frozen=True)
 class SessionResultsRender:
-    """Result of preparing a session results HTML page.
+    """Result of preparing a session results page.
 
     Attributes:
         redirect_url: Redirect target when the session is missing or not completed.
-        template_context: Jinja context when the page should render.
+        template_context: Page context when the session should render.
     """
 
     redirect_url: str | None
@@ -46,7 +46,7 @@ class SessionResultsRender:
 
 
 class CompletedSessionResults:
-    """Compose the completed session results hub template context."""
+    """Compose the completed session results hub context."""
 
     def __init__(self, uow: InterviewUnitOfWork) -> None:
         """Initialize with the active unit of work.
@@ -54,7 +54,7 @@ class CompletedSessionResults:
         Args:
             uow: Shared application unit of work for this page scope.
         """
-        self._uow = uow
+        self._uow: InterviewUnitOfWork = uow
 
     @staticmethod
     def _section_summary_text(
@@ -96,7 +96,7 @@ class CompletedSessionResults:
             breakdown: Nested session score breakdown, if present.
 
         Returns:
-            Section result card for the results hub template.
+            Section result card for the results hub.
         """
         section_data = breakdown.get(kind) if isinstance(breakdown, dict) else None
         score = (
@@ -185,7 +185,7 @@ class CompletedSessionResults:
             interview_id: Session UUID.
 
         Returns:
-            Redirect URL or template context for ``session_results.html``.
+            Redirect URL or JSON context for the results page.
         """
         interview = load_interview_read(self._uow, interview_id)
 

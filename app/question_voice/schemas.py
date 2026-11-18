@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,7 +19,7 @@ class PiperVoiceStatusRead(BaseModel):
         loaded_in_memory: True when the voice is loaded in this process.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     voice_id: str
     locale: str
@@ -32,14 +32,14 @@ class PiperVoiceStatusRead(BaseModel):
 
 
 class QuestionVoicePageContext(BaseModel):
-    """Keys for config and interview templates for Piper question voice.
+    """Keys for config and interview pages for Piper question voice.
 
     Attributes:
         tts_voice_status: Status snapshot for banners and partials.
         tts_voice_banner: Whether to show the install/load banner.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     tts_voice_status: PiperVoiceStatusRead | None
     tts_voice_banner: bool

@@ -8,6 +8,7 @@ from app.platform.domain.speech_settings import (
     question_voice_settings_from_config,
     speech_settings_from_config,
 )
+from app.platform.repo.config_composition import get_default_config_service
 from app.speech.domain.stt_loader import SttModelLoader
 from app.speech.domain.tts_engine import TtsEngine
 
@@ -25,22 +26,23 @@ class SpeechRuntimeCoordinator:
         self,
         stt_loader: SttModelLoader,
         tts_engine: TtsEngine,
-        config_service: type[ConfigService] = ConfigService,
+        config_service: ConfigService | None = None,
     ) -> None:
         """Initialize the coordinator with STT and TTS backends.
 
         Args:
             stt_loader: Backend that loads a :class:`Stt` into memory.
             tts_engine: Backend that holds a voice and synthesizes WAV bytes.
-            config_service: Provider configuration service class.
+            config_service: Provider configuration service instance. Defaults
+                to the shared application-wide instance.
         """
         self._stt = stt_loader
         self._tts = tts_engine
-        self._config_service = config_service
+        self._config_service = config_service or get_default_config_service()
 
     @property
-    def config_service(self) -> type[ConfigService]:
-        """Return the configuration service class bound to this coordinator."""
+    def config_service(self) -> ConfigService:
+        """Return the configuration service bound to this coordinator."""
         return self._config_service
 
     @property
@@ -157,3 +159,4 @@ class SpeechRuntimeCoordinator:
     def is_loaded(self, size: str) -> bool:
         """Return whether the STT model for ``size`` is loaded in memory."""
         return self._stt.is_loaded(size)
+

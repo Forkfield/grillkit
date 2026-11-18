@@ -34,8 +34,12 @@ async def test_prefetch_skips_when_provider_not_configured() -> None:
     persist = MagicMock()
 
     with patch(
-        "app.interview.support.feedback_prefetch.ConfigService.create_provider_from_config",
-        side_effect=ValueError("No provider configured"),
+        "app.interview.support.feedback_prefetch.get_default_config_service",
+        return_value=MagicMock(
+            create_provider_from_config=MagicMock(
+                side_effect=ValueError("No provider configured")
+            )
+        ),
     ):
         await prefetch_section_feedback(
             "iv-1",
@@ -58,8 +62,10 @@ async def test_prefetch_evaluates_and_persists() -> None:
     persist = MagicMock()
 
     with patch(
-        "app.interview.support.feedback_prefetch.ConfigService.create_provider_from_config",
-        return_value=provider,
+        "app.interview.support.feedback_prefetch.get_default_config_service",
+        return_value=MagicMock(
+            create_provider_from_config=MagicMock(return_value=provider)
+        ),
     ):
         await prefetch_section_feedback(
             "iv-1",
@@ -81,8 +87,10 @@ async def test_prefetch_skips_persist_when_result_none() -> None:
     persist = MagicMock()
 
     with patch(
-        "app.interview.support.feedback_prefetch.ConfigService.create_provider_from_config",
-        return_value=provider,
+        "app.interview.support.feedback_prefetch.get_default_config_service",
+        return_value=MagicMock(
+            create_provider_from_config=MagicMock(return_value=provider)
+        ),
     ):
         await prefetch_section_feedback(
             "iv-1",
@@ -104,8 +112,10 @@ async def test_prefetch_handles_evaluation_error_gracefully() -> None:
     persist = MagicMock()
 
     with patch(
-        "app.interview.support.feedback_prefetch.ConfigService.create_provider_from_config",
-        return_value=provider,
+        "app.interview.support.feedback_prefetch.get_default_config_service",
+        return_value=MagicMock(
+            create_provider_from_config=MagicMock(return_value=provider)
+        ),
     ):
         await prefetch_section_feedback(
             "iv-1",
@@ -126,8 +136,10 @@ async def test_prefetch_handles_provider_creation_error_gracefully() -> None:
     persist = MagicMock()
 
     with patch(
-        "app.interview.support.feedback_prefetch.ConfigService.create_provider_from_config",
-        side_effect=Exception("unexpected"),
+        "app.interview.support.feedback_prefetch.get_default_config_service",
+        return_value=MagicMock(
+            create_provider_from_config=MagicMock(side_effect=Exception("unexpected"))
+        ),
     ):
         await prefetch_section_feedback(
             "iv-1",

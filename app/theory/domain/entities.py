@@ -79,7 +79,7 @@ class TheorySection(Section[TheoryTask]):
         tasks: Theory tasks in display order (order, then round).
     """
 
-    MAX_SCORE_PER_ROUND = 5  # pyright: ignore
+    MAX_SCORE_PER_ROUND = 5
     NEW_ID = 0
 
     id: int

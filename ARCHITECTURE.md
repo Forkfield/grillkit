@@ -2,7 +2,7 @@
 
 User-facing overview, screenshots, and quick start: [README.md](README.md).
 
-GrillKit is an AI-powered technical interview trainer. The stack is **FastAPI** (HTTP + WebSocket), **SQLAlchemy** (SQLite), **Alembic** (schema and data migrations), **Jinja2** templates, and **OpenAI-compatible** plus **faster-whisper** adapters in `ai/`. Code is organized **by feature** (`interview/`, `theory/`, `coding/`, `speech/`, `question_voice/`, `platform/`) with cross-cutting code in `shared/`.
+GrillKit is an AI-powered technical interview trainer. The stack is **FastAPI** (JSON HTTP + WebSocket), **SQLAlchemy** (SQLite), **Alembic** (schema and data migrations), a **static Vanilla SPA** frontend served by nginx, and **OpenAI-compatible** plus **faster-whisper** adapters in `ai/`. Code is organized **by feature** (`interview/`, `theory/`, `coding/`, `speech/`, `question_voice/`, `platform/`) with cross-cutting code in `shared/`.
 
 **Session orchestration** lives in `interview/`: setup, dashboard, session shell (`Interview`), page composition, phase order, completion, results hub, and `selection_spec` v2 (`session_mode`). **Theory flow** lives in `theory/`: questions, tasks, timer, WebSocket/audio submit, AI evaluation, and post-session review. **Coding flow** lives in `coding/`: YAML task banks, Monaco UI, Judge0 Run attempts, WebSocket submit, AI evaluation, and post-session review. The interview shell does not own section tasks; `InterviewRead` composes theory task rows at read time via `theory_sections` + `answers`, and coding context from `coding_sections` + `coding_tasks`.
 
@@ -22,8 +22,7 @@ Transactions use a single app-wide `InterviewUnitOfWork` (interviews, theory/cod
 ```
 grillkit/
 ├── app/
-│   ├── main.py                 # create_app(), router registration, lifespan → run_migrations()
-│   ├── templating.py           # Shared Jinja2Templates + static_version()
+│   ├── main.py                 # create_app(), router registration, lifespan → run_migrations(), GET /health
 │   ├── shared/
 │   │   ├── paths.py            # PROJECT_ROOT, DATA_DIR, CONFIG_PATH, whisper/questions/db paths
 │   │   ├── questions.py        # YAML theory question loader (data/questions/)
@@ -50,9 +49,9 @@ grillkit/
 │   │   │   ├── config.py       # GET/POST /config
 │   │   │   └── deps.py
 │   │   ├── use_cases/
-│   │   │   └── config.py       # AppConfig, ConfigService (data/config.json)
+│   │   │   ├── save_config.py   # SaveConfigUseCase (parse+test+persist)
+│   │   │   └── add_llm_model.py # AddLLMModelUseCase
 │   │   ├── queries/
-│   │   │   ├── config_form.py  # Config page read model
 │   │   │   ├── llm_page.py     # LLM catalog page context
 │   │   │   └── platform_page.py
 │   │   └── support/
@@ -86,12 +85,12 @@ grillkit/
 │   │       └── ai_errors.py
 │   │   └── api/
 │   │       ├── deps.py
-│   │       ├── dashboard.py    # GET /
-│   │       ├── setup.py        # GET/POST /setup, cascaded options
+│   │       ├── dashboard.py    # GET / → GET /api/dashboard
+│   │       ├── setup.py        # /setup/*, /api/setup (JSON), cascaded options
 │   │       ├── setup_form.py
-│   │       ├── routes.py       # GET /interview/{id}, question-audio
-│   │       ├── results.py      # GET /results, /theory, /coding (completed sessions)
-│   │       ├── known_questions.py  # GET/POST/DELETE /known-questions, GET /manage
+│   │       ├── routes.py       # /api/interview/{id} (JSON page) + /interview/{id}/question-audio (media)
+│   │       ├── results.py      # /api/interview/{id}/{results,theory,coding} (JSON)
+│   │       ├── known_questions.py  # GET/POST/DELETE /known-questions, GET /api/known-questions/manage
 │   │       └── errors.py
 │   ├── coding/                 # Coding section (tasks, Judge0 runner, WS/API, evaluator)
 │   │   ├── domain/             # CodingSection, CodingTask, CodeRunAttempt aggregates
@@ -154,10 +153,14 @@ grillkit/
 │   │       ├── routes.py       # GET/POST /speech/model/*
 │   │       ├── dictation.py    # WS /interview/{id}/dictation
 │   │       └── dictation_protocol.py
-├── templates/                  # Jinja2 HTML (dashboard, setup, config, interview, speech_model_*)
-├── static/
-│   ├── css/styles.css
-│   └── js/                     # dictation, interview_voice, interview_timer, coding_editor, coding_session, ...
+├── frontend/                   # Public entry point: static Vanilla SPA + nginx reverse-proxy
+│   ├── Dockerfile              # nginx image
+│   ├── nginx.conf              # serves SPA + /static/*, proxies /api, /ws, /media to backend
+│   └── public/
+│       ├── index.html          # SPA shell (hash router, navbar, theme)
+│       ├── app.js              # SPA: pages, JSON API calls, dynamic module loading
+│       ├── styles.css
+│       └── static/js/          # interview/coding/speech modules loaded by app.js
 ├── data/
 │   ├── config.json             # Locale, speech/TTS flags (gitignored)
 │   ├── llm_models.json         # User LLM catalog + selected model (gitignored)
@@ -188,30 +191,30 @@ grillkit/
 
 | Method | Path | Module | Purpose |
 |--------|------|--------|---------|
-| GET | `/` | `interview/api/dashboard.py` | Interview history (last 20) |
-| GET | `/setup` | `interview/api/setup.py` | New interview form (redirects to `/config` if unset) |
-| POST | `/setup` | `interview/api/setup.py` | Create interview → redirect `/interview/{id}` |
+| GET | `/api/dashboard` | `interview/api/dashboard.py` | Interview history (last 20), JSON |
+| GET | `/api/setup` | `interview/api/setup.py` | New interview page context, JSON (SPA owns `/setup`; redirects to `/#/config` if unset) |
+| POST | `/api/setup` | `interview/api/setup.py` | Create interview → `{redirect: /interview/{id}}` |
+| GET | `/api/interview/{id}` | `interview/api/routes.py` | Active interview page context, JSON (SPA owns `/interview/{id}`; completed → `{redirect: /interview/{id}/results}`) |
+| GET | `/api/interview/{id}/results` | `interview/api/results.py` | Completed session hub context, JSON (SPA owns `/interview/{id}/results`) |
+| GET | `/api/interview/{id}/theory` | `interview/api/results.py` | Theory review context, JSON (SPA owns `/interview/{id}/theory`) |
+| GET | `/api/interview/{id}/coding` | `interview/api/results.py` | Coding review context, JSON (SPA owns `/interview/{id}/coding`) |
 | GET | `/setup/options` | `interview/api/setup.py` | Cascaded JSON: theory tracks → levels → categories |
 | GET | `/setup/coding-options` | `interview/api/setup.py` | Cascaded JSON: coding tracks → levels → categories |
 | GET | `/setup/coding-available` | `interview/api/setup.py` | JSON: whether coding modes are offered (Judge0 health) |
 | GET | `/known-questions` | `interview/api/known_questions.py` | JSON: known bank item IDs grouped by `theory` / `coding` |
 | POST | `/known-questions` | `interview/api/known_questions.py` | Mark a bank item as known (`{branch, item_id}`) |
 | DELETE | `/known-questions` | `interview/api/known_questions.py` | Unmark a known bank item |
-| GET | `/known-questions/manage` | `interview/api/known_questions.py` | HTML manage page (resolved question text) |
-| GET | `/config` | `platform/api/config.py` | AI provider configuration form |
-| POST | `/config` | `platform/api/config.py` | Test connection (via form dependency), then save |
-| POST | `/config/test` | `platform/api/config.py` | Test connection without saving |
-| POST | `/config/llm-models` | `platform/api/config.py` | Add catalog entry (incl. `accepts_audio_input`) |
-| DELETE | `/config` | `platform/api/config.py` | Remove saved provider configuration |
-| GET | `/speech/model/status` | `speech/api/routes.py` | Whisper model install status (HTML or JSON) |
+| GET | `/api/known-questions/manage` | `interview/api/known_questions.py` | JSON manage page (resolved question text, `theory_items`/`coding_items`/`total_count`) |
+| GET | `/api/config` | `platform/api/config.py` | AI provider configuration context (JSON) |
+| POST | `/api/config` | `platform/api/config.py` | Test connection, then save (`{success, message, page}`) |
+| POST | `/api/config/test` | `platform/api/config.py` | Test connection without saving |
+| POST | `/api/config/llm-models` | `platform/api/config.py` | Add catalog entry (incl. `accepts_audio_input`) |
+| DELETE | `/api/config` | `platform/api/config.py` | Remove saved provider configuration |
+| GET | `/speech/model/status` | `speech/api/routes.py` | Whisper model install status (JSON) |
 | POST | `/speech/model/download` | `speech/api/routes.py` | Start Whisper download for `config.speech_model_size` |
 | GET | `/speech/model/options` | `speech/api/routes.py` | JSON size trade-off metadata |
-| GET | `/speech/tts/status` | `question_voice/api/routes.py` | Piper voice status (HTML fragment or JSON) when question voice is enabled |
+| GET | `/speech/tts/status` | `question_voice/api/routes.py` | Piper voice status (JSON) when question voice is enabled |
 | POST | `/speech/tts/voice/download` | `question_voice/api/routes.py` | Start Piper voice download for configured `tts_voice_id` |
-| GET | `/interview/{interview_id}` | `interview/api/routes.py` | Active session page (theory and/or coding by phase); completed → redirect `/results` |
-| GET | `/interview/{interview_id}/results` | `interview/api/results.py` | Completed session hub: overall evaluation + section cards |
-| GET | `/interview/{interview_id}/theory` | `interview/api/results.py` | Theory review: chat history and section feedback (completed only) |
-| GET | `/interview/{interview_id}/coding` | `interview/api/results.py` | Coding review: per-task accordion with submits and feedback (completed only) |
 | GET | `/interview/{interview_id}/question-audio` | `interview/api/routes.py` | WAV for current theory task (`answer_id` query param) |
 | POST | `/interview/{interview_id}/theory/audio-answer` | `theory/api/routes.py` | Multipart WAV theory answer → NDJSON |
 | WS | `/interview/{interview_id}/theory/ws` | `theory/api/routes.py` | Real-time theory task submit, timeout, session complete |
@@ -219,13 +222,22 @@ grillkit/
 | GET | `/interview/{interview_id}/coding/state` | `coding/api/routes.py` | Current coding task, progress, run history |
 | WS | `/interview/{interview_id}/coding/ws` | `coding/api/routes.py` | Coding submit, hidden tests, AI evaluation stream |
 | WS | `/interview/{interview_id}/dictation` | `speech/api/dictation.py` | PCM dictation: `start` → `ready`, audio chunks, `stop` → `final` |
-| — | `/static/*` | `main.py` | CSS, JS, and assets |
+| GET | `/health` | `main.py` | Liveness probe for orchestrators and Docker healthcheck |
+
+### Frontend (nginx) — public entry point
+
+| Method | Path | Handling |
+|--------|------|----------|
+| GET | `/` | SPA shell `index.html` (served by frontend container) |
+| GET | `/app.js`, `/styles.css` | SPA assets (served by frontend) |
+| GET | `/static/*` | Interview/coding JS modules (served by frontend) |
+| — | `/api/*`, `/ws`, `/speech/*`, media | Reverse-proxied to the backend |
 
 ## Layer Responsibilities
 
 | Package / layer | Responsibility |
 |-----------------|----------------|
-| `interview/api/`, `speech/api/`, `platform/api/`, `question_voice/api/` | HTTP/WebSocket transport, forms, template rendering |
+| `interview/api/`, `speech/api/`, `platform/api/`, `question_voice/api/` | HTTP/WebSocket transport (JSON, no templates) |
 | `*/api/deps.py` | Inject request-scoped use cases and `InterviewUnitOfWork` via FastAPI `Depends` |
 | `interview/domain/` | Interview session shell aggregate, `SessionSelection`, serialization, domain exceptions |
 | `theory/domain/` | `TheorySection` / `TheoryTask` aggregates and theory-specific exceptions |
@@ -537,23 +549,23 @@ Initial task rows are created with the theory section; follow-ups append via `Th
 | `bank_item_id` | `str` | ID from the YAML bank for that branch |
 | `created_at` | `datetime` | When the item was marked as known |
 
-Instance-wide list (no user accounts). When setup sends `exclude_known: true`, `CreateInterviewSession` loads IDs per branch and `plan_questions(..., excluded_ids=...)` removes them from pools before selection. Mark/unmark via `POST`/`DELETE /known-questions` with `{branch, item_id}`, **I know this** buttons during active interviews, or `/known-questions/manage`. Display text for the manage page is resolved from YAML banks via `interview/support/bank_text.py` (full-bank `id → text` indexes cached per process with `@lru_cache`).
+Instance-wide list (no user accounts). When setup sends `exclude_known: true`, `CreateInterviewSession` loads IDs per branch and `plan_questions(..., excluded_ids=...)` removes them from pools before selection. Mark/unmark via `POST`/`DELETE /known-questions` with `{branch, item_id}`, **I know this** buttons during active interviews, or the `#/known-questions` SPA page (backed by `GET /api/known-questions/manage`). Display text for the manage page is resolved from YAML banks via `interview/support/bank_text.py` (full-bank `id → text` indexes cached per process with `@lru_cache`).
 
 ## Data Flow: Configure Provider
 
 ```
-User → GET /config → ConfigService.get_config() + LLMCatalogService.load_catalog()
-User → POST /config/test → test selected catalog model (no save)
-User → POST /config → merge form into config.json + catalog selection
+User → GET /api/config → ConfigService.get_config() + LLMCatalogService.load_catalog()
+User → POST /api/config/test → test selected catalog model (no save)
+User → POST /api/config → merge form into config.json + catalog selection
   → ConfigService.test_connection(resolve_effective_config()) → AI provider ping
   → on success: save config.json and llm_models.json
-User → POST /config/llm-models (display_name, base_url, model, optional api_key, accepts_audio_input)
+User → POST /api/config/llm-models (display_name, base_url, model, optional api_key, accepts_audio_input)
   → NewLLMModel validated (no manual model id — slug generated by generate_model_id())
   → LLMCatalogService.add_user_model() → data/llm_models.json (sets selected id)
   → when accepts_audio_input: test text + audio capability + Whisper readiness
 ```
 
-`ConfigService.resolve_effective_config()` applies the selected catalog entry’s `base_url`, `model`, and `api_key` for interviews and connection tests. Setup and interview flows require a saved config; otherwise `/setup` redirects to `/config`.
+`ConfigService.resolve_effective_config()` applies the selected catalog entry’s `base_url`, `model`, and `api_key` for interviews and connection tests. Setup and interview flows require a saved config; otherwise `/setup` redirects to `/#/config`.
 
 ## Data Flow: Create Interview
 
@@ -647,7 +659,7 @@ Client → {"type":"stop"}
 ## Data Flow: Speech Model Install
 
 ```
-User → GET /config (speech_model_size, locale)
+User → GET /api/config (speech_model_size, locale)
 User → POST /speech/model/download
   → WhisperModelService.start_download(size from config)
        → Hugging Face snapshot → data/whisper-models/<size>/
@@ -676,25 +688,25 @@ Display score sums `score_breakdown.theory.score` and `score_breakdown.coding.sc
 ## Data Flow: Results and Review Pages
 
 ```
-GET /interview/{id} on completed session
-  → ActiveSessionPage redirects 303 → /interview/{id}/results
+GET /api/interview/{id} on completed session
+  → ActiveSessionPage builds context; endpoint returns {redirect: /interview/{id}/results} → SPA navigates to hash route
 
-GET /interview/{id}/results
+Client → #/interview/{id}/results → GET /api/interview/{id}/results
   → CompletedSessionResults.prepare_page()
        → load completed InterviewRead + overall_feedback JSON
        → section registry builds cards (theory/coding) with review URLs
-  → session_results.html
+  → SPA results hub (overall feedback + section cards); redirect payload → navigateTo()
 
-GET /interview/{id}/theory
+Client → #/interview/{id}/theory → GET /api/interview/{id}/theory
   → theory/queries/review_page.py build_context() — answered rounds + section_feedback
-  → theory_review.html (redirect to /results if section missing)
+  → JSON; redirect to results when the section is missing (404 {redirect})
 
-GET /interview/{id}/coding
+Client → #/interview/{id}/coding → GET /api/interview/{id}/coding
   → coding/queries/review_page.py build_context() — tasks grouped by task_id with rounds
-  → coding_review.html
+  → JSON; redirect to results when the section is missing
 ```
 
-Dashboard history links to `/interview/{id}/results` for completed sessions.
+Dashboard history links to `/interview/{id}/results` for completed sessions; the SPA renders these as `#/interview/{id}/results`.
 
 ## Data Access Pattern
 

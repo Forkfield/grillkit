@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Coding section page read models."""
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +23,7 @@ class CodingPageContext(BaseModel):
         section_status: Coding section status slug.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     task_count: int
     completed_tasks: int

@@ -54,10 +54,14 @@ class TestKnownQuestionsApi:
         assert missing.json() == {"theory": [], "coding": []}
 
     def test_manage_page_renders(self, client, isolated_db) -> None:
-        """Manage page returns HTML with marked IDs."""
+        """Manage API returns known views with bank text and total count."""
         del isolated_db
         with InterviewUnitOfWork(auto_commit=True) as uow:
             KnownQuestionsRepository(uow.session).mark("coding", "bas-001")
-        response = client.get("/known-questions/manage")
+        response = client.get("/api/known-questions/manage")
         assert response.status_code == 200
-        assert "bas-001" in response.text
+        body = response.json()
+        assert body["total_count"] == 1
+        ids = [item["id"] for item in body["coding_items"]]
+        assert "bas-001" in ids
+        assert body["theory_items"] == []

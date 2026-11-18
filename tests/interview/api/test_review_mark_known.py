@@ -44,9 +44,11 @@ class TestReviewMarkKnown:
         assert "q-rm-1" not in known.get("theory", [])
 
     def test_known_questions_manage_page(self, client, isolated_db):
-        """GET /manage renders HTML table with known questions."""
+        """GET /api/known-questions/manage returns known questions as JSON."""
         with InterviewUnitOfWork(auto_commit=True) as uow:
             KnownQuestionsRepository(uow.session).mark("theory", "q-manage-1")
-        response = client.get("/known-questions/manage")
+        response = client.get("/api/known-questions/manage")
         assert response.status_code == 200
-        assert "q-manage-1" in response.text
+        body = response.json()
+        ids = [item["id"] for item in body["theory_items"]]
+        assert "q-manage-1" in ids

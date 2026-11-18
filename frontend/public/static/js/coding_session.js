@@ -461,15 +461,6 @@
         );
     }
 
-    window.grillkitOnTimerExpired = function () {
-        if (isSubmitting) {
-            return;
-        }
-        isSubmitting = true;
-        window.isSubmitting = true;
-        setComposerEnabled(false);
-    };
-
     function bindActions() {
         const runBtn = getRunBtn();
         const submitBtn = getSubmitBtn();
@@ -497,27 +488,21 @@
         },
     };
 
+    // The actual timeout submission is sent by interview_timer.js (sendTimeout) as
+    // {type: "timeout", question_id: taskId, round}; sending our own {type: "timeout",
+    // task_id} here duplicates that message and, without a `round`, the backend rejects
+    // it with "Both task_id and round are required". So only lock the composer here.
     window.grillkitOnTimerExpired = function () {
-        if (!taskId || isSubmitting) {
-            return;
-        }
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            showError("Timer expired but connection lost. Refresh to continue.");
+        if (isSubmitting) {
             return;
         }
         isSubmitting = true;
         window.isSubmitting = true;
         setComposerEnabled(false);
         stopTaskTimer();
-        ws.send(
-            JSON.stringify({
-                type: "timeout",
-                task_id: taskId,
-            })
-        );
     };
 
-    document.addEventListener("DOMContentLoaded", function () {
+    function bootCodingSession() {
         if (panel.dataset.complete === "true" || !taskId) {
             return;
         }
@@ -542,5 +527,11 @@
             initialTask.task_spec = bootstrap.currentTask.task_spec || {};
         }
         applyTask(initialTask);
-    });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bootCodingSession);
+    } else {
+        bootCodingSession();
+    }
 })();

@@ -21,8 +21,10 @@ from app.interview.domain.events import (
 )
 from app.interview.domain.exceptions import InterviewNotFoundError
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.platform.domain.config import ConfigService
-from app.platform.domain.llm_catalog import LLMCatalogService
+from app.platform.repo.config_composition import (
+    get_default_catalog_service,
+    get_default_config_service,
+)
 from app.shared.infrastructure.audio_wav import (
     validate_wav_bytes,
     wav_bytes_to_float32,
@@ -178,10 +180,10 @@ class SubmitTheoryAnswer:
         Raises:
             ValueError: When configuration or catalog flags disallow audio answers.
         """
-        config = ConfigService.get_config()
+        config = get_default_config_service().get_config()
         if config is None or not config.llm_preset_id:
             raise ValueError("Interview model is not configured")
-        entry = LLMCatalogService.get_model(config.llm_preset_id)
+        entry = get_default_catalog_service().get_model(config.llm_preset_id)
         if entry is None or not entry.accepts_audio_input:
             raise ValueError("Selected interview model does not accept audio input")
 

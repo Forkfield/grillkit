@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GrillKit</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script>
+        /* Apply theme before first paint to avoid a flash of the wrong theme. */
+        (function () {
+            var stored = null;
+            try { stored = localStorage.getItem("grillkit-theme"); } catch (e) {}
+            var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar">
+            <a href="#/dashboard" class="navbar-brand" data-nav>GrillKit</a>
+            <ul class="navbar-nav">
+                <li><a href="#/dashboard" class="nav-link" data-nav>Dashboard</a></li>
+                <li><a href="#/setup" class="nav-link" data-nav>New Interview</a></li>
+                <li><a href="#/known-questions" class="nav-link" data-nav>Known Questions</a></li>
+                <li><a href="#/config" class="nav-link" data-nav>Configuration</a></li>
+            </ul>
+            <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle color theme" data-theme-toggle>
+                <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true">&#x2600;</span>
+                <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true">&#x263D;</span>
+            </button>
+        </nav>
+
+        <main class="main-content" id="app-view"></main>
+    </div>
+    <script src="/app.js"></script>
+</body>
+</html>

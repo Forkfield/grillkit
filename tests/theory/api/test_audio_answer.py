@@ -3,7 +3,7 @@
 """Tests for POST /interview/{id}/theory/audio-answer and related interview UI gating."""
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -167,25 +167,32 @@ class TestAudioAnswerApi:
         """HTTP 400 when the configured catalog model does not accept audio."""
         interview_id = seed_two_question_interview("audio-api-disabled")
         monkeypatch.setattr(
-            "app.platform.domain.config.ConfigService.get_config",
-            lambda: AppConfig(
-                provider_type="openai-compatible",
-                base_url="http://localhost",
-                model="text-only",
-                llm_preset_id="text-only",
+            "app.theory.use_cases.submit_answer.get_default_config_service",
+            lambda: MagicMock(
+                get_config=MagicMock(
+                    return_value=AppConfig(
+                        llm_preset_id="text-only",
+                    )
+                )
             ),
         )
         monkeypatch.setattr(
-            "app.platform.domain.llm_catalog.LLMCatalogService.get_model",
-            lambda preset_id: LLMModelEntry(
-                id=preset_id,
-                display_name="Text only",
-                provider_type="openai-compatible",
-                model="text-only",
-                base_url="http://localhost",
-                api_key_required=False,
-                accepts_audio_input=False,
-            ),
+            "app.theory.use_cases.submit_answer.get_default_catalog_service",
+            lambda: type(
+                "Catalog",
+                (),
+                {
+                    "get_model": lambda self, preset_id: LLMModelEntry(
+                        id=preset_id,
+                        display_name="Text only",
+                        provider_type="openai-compatible",
+                        model="text-only",
+                        base_url="http://localhost",
+                        api_key_required=False,
+                        accepts_audio_input=False,
+                    )
+                },
+            )(),
         )
         wav_bytes = minimal_wav_bytes()
 
@@ -234,23 +241,26 @@ class TestInterviewAudioAnswerPage:
         del isolated_db
         interview = _active_interview_read("audio-ui-1")
         monkeypatch.setattr(
-            "app.interview.queries.session_page.LLMCatalogService.get_model",
-            lambda preset_id: LLMModelEntry(
-                id=preset_id,
-                display_name="Audio model",
-                provider_type="openai-compatible",
-                model="audio-model",
-                base_url="http://localhost",
-                api_key_required=False,
-                accepts_audio_input=True,
-            ),
+            "app.interview.queries.session_page.get_default_catalog_service",
+            lambda: type(
+                "Catalog",
+                (),
+                {
+                    "get_model": lambda self, preset_id: LLMModelEntry(
+                        id=preset_id,
+                        display_name="Audio model",
+                        provider_type="openai-compatible",
+                        model="audio-model",
+                        base_url="http://localhost",
+                        api_key_required=False,
+                        accepts_audio_input=True,
+                    )
+                },
+            )(),
         )
         page_context = SessionPageService.build_page_context(
             interview,
             config=AppConfig(
-                provider_type="openai-compatible",
-                base_url="http://localhost",
-                model="audio-model",
                 llm_preset_id="audio-model",
             ),
             question_voice_enabled=False,
@@ -267,12 +277,11 @@ class TestInterviewAudioAnswerPage:
                 ),
             ),
         ):
-            response = client.get("/interview/audio-ui-1")
+            response = client.get("/api/interview/audio-ui-1")
 
         assert response.status_code == 200
-        assert 'id="audio-record-btn"' in response.text
-        assert 'data-audio-answer-enabled="true"' in response.text
-        assert "interview_audio_answer.js" in response.text
+        payload = response.json()
+        assert payload["interview_model_accepts_audio"] is True
 
     def test_interview_page_hides_audio_controls_without_catalog_flag(
         self, client, isolated_db
@@ -283,9 +292,6 @@ class TestInterviewAudioAnswerPage:
         page_context = SessionPageService.build_page_context(
             interview,
             config=AppConfig(
-                provider_type="openai-compatible",
-                base_url="http://localhost",
-                model="text-model",
                 llm_preset_id="text-model",
             ),
             question_voice_enabled=False,
@@ -302,8 +308,8 @@ class TestInterviewAudioAnswerPage:
                 ),
             ),
         ):
-            response = client.get("/interview/audio-ui-2")
+            response = client.get("/api/interview/audio-ui-2")
 
         assert response.status_code == 200
-        assert 'id="audio-record-btn"' not in response.text
-        assert 'data-audio-answer-enabled="true"' not in response.text
+        payload = response.json()
+        assert payload["interview_model_accepts_audio"] is False

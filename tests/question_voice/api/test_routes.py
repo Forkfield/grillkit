@@ -27,9 +27,6 @@ class TestTtsStatusRoute:
     def test_status_returns_json_when_voice_disabled(self, client):
         """Status reports unavailable when voice is off."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
         missing = PiperVoiceStatusRead(
@@ -92,8 +89,8 @@ class TestTtsStatusRoute:
         assert payload["enabled"] is True
         assert payload["loaded_in_memory"] is True
 
-    def test_status_uses_negotiated_response_html(self, client, voice_config):
-        """Without JSON Accept header, routes return HTML partial."""
+    def test_status_returns_json(self, client, voice_config):
+        """Status route always returns a JSON payload."""
         ready = PiperVoiceStatusRead(
             voice_id="en_US-lessac-medium",
             locale="en",
@@ -115,7 +112,10 @@ class TestTtsStatusRoute:
         ):
             response = client.get("/speech/tts/status")
         assert response.status_code == 200
-        assert "text/html" in response.headers["content-type"]
+        assert "application/json" in response.headers["content-type"]
+        payload = response.json()
+        assert payload["state"] == "ready"
+        assert payload["enabled"] is True
 
     def test_status_locale_query_overrides_saved_config(self, client, voice_config):
         """Status endpoint honors locale query param over saved config."""
@@ -277,10 +277,8 @@ class TestTtsVoiceDownloadRoute:
         assert payload["voice_id"] == "ru_RU-dmitri-medium"
         start_download.assert_called_once_with("ru_RU-dmitri-medium", "ru")
 
-    def test_voice_download_returns_html_when_no_json_accept(
-        self, client, voice_config
-    ):
-        """Download route returns HTML partial via negotiated_response."""
+    def test_voice_download_returns_json(self, client, voice_config):
+        """Download route returns a JSON payload."""
         downloading = PiperVoiceStatusRead(
             voice_id="en_US-lessac-medium",
             locale="en",
@@ -303,4 +301,6 @@ class TestTtsVoiceDownloadRoute:
         ):
             response = client.post("/speech/tts/voice/download")
         assert response.status_code == 200
-        assert "text/html" in response.headers["content-type"]
+        assert "application/json" in response.headers["content-type"]
+        payload = response.json()
+        assert payload["state"] == "downloading"

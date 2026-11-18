@@ -30,9 +30,6 @@ class TestTtsStatusApi:
     def test_status_json_when_voice_disabled(self, client):
         """Status reports unavailable when voice is off."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
         missing = PiperVoiceStatusRead(
@@ -198,9 +195,6 @@ class TestQuestionAudioApi:
         del temp_questions_dir
         monkeypatch.setattr("random.shuffle", lambda items: None)
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
         from app.interview.domain.value_objects import (

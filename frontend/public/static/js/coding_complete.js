@@ -76,8 +76,9 @@
             } else if (data.type === "interview_completed") {
                 clearEvaluationWatchdog();
                 showCompleteEvaluating(false);
+                // Results is an SPA hash route; the server no longer serves this path.
                 window.location.href =
-                    "/interview/" +
+                    "#/interview/" +
                     encodeURIComponent(interviewId) +
                     "/results";
             } else if (data.type === "error") {
@@ -137,11 +138,17 @@
         completeWs.send(JSON.stringify({ type: "complete" }));
     }
 
-    document.addEventListener("DOMContentLoaded", function () {
+    function bootCodingComplete() {
         connectCompleteWebSocket();
         const endBtn = document.getElementById("coding-end-btn");
         if (endBtn) {
             endBtn.addEventListener("click", endCodingInterview);
         }
-    });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bootCodingComplete);
+    } else {
+        bootCodingComplete();
+    }
 })();

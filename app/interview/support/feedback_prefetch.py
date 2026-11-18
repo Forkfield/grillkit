@@ -13,7 +13,7 @@ from app.ai.base import AIProvider
 from app.interview.domain.session_phases import SectionEvaluationSummary
 from app.interview.domain.value_objects import SectionKind
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.platform.domain.config import ConfigService
+from app.platform.repo.config_composition import get_default_config_service
 
 logger = logging.getLogger(__name__)
 EvaluationPayload = tuple[dict[str, Any], int]
@@ -42,7 +42,7 @@ async def prefetch_section_feedback(
         return
 
     try:
-        provider = ConfigService.create_provider_from_config()
+        provider = get_default_config_service().create_provider_from_config()
     except Exception:
         logger.warning(
             "Skipping %s section prefetch for %s: provider not configured",

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -131,7 +131,7 @@ class CodingSessionStateRead:
 class CodingRunRequest(BaseModel):
     """Request body for ``POST /interview/{id}/coding/run``."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     task_id: str = Field(min_length=1)
     source_code: str
@@ -140,7 +140,7 @@ class CodingRunRequest(BaseModel):
 class CodingRunResponse(BaseModel):
     """Response body mirroring a persisted Run attempt."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     attempt_id: int
     attempt_no: int

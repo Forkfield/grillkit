@@ -4,6 +4,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app.interview.domain.value_objects import SessionSelection
 from app.platform.domain.config import AppConfig
 
 
@@ -96,40 +97,38 @@ class TestSetupCodingOptions:
 class TestSetupConfigRedirect:
     """Setup requires provider configuration before starting an interview."""
 
-    def test_setup_get_redirects_without_config(self, client):
-        """GET /setup redirects to /config when provider is not configured."""
+    def test_setup_get_unconfigured(self, client):
+        """GET /api/setup signals the provider is not configured."""
         with patch(
             "app.platform.domain.config.ConfigService.get_config", return_value=None
         ):
-            response = client.get("/setup", follow_redirects=False)
-        assert response.status_code == 303
-        assert response.headers["location"] == "/config"
+            response = client.get("/api/setup")
+        assert response.status_code == 200
+        assert response.json() == {"configured": False}
 
     def test_setup_post_redirects_without_config(self, client):
-        """POST /setup redirects to /config when provider is not configured."""
+        """POST /api/setup redirects to /#/config when provider is not configured."""
         with patch(
             "app.platform.domain.config.ConfigService.get_config", return_value=None
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": (
                         '{"sources":[{"track":"python",'
                         '"level":"junior","categories":["basics"]}]}'
                     ),
-                    "question_count": "5",
+                    "question_count": 5,
                 },
-                follow_redirects=False,
             )
-        assert response.status_code == 303
-        assert response.headers["location"] == "/config"
+        assert response.status_code == 200
+        body = response.json()
+        assert body["configured"] is False
+        assert body["redirect"] == "/#/config"
 
     def test_setup_get_shows_configured_locale(self, client):
-        """GET /setup displays interview language from saved config."""
+        """GET /api/setup returns interview language from saved config."""
         mock_config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="ru",
         )
         with (
@@ -150,17 +149,16 @@ class TestSetupConfigRedirect:
                 return_value=["basics"],
             ),
         ):
-            response = client.get("/setup")
+            response = client.get("/api/setup")
         assert response.status_code == 200
-        assert "Russian" in response.text
-        assert 'name="locale"' not in response.text
+        body = response.json()
+        assert body["configured"] is True
+        assert body["locale_label"] == "Russian"
+        assert body["locale"] == "ru"
 
     def test_setup_post_passes_timer_limit_when_enabled(self, client):
-        """POST /setup forwards per-round timer seconds when the checkbox is set."""
+        """POST /api/setup forwards per-round timer seconds when the checkbox is set."""
         mock_config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
         )
         captured: dict[str, object] = {}
@@ -183,31 +181,28 @@ class TestSetupConfigRedirect:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": (
                         '{"sources":[{"track":"python",'
                         '"level":"junior","categories":["basics"]}]}'
                     ),
-                    "question_count": "5",
-                    "enable_question_timer": "on",
-                    "question_time_minutes": "4",
+                    "question_count": 5,
+                    "enable_question_timer": True,
+                    "question_time_minutes": 4,
                 },
-                follow_redirects=False,
             )
 
-        assert response.status_code == 303
-        assert response.headers["location"] == "/interview/timer-setup-id"
+        assert response.status_code == 200
+        body = response.json()
+        assert body["redirect"] == "/interview/timer-setup-id"
         session = captured.get("session")
-        assert session is not None
+        assert isinstance(session, SessionSelection)
         assert session.theory.task_time_limit_seconds == 240
 
     def test_setup_post_rejects_question_count_below_topics(self, client):
-        """POST /setup rejects when question count is below selected topic count."""
+        """POST /api/setup rejects when question count is below selected topic count."""
         mock_config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
         )
         selection = (
@@ -233,15 +228,17 @@ class TestSetupConfigRedirect:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": selection,
-                    "question_count": "1",
+                    "question_count": 1,
                 },
             )
 
         assert response.status_code == 200
-        assert "at least 2" in response.text
+        body = response.json()
+        assert body["success"] is False
+        assert "at least 2" in body["error"]
 
 
 class TestSetupExcludeKnown:

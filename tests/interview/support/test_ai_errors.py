@@ -12,7 +12,7 @@ class TestModelNotFound:
         exc = Exception("model 'gpt-4' not found on endpoint")
         result = ai_error_message_for_client(exc)
         assert "AI model is not available" in result
-        assert "/config" in result
+        assert "Configuration" in result
 
     def test_mixed_case(self) -> None:
         exc = Exception("Model Not Found")
@@ -32,7 +32,7 @@ class TestTimeout:
         exc = Exception("request timed out after 30 seconds")
         result = ai_error_message_for_client(exc)
         assert "AI evaluation timed out" in result
-        assert "/config" in result
+        assert "Configuration" in result
 
     def test_timeout_keyword(self) -> None:
         exc = Exception("Connection timeout")

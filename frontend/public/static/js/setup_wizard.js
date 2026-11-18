@@ -437,7 +437,7 @@
             "mode",
             "Interview language",
             "<p>" + localeLabel + "</p>"
-            + "<p class=\"form-hint\">Change in <a href=\"/config\">Configuration</a>.</p>",
+            + "<p class=\"form-hint\">Change in <a href=\"/#/config\">Configuration</a>.</p>",
             false
         );
         if (selection.exclude_known) {

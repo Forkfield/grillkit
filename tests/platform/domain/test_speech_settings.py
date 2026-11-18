@@ -21,9 +21,6 @@ class TestSpeechSettings:
     def test_extracts_whisper_settings(self):
         """speech_settings_from_config yields size and locale."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="medium",
             locale="ru",
         )
@@ -35,11 +32,7 @@ class TestSpeechSettings:
 
     def test_uses_defaults_from_config(self):
         """Default config values are extracted correctly."""
-        config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
-        )
+        config = AppConfig()
         settings = speech_settings_from_config(config)
         assert settings.speech_model_size == "small"
         assert settings.locale == "en"
@@ -57,9 +50,6 @@ class TestQuestionVoiceSettings:
     def test_extracts_piper_settings(self):
         """question_voice_settings_from_config yields enabled, voice_id, locale."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=True,
             tts_voice_id="ru_RU-dmitri-medium",
             locale="ru",
@@ -74,9 +64,6 @@ class TestQuestionVoiceSettings:
     def test_disabled_voice(self):
         """Disabled voice sets enabled flag to False."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
             tts_voice_id="en_US-lessac-medium",
             locale="en",
@@ -118,11 +105,7 @@ class TestQuestionVoiceSettings:
 
     def test_defaults_from_config(self):
         """Default config yields default voice settings."""
-        config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
-        )
+        config = AppConfig()
         settings = question_voice_settings_from_config(config)
         assert settings.enabled is False
         assert settings.voice_id == "en_US-lessac-medium"

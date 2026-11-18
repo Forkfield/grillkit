@@ -13,29 +13,35 @@ from app.ai.llm_models import (
     slugify_model_id,
 )
 from app.platform.domain.llm_catalog import LLMCatalogService
+from app.platform.repo.llm_catalog_repository import LLMCatalogRepository
 from app.platform.schemas import NewLLMModel
 
 
 @pytest.fixture
-def llm_catalog_path(tmp_path, monkeypatch):
-    """Point catalog path at a temporary JSON file."""
-    catalog_path = tmp_path / "llm_models.json"
-    monkeypatch.setattr("app.platform.domain.llm_catalog.LLM_MODELS_PATH", catalog_path)
-    yield catalog_path
+def catalog_service(tmp_path):
+    """Build a catalog service bound to a temporary JSON file."""
+    repo = LLMCatalogRepository(path=tmp_path / "llm_models.json", data_dir=tmp_path)
+    return LLMCatalogService(repo)
+
+
+@pytest.fixture
+def catalog_path(tmp_path):
+    """Return the temporary catalog file path (shared with ``catalog_service``)."""
+    return tmp_path / "llm_models.json"
 
 
 class TestLLMCatalog:
     """Tests for catalog loading and model persistence."""
 
-    def test_load_catalog_empty_when_file_missing(self, llm_catalog_path):
+    def test_load_catalog_empty_when_file_missing(self, catalog_service):
         """Missing catalog file yields an empty catalog."""
-        catalog = LLMCatalogService.load_catalog()
+        catalog = catalog_service.load_catalog()
         assert catalog.selected_id is None
         assert catalog.models == {}
 
-    def test_add_user_model_persists_accepts_audio_input(self, llm_catalog_path):
+    def test_add_user_model_persists_accepts_audio_input(self, catalog_service, catalog_path):
         """Audio capability flag round-trips through llm_models.json."""
-        entry = LLMCatalogService.add_user_model(
+        entry = catalog_service.add_user_model(
             NewLLMModel(
                 display_name="Audio API",
                 base_url="https://api.example.com/v1",
@@ -45,12 +51,12 @@ class TestLLMCatalog:
         )
         assert entry.id == "audio-api"
         assert entry.accepts_audio_input is True
-        saved = json.loads(llm_catalog_path.read_text())
+        saved = json.loads(catalog_path.read_text())
         assert saved["models"]["audio-api"]["accepts_audio_input"] is True
 
-    def test_add_user_model_persists_api_key(self, llm_catalog_path):
+    def test_add_user_model_persists_api_key(self, catalog_service, catalog_path):
         """Models can store an API key in llm_models.json."""
-        entry = LLMCatalogService.add_user_model(
+        entry = catalog_service.add_user_model(
             NewLLMModel(
                 display_name="Cloud API",
                 base_url="https://api.example.com/v1",
@@ -60,51 +66,55 @@ class TestLLMCatalog:
         )
         assert entry.id == "cloud-api"
         assert entry.api_key == "secret-key"
-        saved = json.loads(llm_catalog_path.read_text())
+        saved = json.loads(catalog_path.read_text())
         assert saved["models"]["cloud-api"]["api_key"] == "secret-key"
         assert saved["models"]["cloud-api"]["base_url"] == "https://api.example.com/v1"
 
-    def test_add_user_model_sets_selected(self, llm_catalog_path):
+    def test_add_user_model_sets_selected(self, catalog_service, catalog_path):
         """Adding a model selects it in llm_models.json."""
-        LLMCatalogService.add_user_model(
+        catalog_service.add_user_model(
             NewLLMModel(
                 display_name="Work API",
                 base_url="http://192.168.1.10:11434/v1",
                 model="deepseek-coder-v2:16b",
             )
         )
-        saved = json.loads(llm_catalog_path.read_text())
+        saved = json.loads(catalog_path.read_text())
         assert saved["selected"] == "work-api"
 
-    def test_add_user_model_generates_unique_id_for_duplicates(self, llm_catalog_path):
+    def test_add_user_model_generates_unique_id_for_duplicates(
+        self, catalog_service, catalog_path
+    ):
         """Duplicate display names get distinct auto-generated ids."""
         payload = NewLLMModel(
             display_name="Cloud",
             base_url="https://api.example.com/v1",
             model="gpt-4",
         )
-        first = LLMCatalogService.add_user_model(payload)
-        second = LLMCatalogService.add_user_model(payload)
+        first = catalog_service.add_user_model(payload)
+        second = catalog_service.add_user_model(payload)
         assert first.id == "cloud"
         assert second.id == "cloud-2"
-        saved = json.loads(llm_catalog_path.read_text())
+        saved = json.loads(catalog_path.read_text())
         assert set(saved["models"]) == {"cloud", "cloud-2"}
 
-    def test_normalize_model_id_rejects_custom(self, llm_catalog_path):
+    def test_normalize_model_id_rejects_custom(self, catalog_service):
         """Custom sentinel is not a valid catalog selection."""
-        catalog = LLMCatalogService.load_catalog()
+        catalog = catalog_service.load_catalog()
         with pytest.raises(ValueError, match="Interview model is required"):
             normalize_model_id(CUSTOM_PRESET_ID, catalog)
 
-    def test_normalize_model_id_rejects_unknown(self, llm_catalog_path):
+    def test_normalize_model_id_rejects_unknown(self, catalog_service):
         """Unknown ids raise ValueError."""
-        catalog = LLMCatalogService.load_catalog()
+        catalog = catalog_service.load_catalog()
         with pytest.raises(ValueError, match="Unsupported LLM model"):
             normalize_model_id("missing", catalog)
 
-    def test_get_model_strips_trailing_slash_from_base_url(self, llm_catalog_path):
+    def test_get_model_strips_trailing_slash_from_base_url(
+        self, catalog_service, catalog_path
+    ):
         """Trailing slashes on base_url are normalized on read."""
-        llm_catalog_path.write_text(
+        catalog_path.write_text(
             json.dumps(
                 {
                     "selected": "local",
@@ -120,7 +130,7 @@ class TestLLMCatalog:
                 }
             )
         )
-        entry = LLMCatalogService.get_model("local")
+        entry = catalog_service.get_model("local")
         assert entry is not None
         assert entry.base_url == "http://localhost:11434/v1"
 

@@ -19,10 +19,10 @@ def test_theory_review_service_builds_chat_history(isolated_db) -> None:
 
 
 def test_theory_review_page_renders_history(client, isolated_db) -> None:
-    """Theory review page renders chat history and section feedback."""
+    """Theory review JSON exposes chat history and section feedback."""
     interview_id = seed_completed_theory_interview("results-theory-page-1")
-    response = client.get(f"/interview/{interview_id}/theory")
+    response = client.get(f"/api/interview/{interview_id}/theory")
     assert response.status_code == 200
-    assert "Conversation History" in response.text
-    assert "A programming language" in response.text
-    assert "Clear and concise." in response.text
+    payload = response.json()
+    assert payload["answers"][0]["answer_text"] == "A programming language"
+    assert payload["answers"][0]["feedback"] == "Clear and concise."

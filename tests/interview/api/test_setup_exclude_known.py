@@ -19,9 +19,6 @@ class TestSetupExcludeKnown:
 
     def _config(self) -> AppConfig:
         return AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
         )
 
@@ -72,16 +69,15 @@ class TestSetupExcludeKnown:
             return_value=self._config(),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": session_to_spec(session),
-                    "question_count": "5",
+                    "question_count": 5,
                 },
-                follow_redirects=False,
             )
 
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = response.json()["redirect"].rsplit("/", 1)[-1]
 
         # The plan should be generated; known question excluded would mean
         # the session was still created (if enough questions remain).

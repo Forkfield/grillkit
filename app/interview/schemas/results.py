@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,7 +24,7 @@ class SectionResultCard(BaseModel):
         detail_url: Relative URL for the section review page.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     section: Literal["theory", "coding"]
     label: str
@@ -51,7 +51,7 @@ class SessionResultsContext(BaseModel):
         coding_review_url: Coding review URL when coding is enabled.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     interview: InterviewRead
     interview_title: str

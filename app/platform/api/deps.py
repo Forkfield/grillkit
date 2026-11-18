@@ -6,27 +6,27 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from app.platform.domain.config import ConfigService
-from app.platform.domain.llm_catalog import LLMCatalogService
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
+from app.platform.repo.config_composition import ConfigServiceDep, LLMCatalogServiceDep
 from app.platform.use_cases.add_llm_model import AddLLMModelUseCase
 from app.platform.use_cases.delete_config import DeleteConfigUseCase
 from app.platform.use_cases.save_config import SaveConfigUseCase
+from app.question_voice.api.deps import VoiceStatusServiceDep
+from app.speech.api.deps import WhisperModelServiceDep
+
+# Re-export the shared config service dependency so API routers can `Depends`
+# on it from ``app.platform.api.deps`` as before.
+__all__ = ["ConfigServiceDep"]
 
 
-def get_config_service() -> type[ConfigService]:
-    """Return the config service class used by API handlers."""
-    return ConfigService
-
-
-ConfigServiceDep = Annotated[type[ConfigService], Depends(get_config_service)]
-
-
-def get_add_llm_model_use_case() -> AddLLMModelUseCase:
+def get_add_llm_model_use_case(
+    config_service: ConfigServiceDep,
+    catalog_service: LLMCatalogServiceDep,
+) -> AddLLMModelUseCase:
     """Return the add-model use case wired with its services."""
     return AddLLMModelUseCase(
-        config_service=ConfigService,
-        llm_catalog_service=LLMCatalogService,
+        config_service=config_service,
+        llm_catalog_service=catalog_service,
     )
 
 
@@ -36,11 +36,20 @@ AddLLMModelUseCaseDep = Annotated[
 ]
 
 
-def get_save_config_use_case(request: Request) -> SaveConfigUseCase:
+def get_save_config_use_case(
+    request: Request,
+    config_service: ConfigServiceDep,
+    catalog_service: LLMCatalogServiceDep,
+    whisper_model_service: WhisperModelServiceDep,
+    voice_status_service: VoiceStatusServiceDep,
+) -> SaveConfigUseCase:
     """Return the save-config use case wired with app-lifetime services."""
     return SaveConfigUseCase(
-        config_service=ConfigService,
+        config_service=config_service,
+        catalog_service=catalog_service,
         coordinator=request.app.state.speech_runtime,
+        whisper_model_service=whisper_model_service,
+        voice_status_service=voice_status_service,
     )
 
 
@@ -50,10 +59,13 @@ SaveConfigUseCaseDep = Annotated[
 ]
 
 
-def get_delete_config_use_case(request: Request) -> DeleteConfigUseCase:
+def get_delete_config_use_case(
+    request: Request,
+    config_service: ConfigServiceDep,
+) -> DeleteConfigUseCase:
     """Return the delete-config use case wired with app-lifetime services."""
     return DeleteConfigUseCase(
-        config_service=ConfigService,
+        config_service=config_service,
         coordinator=request.app.state.speech_runtime,
     )
 

@@ -50,11 +50,11 @@ def test_full_template_context_includes_coding_key(isolated_db):
 
 
 def test_interview_route_uses_coding_template(client, isolated_db):
-    """Active coding phase renders the dedicated coding interview template."""
+    """Active coding phase returns a coding JSON context."""
     interview_id, _task_id = seed_active_coding_interview("coding-template-1")
-    response = client.get(f"/interview/{interview_id}")
+    response = client.get(f"/api/interview/{interview_id}")
     assert response.status_code == 200
-    assert "coding-session" in response.text
-    assert "coding-session__assignment" in response.text
-    assert "I know this" in response.text
-    assert "interview-chat-panel" not in response.text
+    payload = response.json()
+    assert payload["active_phase"] == "coding"
+    assert payload["coding"] is not None
+    assert payload["coding"]["task_count"] == 1

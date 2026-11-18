@@ -1,15 +1,17 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Question-voice page context builder for HTML templates."""
+"""Question-voice page context builder for JSON/API responses."""
 
 from app.platform.domain.config import AppConfig
 from app.question_voice.queries.voice_status import VoiceStatus
 from app.question_voice.schemas import PiperVoiceStatusRead, QuestionVoicePageContext
-from app.shared.infrastructure.gateways.piper_voice import PiperVoiceService
+from app.shared.infrastructure.artifact_composition import (
+    get_default_piper_voice_service,
+)
 
 
 class VoicePage:
-    """Build template context for Piper question-voice status."""
+    """Build Piper question-voice status context."""
 
     @staticmethod
     def _show_voice_banner(status: PiperVoiceStatusRead) -> bool:
@@ -22,16 +24,16 @@ class VoicePage:
     async def build_page_context(
         config: AppConfig | None,
     ) -> QuestionVoicePageContext:
-        """Build Piper voice status keys for config and interview templates.
+        """Build Piper voice status keys shared by config and interview pages.
 
         Args:
             config: Saved provider configuration, or None when unset.
 
         Returns:
-            Frozen page context for templates.
+            Frozen page context.
         """
         voice_id, locale = VoiceStatus.resolve_tts_target(config)
-        status = PiperVoiceService.get_status(voice_id, locale)
+        status = get_default_piper_voice_service().get_status(voice_id, locale)
         show_banner = config is not None and config.question_voice_enabled
         return QuestionVoicePageContext(
             tts_voice_status=status,
@@ -39,4 +41,4 @@ class VoicePage:
         )
 
 
-QuestionVoicePageService = VoicePage
+TTSPageService = VoicePage

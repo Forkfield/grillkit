@@ -19,9 +19,6 @@ class TestSetupNegative:
 
     def _config(self) -> AppConfig:
         return AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
         )
 
@@ -60,16 +57,15 @@ class TestSetupNegative:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": selection,
-                    "question_count": "0",
+                    "question_count": 0,
                 },
-                follow_redirects=False,
             )
         # Should still create session (clamped to 1)
-        assert response.status_code == 303
-        assert "/interview/" in response.headers["location"]
+        assert response.status_code == 200
+        assert "/interview/" in response.json()["redirect"]
 
     def test_question_count_clamped_to_max(self, client, isolated_db):
         """question_count=50 is clamped to _MAX_QUESTIONS (20)."""
@@ -93,16 +89,15 @@ class TestSetupNegative:
             return_value=self._config(),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": session_to_spec(extensive),
-                    "question_count": "50",
+                    "question_count": 50,
                 },
-                follow_redirects=False,
             )
         # Should still create session (clamped to 20)
-        assert response.status_code == 303
-        assert "/interview/" in response.headers["location"]
+        assert response.status_code == 200
+        assert "/interview/" in response.json()["redirect"]
 
     def test_malformed_json_shows_error(self, client, isolated_db):
         """Malformed selection_json returns setup form with error."""
@@ -125,14 +120,16 @@ class TestSetupNegative:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
-                    "selection_json": "not valid json {{{",
-                    "question_count": "5",
+                "/api/setup",
+                json={
+                    "selection_json": "not valid json {{{ ",
+                    "question_count": 5,
                 },
             )
         assert response.status_code == 200
-        assert "error" in response.text.lower() or "setup" in response.text.lower()
+        body = response.json()
+        assert body["success"] is False
+        assert "error" in body
 
     def test_unknown_category_rejected(self, client, isolated_db):
         """Invalid category in selection returns error."""
@@ -163,13 +160,15 @@ class TestSetupNegative:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": selection,
-                    "question_count": "5",
+                    "question_count": 5,
                 },
             )
         assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is False
 
     def test_coding_question_count_clamped(self, client, isolated_db):
         """coding_question_count is also clamped to 1–20 range."""
@@ -206,16 +205,15 @@ class TestSetupNegative:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": session_to_spec(session),
-                    "question_count": "5",
-                    "coding_question_count": "0",  # Should clamp to 1
+                    "question_count": 5,
+                    "coding_question_count": 0,  # Should clamp to 1
                 },
-                follow_redirects=False,
             )
-        assert response.status_code == 303
-        assert "/interview/" in response.headers["location"]
+        assert response.status_code == 200
+        assert "/interview/" in response.json()["redirect"]
 
     def test_too_few_questions_for_topics_shows_error(self, client, isolated_db):
         """When question_count < topic_count and all are single-cat topics, error shown."""
@@ -244,38 +242,38 @@ class TestSetupNegative:
             ),
         ):
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": selection,
-                    "question_count": "1",
+                    "question_count": 1,
                 },
             )
         assert response.status_code == 200
-        assert "at least" in response.text.lower() or "error" in response.text.lower()
+        body = response.json()
+        assert body["success"] is False
+        assert "at least" in body["error"].lower() or "error" in body["error"].lower()
 
-    def test_setup_get_redirects_without_config(self, client):
-        """GET /setup redirects to /config when provider is not configured."""
+    def test_setup_get_unconfigured(self, client):
+        """GET /api/setup signals the provider is not configured."""
         with patch(
             "app.platform.domain.config.ConfigService.get_config",
             return_value=None,
         ):
-            response = client.get("/setup", follow_redirects=False)
-        assert response.status_code == 303
-        assert response.headers["location"] == "/config"
+            response = client.get("/api/setup")
+        assert response.status_code == 200
+        assert response.json() == {"configured": False}
 
     def test_setup_post_redirects_without_config(self, client):
-        """POST /setup redirects to /config when provider is not configured."""
+        """POST /api/setup redirects to /#/config when provider is not configured."""
         with patch(
             "app.platform.domain.config.ConfigService.get_config",
             return_value=None,
         ):
             response = client.post(
-                "/setup",
-                data={
-                    "selection_json": "{}",
-                    "question_count": "5",
-                },
-                follow_redirects=False,
+                "/api/setup",
+                json={"selection_json": "{}", "question_count": 5},
             )
-        assert response.status_code == 303
-        assert response.headers["location"] == "/config"
+        assert response.status_code == 200
+        body = response.json()
+        assert body["configured"] is False
+        assert body["redirect"] == "/#/config"

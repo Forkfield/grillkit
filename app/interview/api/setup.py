@@ -1,15 +1,16 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Setup endpoint module.
+"""Setup endpoints module (JSON).
 
-This module provides the setup page for configuring interview parameters
-and creating new interview sessions.
+This module provides the setup API for configuring interview parameters
+and creating new interview sessions. The setup page is rendered by the SPA
+frontend; the backend only serves JSON page data and the create endpoint.
 """
 
 from dataclasses import replace
 
-from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from app.coding.support.coding_availability import (
     is_coding_available_async,
@@ -20,25 +21,16 @@ from app.interview.domain.rules.selection import (
     parse_session_json,
     validate_session_selection,
 )
+from app.interview.schemas.setup import SetupCreateBody
 from app.platform.api.deps import ConfigServiceDep
+from app.platform.domain.config import AppConfig
 from app.shared import coding as coding_bank
 from app.shared.questions import list_categories, list_levels, list_tracks
 from app.speech.api.deps import WhisperModelServiceDep
 from app.speech.queries.speech_page import SttModelPageService
-from app.templating import templates
 
-router = APIRouter(prefix="/setup", tags=["setup"])
-
-_CONFIG_REDIRECT = RedirectResponse(url="/config", status_code=303)
 _MIN_QUESTIONS = 1
 _MAX_QUESTIONS = 20
-
-
-def _redirect_if_no_config(config_service: ConfigServiceDep) -> RedirectResponse | None:
-    """Return a redirect to the config page when AI provider is not configured."""
-    if config_service.get_config() is None:
-        return _CONFIG_REDIRECT
-    return None
 
 
 def _clamp_question_count(value: int) -> int:
@@ -53,38 +45,41 @@ def _clamp_question_count(value: int) -> int:
     return max(_MIN_QUESTIONS, min(_MAX_QUESTIONS, value))
 
 
-@router.get("", response_class=HTMLResponse)
-async def setup_page(
-    request: Request,
-    config_service: ConfigServiceDep,
+def _page_payload(
+    *,
+    config: AppConfig | None,
     whisper_model_service: WhisperModelServiceDep,
-) -> Response:
-    """Setup page for interview configuration.
+    error: str | None = None,
+    min_question_count: int = _MIN_QUESTIONS,
+    min_coding_task_count: int = _MIN_QUESTIONS,
+    initial_wizard_step: str = "mode",
+) -> dict[str, object]:
+    """Build the setup page JSON payload for the SPA."""
+    payload: dict[str, object] = {
+        "configured": config is not None,
+        **setup_form_context(
+            locale=config.locale if config is not None else "en",
+            error=error,
+            min_question_count=min_question_count,
+            min_coding_task_count=min_coding_task_count,
+            initial_wizard_step=initial_wizard_step,
+        ),
+    }
+    if config is not None:
+        stt = SttModelPageService.build_page_context(
+            config,
+            whisper_model_service=whisper_model_service,
+        )
+        payload["speech_model_banner"] = stt.speech_model_banner
+        payload["speech_model_status"] = (
+            stt.speech_model_status.model_dump()
+            if stt.speech_model_status is not None
+            else None
+        )
+    return payload
 
-    Args:
-        request: FastAPI request object.
-        config_service: Provider configuration service.
-        whisper_model_service: Whisper model download service.
 
-    Returns:
-        HTML response with setup form, or redirect to config when unset.
-    """
-    if redirect := _redirect_if_no_config(config_service):
-        return redirect
-    config = config_service.get_config()
-    if config is None:
-        return _CONFIG_REDIRECT
-    return templates.TemplateResponse(
-        request,
-        "setup.html",
-        {
-            **setup_form_context(locale=config.locale),
-            **SttModelPageService.build_page_context(
-                config,
-                whisper_model_service=whisper_model_service,
-            ).model_dump(),
-        },
-    )
+router = APIRouter(prefix="/setup", tags=["setup"])
 
 
 @router.get("/options")
@@ -161,59 +156,64 @@ async def setup_coding_available() -> JSONResponse:
     return JSONResponse({"available": await is_coding_available_async()})
 
 
-@router.post("", response_class=HTMLResponse)
+api_router = APIRouter(prefix="/api/setup", tags=["setup"])
+
+
+@api_router.get("")
+async def setup_page(
+    config_service: ConfigServiceDep,
+    whisper_model_service: WhisperModelServiceDep,
+) -> dict[str, object]:
+    """Return the setup page JSON payload for the SPA.
+
+    Args:
+        config_service: Provider configuration service.
+        whisper_model_service: Whisper model download service.
+
+    Returns:
+        JSON with the setup form context, or ``{"configured": False}``
+        when the provider is not configured yet (the SPA redirects to config).
+    """
+    config = config_service.get_config()
+    if config is None:
+        return {"configured": False}
+    return _page_payload(config=config, whisper_model_service=whisper_model_service)
+
+
+@api_router.post("")
 async def create_interview(
-    request: Request,
+    body: SetupCreateBody,
     config_service: ConfigServiceDep,
     session_creation: CreateSessionDep,
-    whisper_model_service: WhisperModelServiceDep,
-    selection_json: str = Form(...),
-    question_count: int = Form(5),
-    coding_question_count: int = Form(2),
-    enable_question_timer: str | None = Form(None),
-    question_time_minutes: int = Form(3),
-    enable_coding_timer: str | None = Form(None),
-    coding_time_minutes: int = Form(10),
-) -> Response:
+) -> dict[str, object]:
     """Create interview session from multi-track setup selection.
 
     Args:
-        request: FastAPI request object.
+        body: Parsed setup form submission.
         config_service: Provider configuration service.
         session_creation: Session creation service.
-        whisper_model_service: Whisper model download service.
-        selection_json: JSON payload built by the setup form script.
-        question_count: Number of theory questions.
-        coding_question_count: Number of coding tasks.
-        enable_question_timer: Present when the theory timer checkbox is checked.
-        question_time_minutes: Per-round theory limit in minutes when enabled.
-        enable_coding_timer: Present when the coding timer checkbox is checked.
-        coding_time_minutes: Per-task coding limit in minutes when enabled.
 
     Returns:
-        Redirect to interview session page, config, or back to setup on error.
+        JSON with ``redirect`` on success, or ``success=False`` plus an error
+        message and refreshed min counts when validation fails.
     """
-    if redirect := _redirect_if_no_config(config_service):
-        return redirect
     config = config_service.get_config()
     if config is None:
-        return _CONFIG_REDIRECT
+        return {"success": False, "configured": False, "redirect": "/#/config"}
 
     theory_timer_seconds: int | None = None
-    if enable_question_timer:
-        minutes = max(1, question_time_minutes)
-        theory_timer_seconds = minutes * 60
+    if body.enable_question_timer:
+        theory_timer_seconds = max(1, body.question_time_minutes) * 60
 
     coding_timer_seconds: int | None = None
-    if enable_coding_timer:
-        minutes = max(1, coding_time_minutes)
-        coding_timer_seconds = minutes * 60
+    if body.enable_coding_timer:
+        coding_timer_seconds = max(1, body.coding_time_minutes) * 60
 
-    clamped_theory_count = _clamp_question_count(question_count)
-    clamped_coding_count = _clamp_question_count(coding_question_count)
+    clamped_theory_count = _clamp_question_count(body.question_count)
+    clamped_coding_count = _clamp_question_count(body.coding_question_count)
 
     try:
-        session = parse_session_json(selection_json)
+        session = parse_session_json(body.selection_json)
         session = replace(
             session,
             theory=replace(
@@ -232,35 +232,21 @@ async def create_interview(
             session,
             locale=config.locale,
         )
-        return RedirectResponse(
-            url=f"/interview/{interview.id}",
-            status_code=303,
-        )
+        return {"success": True, "redirect": f"/interview/{interview.id}"}
     except ValueError as e:
         min_theory = _MIN_QUESTIONS
         min_coding = _MIN_QUESTIONS
         try:
-            parsed = parse_session_json(selection_json)
+            parsed = parse_session_json(body.selection_json)
             if parsed.theory.enabled:
                 min_theory = max(_MIN_QUESTIONS, parsed.theory_selection.topic_count)
             if parsed.coding.enabled:
                 min_coding = max(_MIN_QUESTIONS, parsed.coding_selection.topic_count)
         except ValueError:
             pass
-        return templates.TemplateResponse(
-            request,
-            "setup.html",
-            {
-                **setup_form_context(
-                    locale=config.locale,
-                    error=str(e),
-                    min_question_count=min_theory,
-                    min_coding_task_count=min_coding,
-                    initial_wizard_step="review",
-                ),
-                **SttModelPageService.build_page_context(
-                    config,
-                    whisper_model_service=whisper_model_service,
-                ).model_dump(),
-            },
-        )
+        return {
+            "success": False,
+            "error": str(e),
+            "min_question_count": min_theory,
+            "min_coding_task_count": min_coding,
+        }

@@ -8,17 +8,20 @@ from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 
 def test_whisper_and_piper_have_separate_download_state():
     """Whisper and Piper must not share download lock or active key."""
-    WhisperModelService.reset_download_state()
-    PiperVoiceService.reset_download_state()
+    whisper = WhisperModelService()
+    piper = PiperVoiceService()
 
-    assert WhisperModelService._download_lock is not PiperVoiceService._download_lock
+    whisper.reset_download_state()
+    piper.reset_download_state()
 
-    WhisperModelService._active_key = "small"
-    WhisperModelService._percent = 42
+    assert whisper._download_lock is not piper._download_lock
 
-    assert WhisperModelService.is_downloading("small")
-    assert not PiperVoiceService.is_downloading("small")
-    assert PiperVoiceService.download_percent() == 0
+    whisper._active_key = "small"
+    whisper._percent = 42
 
-    WhisperModelService.reset_download_state()
-    PiperVoiceService.reset_download_state()
+    assert whisper.is_downloading("small")
+    assert not piper.is_downloading("small")
+    assert piper.download_percent() == 0
+
+    whisper.reset_download_state()
+    piper.reset_download_state()

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,7 +21,7 @@ class CodingTaskRoundRead(BaseModel):
         submit_test_summary: Hidden test summary after the initial submit.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     round: int
     prompt_text: str
@@ -43,7 +43,7 @@ class CodingTaskReviewRead(BaseModel):
         rounds: Submitted rounds in ascending round order.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     order: int
     task_id: str
@@ -68,7 +68,7 @@ class CodingReviewContext(BaseModel):
         results_url: Relative URL for the session results hub.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     interview_id: str
     interview_title: str

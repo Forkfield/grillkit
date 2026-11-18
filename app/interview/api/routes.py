@@ -6,8 +6,8 @@ This module provides the interview page (HTTP GET). Business logic is
 delegated to the service layer; theory transport lives under ``/theory/``.
 """
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.interview.api.deps import ActiveSessionPageDep
 from app.interview.api.errors import http_exception_from_domain_error
@@ -19,41 +19,23 @@ from app.shared.infrastructure.gateways.tts_exceptions import (
     QuestionVoiceSynthesisError,
 )
 from app.speech.api.deps import WhisperModelServiceDep
-from app.templating import templates
 
 router = APIRouter(prefix="/interview", tags=["interview"])
 
-
-def _interview_template_name(context: dict[str, object]) -> str:
-    """Pick the interview page template for the active session phase.
-
-    Args:
-        context: Template context from ``SessionPageService``.
-
-    Returns:
-        Template path for theory or coding-focused rendering.
-    """
-    if context.get("active_phase") == "coding":
-        return "coding_interview.html"
-    return "interview.html"
+api_router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 
-@router.get("/{interview_id}", response_class=HTMLResponse)
-async def interview_page(
-    request: Request,
+@api_router.get("/{interview_id}", response_model=None)
+async def interview_page_json(
     interview_id: str,
     config_service: ConfigServiceDep,
     whisper_model_service: WhisperModelServiceDep,
     page_service: ActiveSessionPageDep,
     coordinator: SpeechRuntimeDep,
-) -> Response:
-    """View an interview session.
-
-    Loads the session with all answers. Active sessions show the
-    current unanswered question; completed sessions show the full history.
+) -> dict[str, object] | JSONResponse:
+    """Return the interview page JSON payload for the SPA.
 
     Args:
-        request: FastAPI request object.
         interview_id: The session UUID.
         config_service: Provider configuration service.
         whisper_model_service: Whisper model download service.
@@ -61,7 +43,8 @@ async def interview_page(
         coordinator: App-lifetime speech runtime coordinator.
 
     Returns:
-        HTML response with interview view, or redirect if not found.
+        JSON with the full page context, or ``{"redirect": ...}`` for
+        sessions that are missing or already completed.
     """
     config = config_service.get_config()
     page = await page_service.prepare_page(
@@ -70,24 +53,20 @@ async def interview_page(
         whisper_model_service=whisper_model_service,
     )
     if page.redirect_url is not None:
-        return RedirectResponse(url=page.redirect_url, status_code=303)
+        return JSONResponse(
+            {"redirect": page.redirect_url, "not_found": True},
+            status_code=404,
+        )
 
     context = page.template_context or {}
     if context.get("interview", {}).get("status") == "completed":
-        return RedirectResponse(
-            url=f"/interview/{interview_id}/results",
-            status_code=303,
-        )
+        return {"redirect": f"/interview/{interview_id}/results"}
 
     await coordinator.preload_whisper_for_active_interview(
         config,
         interview_active=page.interview_active,
     )
-    return templates.TemplateResponse(
-        request,
-        _interview_template_name(context),
-        context,
-    )
+    return context
 
 
 @router.get("/{interview_id}/question-audio")

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 from app.interview.domain.rules.selection import session_selection_summary_lines
 from app.interview.domain.section_feedback import resolve_section_feedback
@@ -76,10 +76,20 @@ def section_score_bounds(
     return total_score, max_score
 
 
+class SharedReviewFields(TypedDict):
+    """Shared review-page context fields used by theory and coding pages."""
+
+    interview_id: str
+    interview_title: str
+    selection_lines: list[str]
+    locale_label: str
+    results_url: str
+
+
 def shared_review_fields(
     interview_id: str,
     snapshot: CompletedInterviewContext,
-) -> dict[str, Any]:
+) -> SharedReviewFields:
     """Build review context fields shared by theory and coding pages.
 
     Args:
@@ -113,7 +123,7 @@ def resolved_section_feedback(
         cached_payload: Persisted section feedback payload, if any.
 
     Returns:
-        Section feedback dict for templates.
+        Section feedback dict for review pages.
     """
     return resolve_section_feedback(
         cached_payload,
@@ -128,7 +138,7 @@ def review_score_fields(
     total_score: int,
     max_score: int,
 ) -> dict[str, int]:
-    """Build normalized score fields for section review templates.
+    """Build normalized score fields for section review pages.
 
     Args:
         summary: Section evaluation summary.

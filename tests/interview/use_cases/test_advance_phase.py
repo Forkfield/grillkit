@@ -250,7 +250,8 @@ def test_interview_page_switches_to_coding_template_after_theory(
     )
     _complete_theory_section(interview.id)
 
-    response = client.get(f"/interview/{interview.id}")
+    response = client.get(f"/api/interview/{interview.id}")
     assert response.status_code == 200
-    assert 'id="coding-panel"' in response.text
-    assert "coding-session" in response.text
+    payload = response.json()
+    assert payload["active_phase"] == "coding"
+    assert payload["coding"] is not None

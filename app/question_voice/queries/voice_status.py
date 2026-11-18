@@ -1,10 +1,12 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Piper voice status resolution for API and templates."""
+"""Piper voice status resolution for API responses."""
 
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import PiperVoiceStatusRead
-from app.shared.infrastructure.gateways.piper_voice import PiperVoiceService
+from app.shared.infrastructure.artifact_composition import (
+    get_default_piper_voice_service,
+)
 from app.shared.locales import DEFAULT_LOCALE, normalize_locale
 from app.shared.tts_voices import (
     default_voice_for_locale,
@@ -72,7 +74,9 @@ class VoiceStatus:
             locale=locale,
             voice_id=voice_id,
         )
-        status = PiperVoiceService.get_status(resolved_voice, resolved_locale)
+        status = get_default_piper_voice_service().get_status(
+            resolved_voice, resolved_locale
+        )
         enabled = config is not None and config.question_voice_enabled
         return status, enabled
 

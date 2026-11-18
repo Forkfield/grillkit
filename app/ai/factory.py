@@ -8,6 +8,7 @@ from user configuration.
 
 from app.ai.base import AIProvider
 from app.ai.openai_compatible import OpenAICompatibleProvider
+from app.platform.domain.effective_config import EffectiveModelConfig
 
 
 class ProviderFactory:
@@ -48,3 +49,25 @@ class ProviderFactory:
             )
 
         raise ValueError(f"Unsupported API type: {api_type}")
+
+    @classmethod
+    def from_effective(cls, effective: EffectiveModelConfig) -> AIProvider:
+        """Create a provider from an effective model config aggregate.
+
+        Unpacks the provider fields (:class:`app.platform.domain.effective_config
+        .EffectiveModelConfig`) a single time so construction is never repeated
+        from a set of loose primitives.
+
+        Args:
+            effective: Aggregate of provider fields and timeout.
+
+        Returns:
+            Configured AIProvider instance.
+        """
+        return cls.from_config(
+            api_type=effective.provider_type,
+            base_url=effective.base_url,
+            model=effective.model,
+            api_key=effective.api_key,
+            timeout=effective.timeout,
+        )

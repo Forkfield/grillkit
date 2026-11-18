@@ -30,8 +30,8 @@ class CodingReviewPage:
         Args:
             uow: Shared application unit of work for this review scope.
         """
-        self._uow = uow
-        self._query = CodingSectionSummary(uow)
+        self._uow: InterviewUnitOfWork = uow
+        self._query: CodingSectionSummary = CodingSectionSummary(uow)
 
     @staticmethod
     def _group_tasks(section: CodingSection) -> list[CodingTaskReviewRead]:
@@ -93,7 +93,7 @@ class CodingReviewPage:
         interview_id: str,
         snapshot: CompletedInterviewSnapshot,
     ) -> CodingReviewContext | None:
-        """Assemble coding review template context for a completed session.
+        """Assemble coding review context for a completed session.
 
         Args:
             interview_id: Parent session UUID.
@@ -121,13 +121,17 @@ class CodingReviewPage:
             max_score=section.max_score(),
         )
 
+        shared = shared_review_fields(interview_id, snapshot)
         return CodingReviewContext(
-            **{
-                **shared_review_fields(interview_id, snapshot),
-                **scores,
-                "section_feedback": section_feedback,
-                "tasks": self._group_tasks(section),
-            }
+            interview_id=shared["interview_id"],
+            interview_title=shared["interview_title"],
+            selection_lines=shared["selection_lines"],
+            locale_label=shared["locale_label"],
+            results_url=shared["results_url"],
+            section_score=scores["section_score"],
+            section_max_score=scores["section_max_score"],
+            section_feedback=section_feedback,
+            tasks=self._group_tasks(section),
         )
 
     def build_context_for(self, interview_id: str) -> CodingReviewContext | None:

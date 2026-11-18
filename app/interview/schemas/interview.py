@@ -3,7 +3,7 @@
 """Interview session read models for services and API."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,7 +33,7 @@ class InterviewRead(BaseModel):
         completed_at: When the session ended, or None while active.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     id: str
     status: str
@@ -73,7 +73,7 @@ class InterviewPageContext(BaseModel):
         interview_model_accepts_audio: Whether the configured LLM accepts audio answers.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     interview: InterviewRead
     interview_title: str
