@@ -4,8 +4,6 @@
 
 import asyncio
 
-from sqlalchemy import event
-
 from app.interview.domain.serialization import session_to_spec
 from app.interview.domain.value_objects import (
     SectionBranchSpec,
@@ -18,6 +16,7 @@ from app.interview.schemas.interview import AnswerRead, InterviewRead
 from app.platform.domain.config import AppConfig
 from tests.helpers.interview_seed import seed_two_question_interview
 from tests.helpers.selection import minimal_selection_spec
+from tests.helpers.sql_trace import count_selects
 
 _SPEC = minimal_selection_spec()
 
@@ -125,21 +124,14 @@ def test_build_page_context_coding_only_session(isolated_db):
 def test_prepare_page_issues_one_query_per_loaded_collection(isolated_db):
     """Page load reads the session, sections, and tasks without extra queries."""
     interview_id = seed_two_question_interview("page-selects-1")
-    selects: list[str] = []
 
-    def record_select(conn, cursor, statement, parameters, context, executemany):
-        del conn, cursor, parameters, context, executemany
-        if statement.lstrip().upper().startswith("SELECT"):
-            selects.append(statement)
-
-    event.listen(isolated_db, "before_cursor_execute", record_select)
-    try:
-        with InterviewUnitOfWork(auto_commit=True) as uow:
-            render = asyncio.run(
-                SessionPageService(uow).prepare_page(interview_id, config=None)
-            )
-    finally:
-        event.remove(isolated_db, "before_cursor_execute", record_select)
+    with (
+        count_selects(isolated_db) as trace,
+        InterviewUnitOfWork(auto_commit=True) as uow,
+    ):
+        render = asyncio.run(
+            SessionPageService(uow).prepare_page(interview_id, config=None)
+        )
 
     assert render.context is not None
-    assert len(selects) == 4
+    assert len(trace.statements) == 4
