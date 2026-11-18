@@ -71,11 +71,6 @@ class InterviewDashboard:
         for key, entry in score_breakdown.items():
             if key == "total" or not isinstance(entry, dict):
                 continue
-            if key in ("theory", "coding"):
-                max_score = entry.get("max")
-                if isinstance(max_score, int):
-                    total += max_score
-                continue
             max_score = entry.get("max")
             if isinstance(max_score, int):
                 total += max_score
@@ -118,14 +113,11 @@ class InterviewDashboard:
         )
 
         if session.theory.enabled:
-            if interview.answers:
-                theory_max = sum(
-                    TheorySection.MAX_SCORE_PER_ROUND for _answer in interview.answers
-                )
-            else:
-                theory_max = (
-                    interview.question_count * TheorySection.MAX_SCORE_PER_ROUND
-                )
+            theory_max = (
+                len(interview.answers)
+                if interview.answers
+                else interview.question_count
+            ) * TheorySection.MAX_SCORE_PER_ROUND
             if theory_max > 0:
                 return theory_max
 
@@ -136,7 +128,7 @@ class InterviewDashboard:
             if section is not None:
                 return section.max_score()
             if interview.question_count > 0:
-                return interview.question_count * TheorySection.MAX_SCORE_PER_ROUND
+                return interview.question_count * CodingSection.MAX_SCORE_PER_ROUND
 
         return 0
 

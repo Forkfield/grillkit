@@ -10,7 +10,6 @@ from app.coding.domain.evaluator import CodingEvaluator
 from app.coding.queries.section_summary import CodingSectionSummary
 from app.interview.domain.session_phases import (
     SectionEvaluationSummary,
-    SectionPageContext,
     prior_sections_complete_for,
 )
 from app.interview.repositories.uow import InterviewUnitOfWork
@@ -108,21 +107,6 @@ class CodingSectionState:
             return True
         return section.is_complete()
 
-    def is_user_facing(self, interview_id: str) -> bool:
-        """Return whether the user should interact with the coding section now.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            True when the coding section is active and still has work remaining.
-        """
-        section = self._uow.coding_sections.get_aggregate(interview_id)
-        if section is None:
-            return False
-        complete = section.status in {"skipped", "completed"} or section.is_complete()
-        return section.status == "active" and not complete
-
     def activate_if_pending(self, interview_id: str) -> bool:
         """Promote a pending coding section to active when prior phases finish.
 
@@ -135,26 +119,6 @@ class CodingSectionState:
             True when the section was activated in this call.
         """
         return self.activate_pending(interview_id)
-
-    def get_page_context(self, interview_id: str) -> SectionPageContext | None:
-        """Return coding section page metadata for session composition.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            Section page context, or None when no coding section exists.
-        """
-        section = self._uow.coding_sections.get_aggregate(interview_id)
-        if section is None:
-            return None
-        complete = section.status in {"skipped", "completed"} or section.is_complete()
-        active = section.status == "active" and not complete
-        return SectionPageContext(
-            section="coding",
-            active=active,
-            complete=complete,
-        )
 
     def get_evaluation_summary(
         self,

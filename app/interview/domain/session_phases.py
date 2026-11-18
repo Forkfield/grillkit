@@ -34,21 +34,6 @@ class SectionEvaluationSummary:
     skipped: bool = False
 
 
-@dataclass(frozen=True, slots=True)
-class SectionPageContext:
-    """Minimal page context exposed by an interview section.
-
-    Attributes:
-        section: Section kind identifier.
-        active: Whether this section is the current user-facing phase.
-        complete: Whether the user finished all tasks in this section.
-    """
-
-    section: SectionKind
-    active: bool
-    complete: bool
-
-
 class SectionService(Protocol):
     """Contract implemented by theory and coding section services."""
 
@@ -57,14 +42,8 @@ class SectionService(Protocol):
     def is_complete(self, interview_id: str) -> bool:
         """Return whether the section has no remaining user tasks."""
 
-    def is_user_facing(self, interview_id: str) -> bool:
-        """Return whether the user should interact with this section now."""
-
     def activate_if_pending(self, interview_id: str) -> bool:
         """Promote a pending section to active when prerequisites are met."""
-
-    def get_page_context(self, interview_id: str) -> SectionPageContext | None:
-        """Return section page metadata for session composition."""
 
     def get_evaluation_summary(
         self,
