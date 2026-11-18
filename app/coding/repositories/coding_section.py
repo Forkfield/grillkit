@@ -118,6 +118,14 @@ class CodingSectionRepository(SqlAlchemyRepository[CodingSection]):
             raise CodingSectionNotFoundError(section.interview_id)
         return coding_section_from_orm(reloaded)
 
+    def remember(self, orm_section: CodingSection) -> None:
+        """Keep a row loaded through another repository for later saving.
+
+        Args:
+            orm_section: Coding section ORM row with tasks loaded.
+        """
+        self._tracked[orm_section.interview_id] = orm_section
+
     def _orm_for(self, section: DomainCodingSection) -> CodingSection | None:
         """Resolve the ORM row for an aggregate without re-querying.
 

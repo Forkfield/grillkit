@@ -119,6 +119,14 @@ class TheorySectionRepository(SqlAlchemyRepository[TheorySection]):
             raise TheorySectionNotFoundError(section.interview_id)
         return theory_section_from_orm(reloaded)
 
+    def remember(self, orm_section: TheorySection) -> None:
+        """Keep a row loaded through another repository for later saving.
+
+        Args:
+            orm_section: Theory section ORM row with tasks loaded.
+        """
+        self._tracked[orm_section.interview_id] = orm_section
+
     def _orm_for(self, section: DomainTheorySection) -> TheorySection | None:
         """Resolve the ORM row for an aggregate without re-querying.
 

@@ -89,6 +89,10 @@ def load_session_snapshot(
         if orm_interview.coding_section is not None
         else None
     )
+    if orm_interview.theory_section is not None:
+        uow.theory_sections.remember(orm_interview.theory_section)
+    if orm_interview.coding_section is not None:
+        uow.coding_sections.remember(orm_interview.coding_section)
     interview = assemble_interview_read(shell, theory, coding)
     return SessionSnapshot(
         interview=interview,
