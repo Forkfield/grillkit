@@ -70,7 +70,12 @@ class TestInterviewPageJson:
     @staticmethod
     def _mock_page(monkeypatch, render):
         async def fake_prepare_page(
-            self, interview_id, *, config, whisper_model_service
+            self,
+            interview_id,
+            *,
+            config,
+            accepts_audio_input=False,
+            whisper_model_service,
         ):
             return render
 
@@ -96,8 +101,8 @@ class TestInterviewPageJson:
     ):
         """GET /api/interview/{id} returns the active page context as JSON."""
         with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=minimal_app_config,
+            "app.platform.domain.config.ConfigService.load_active",
+            return_value=(minimal_app_config, None),
         ):
             response = self._get(
                 client,
@@ -115,8 +120,8 @@ class TestInterviewPageJson:
     ):
         """GET /api/interview/{id} signals a redirect to results when completed."""
         with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=minimal_app_config,
+            "app.platform.domain.config.ConfigService.load_active",
+            return_value=(minimal_app_config, None),
         ):
             response = self._get(
                 client,

@@ -46,10 +46,11 @@ async def interview_page_json(
         JSON with the full page context, or ``{"redirect": ...}`` for
         sessions that are missing or already completed.
     """
-    config = config_service.get_config()
+    config, model = config_service.load_active()
     page = await page_service.prepare_page(
         interview_id,
         config=config,
+        accepts_audio_input=model is not None and model.accepts_audio_input,
         whisper_model_service=whisper_model_service,
     )
     if page.redirect_url is not None:

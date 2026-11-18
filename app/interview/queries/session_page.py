@@ -21,7 +21,6 @@ from app.interview.use_cases.advance_phase import (
     AdvanceSessionPhase as SessionPhaseOrchestrator,
 )
 from app.platform.domain.config import AppConfig
-from app.platform.repo.config_composition import get_default_catalog_service
 from app.question_voice.queries.voice_page import VoicePage as QuestionVoicePageService
 from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 from app.shared.locales import (
@@ -78,6 +77,7 @@ class ActiveSessionPage:
         interview_id: str,
         *,
         config: AppConfig | None,
+        accepts_audio_input: bool = False,
         whisper_model_service: WhisperModelService | None = None,
     ) -> SessionPageRender:
         """Load a session and build context for the interview page.
@@ -85,6 +85,7 @@ class ActiveSessionPage:
         Args:
             interview_id: The session UUID.
             config: Saved provider configuration, if any.
+            accepts_audio_input: Whether the configured LLM accepts audio answers.
             whisper_model_service: Whisper model service instance (injectable).
 
         Returns:
@@ -97,6 +98,7 @@ class ActiveSessionPage:
         template_context = await self.build_full_template_context(
             interview,
             config=config,
+            accepts_audio_input=accepts_audio_input,
             whisper_model_service=whisper_model_service,
         )
         return SessionPageRender(
@@ -113,6 +115,7 @@ class ActiveSessionPage:
         question_voice_enabled: bool,
         theory: TheoryPageContext | None = None,
         uow: InterviewUnitOfWork | None = None,
+        interview_model_accepts_audio: bool = False,
     ) -> InterviewPageContext:
         """Assemble the full shell context for the interview SPA.
 
@@ -125,6 +128,7 @@ class ActiveSessionPage:
             question_voice_enabled: Whether Piper TTS is enabled in config.
             theory: Optional pre-built theory page context.
             uow: Optional active unit of work for coding score fallback.
+            interview_model_accepts_audio: Whether the configured model accepts audio.
 
         Returns:
             Frozen page context for the interview SPA.
@@ -159,12 +163,6 @@ class ActiveSessionPage:
         )
         selection_lines = session_selection_summary_lines(session)
         interview_title = session_display_title(session)
-        interview_model_accepts_audio = False
-        if config is not None and config.llm_preset_id:
-            entry = get_default_catalog_service().get_model(config.llm_preset_id)
-            interview_model_accepts_audio = (
-                entry is not None and entry.accepts_audio_input
-            )
 
         return InterviewPageContext(
             interview=interview,
@@ -191,6 +189,7 @@ class ActiveSessionPage:
         interview: InterviewRead,
         *,
         config: AppConfig | None,
+        accepts_audio_input: bool = False,
         whisper_model_service: WhisperModelService | None = None,
     ) -> dict[str, Any]:
         """Merge session shell, theory section, and audio keys for the interview SPA.
@@ -198,6 +197,7 @@ class ActiveSessionPage:
         Args:
             interview: Loaded interview read model.
             config: Application config, if configured.
+            accepts_audio_input: Whether the configured LLM accepts audio answers.
             whisper_model_service: Whisper model service instance (injectable).
 
         Returns:
@@ -220,6 +220,7 @@ class ActiveSessionPage:
             question_voice_enabled=bool(config and config.question_voice_enabled),
             theory=theory,
             uow=self._uow,
+            interview_model_accepts_audio=accepts_audio_input,
         ).model_dump()
         speech = SttModelPageService.build_page_context(
             config,

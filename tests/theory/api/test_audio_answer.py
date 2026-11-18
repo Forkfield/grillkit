@@ -235,35 +235,18 @@ class TestInterviewAudioAnswerPage:
     """Tests for audio answer controls on the interview page."""
 
     def test_interview_page_shows_audio_controls_when_enabled(
-        self, client, monkeypatch, isolated_db
+        self, client, isolated_db
     ):
         """Record / Send audio buttons render when LLM and Whisper are ready."""
         del isolated_db
         interview = _active_interview_read("audio-ui-1")
-        monkeypatch.setattr(
-            "app.interview.queries.session_page.get_default_catalog_service",
-            lambda: type(
-                "Catalog",
-                (),
-                {
-                    "get_model": lambda self, preset_id: LLMModelEntry(
-                        id=preset_id,
-                        display_name="Audio model",
-                        provider_type="openai-compatible",
-                        model="audio-model",
-                        base_url="http://localhost",
-                        api_key_required=False,
-                        accepts_audio_input=True,
-                    )
-                },
-            )(),
-        )
         page_context = SessionPageService.build_page_context(
             interview,
             config=AppConfig(
                 llm_preset_id="audio-model",
             ),
             question_voice_enabled=False,
+            interview_model_accepts_audio=True,
         )
 
         with (

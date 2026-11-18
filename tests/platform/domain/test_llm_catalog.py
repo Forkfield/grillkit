@@ -3,6 +3,7 @@
 """Tests for the LLM model catalog."""
 
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -109,6 +110,24 @@ class TestLLMCatalog:
         catalog = catalog_service.load_catalog()
         with pytest.raises(ValueError, match="Unsupported LLM model"):
             normalize_model_id("missing", catalog)
+
+    def test_get_selected_model_reads_catalog_once(self, catalog_service):
+        """Selecting the active model loads llm_models.json only once."""
+        catalog_service.add_user_model(
+            NewLLMModel(
+                display_name="Cloud",
+                base_url="https://api.example.com/v1",
+                model="gpt-4",
+            )
+        )
+        load = MagicMock(wraps=catalog_service.load_catalog)
+        catalog_service.load_catalog = load
+
+        entry = catalog_service.get_selected_model()
+
+        assert entry is not None
+        assert entry.id == "cloud"
+        assert load.call_count == 1
 
     def test_get_model_strips_trailing_slash_from_base_url(
         self, catalog_service, catalog_path

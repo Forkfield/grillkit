@@ -17,6 +17,23 @@ if TYPE_CHECKING:
     from app.platform.schemas import NewLLMModel
 
 
+def selected_id_of(catalog: LLMCatalog) -> str | None:
+    """Return the active model id from a loaded catalog.
+
+    Falls back to the first catalog entry when ``selected`` is unset or points
+    to a model that no longer exists.
+
+    Args:
+        catalog: Loaded model catalog.
+
+    Returns:
+        Active model id, or ``None`` when the catalog is empty.
+    """
+    if catalog.selected_id and catalog.selected_id in catalog.models:
+        return catalog.selected_id
+    return next(iter(catalog.models), None)
+
+
 class LLMCatalogRepositoryProtocol(Protocol):
     """Port for reading and persisting the interview model catalog.
 
@@ -63,10 +80,7 @@ class LLMCatalogService:
         Returns:
             Selected model id or ``None`` when unset or unknown.
         """
-        catalog = self.load_catalog()
-        if catalog.selected_id and catalog.selected_id in catalog.models:
-            return catalog.selected_id
-        return next(iter(catalog.models), None)
+        return selected_id_of(self.load_catalog())
 
     def get_selected_model(self) -> LLMModelEntry | None:
         """Return the active interview model entry, or ``None`` when unselected.
@@ -74,10 +88,11 @@ class LLMCatalogService:
         Returns:
             The selected catalog entry when set and known, otherwise ``None``.
         """
-        selected_id = self.get_selected_model_id()
+        catalog = self.load_catalog()
+        selected_id = selected_id_of(catalog)
         if selected_id is None:
             return None
-        return self.load_catalog().models.get(selected_id)
+        return catalog.models.get(selected_id)
 
     def set_selected_model(self, model_id: str) -> None:
         """Persist the active interview model id.

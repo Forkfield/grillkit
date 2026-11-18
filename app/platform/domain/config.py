@@ -197,19 +197,33 @@ class ConfigService:
         self._repo = repo
         self._catalog_service = catalog_service
 
+    def load_active(self) -> tuple[AppConfig | None, LLMModelEntry | None]:
+        """Load the saved configuration and the active catalog entry once.
+
+        ``get_config()`` needs the catalog only to fill ``llm_preset_id``; page
+        builders also need the entry's audio capability. Returning both from a
+        single catalog read avoids re-reading ``llm_models.json`` per lookup.
+
+        Returns:
+            Configuration and selected catalog entry, or ``(None, None)`` when
+            no configuration file is saved.
+        """
+        config = self._repo.load()
+        if config is None:
+            return None, None
+        selected = self._catalog_service.get_selected_model()
+        if selected is None:
+            return config, None
+        config.llm_preset_id = selected.id
+        return config, selected
+
     def get_config(self) -> AppConfig | None:
         """Load configuration from disk via the config repository.
 
         Returns:
             AppConfig with shared settings and the active model id, or None.
         """
-        config = self._repo.load()
-        if config is None:
-            return None
-        selected = self._catalog_service.get_selected_model()
-        if selected is None:
-            return config
-        config.llm_preset_id = selected.id
+        config, _ = self.load_active()
         return config
 
     def resolve_effective_config(self, config: AppConfig) -> EffectiveModelConfig:

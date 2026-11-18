@@ -4,7 +4,7 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,6 +24,7 @@ from app.platform.domain.effective_config import EffectiveModelConfig
 from app.platform.domain.llm_catalog import LLMCatalogService
 from app.platform.repo.config_repository import ConfigRepository
 from app.platform.repo.llm_catalog_repository import LLMCatalogRepository
+from app.platform.schemas import NewLLMModel
 
 
 @pytest.fixture
@@ -290,6 +291,37 @@ class TestConfigService:
     def test_get_config_no_file(self, config_service, mock_config_path):
         """Test retrieving config when file does not exist."""
         assert config_service.get_config() is None
+
+    def test_load_active_returns_config_and_model_with_one_catalog_read(
+        self, tmp_path
+    ):
+        """load_active returns the selected entry without re-reading the catalog."""
+        data_dir = tmp_path
+        catalog_repo = LLMCatalogRepository(
+            path=data_dir / "llm_models.json", data_dir=data_dir
+        )
+        catalog = LLMCatalogService(catalog_repo)
+        _ = catalog.add_user_model(
+            NewLLMModel(
+                display_name="Cloud",
+                base_url="https://api.example.com/v1",
+                model="gpt-4",
+            )
+        )
+        config_repo = ConfigRepository(
+            path=data_dir / "config.json", data_dir=data_dir
+        )
+        config_repo.save(AppConfig(llm_preset_id="cloud"))
+        load = MagicMock(wraps=catalog_repo.load)
+        catalog_repo.load = load
+
+        config, entry = ConfigService(config_repo, catalog).load_active()
+
+        assert config is not None
+        assert config.llm_preset_id == "cloud"
+        assert entry is not None
+        assert entry.id == "cloud"
+        assert load.call_count == 1
 
     def test_delete_config(self, config_service, mock_config_path):
         """Test deleting configuration file."""

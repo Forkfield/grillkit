@@ -45,20 +45,6 @@ def _session() -> InterviewRead:
 def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_db):
     """Page context reflects whether the configured LLM accepts audio input."""
     del isolated_db
-    monkeypatch.setattr(
-        "app.interview.queries.session_page.get_default_catalog_service",
-        lambda: type(
-            "Catalog",
-            (),
-            {
-                "get_model": lambda self, preset_id: type(
-                    "Entry",
-                    (),
-                    {"accepts_audio_input": preset_id == "audio-model"},
-                )()
-            },
-        )(),
-    )
 
     enabled = SessionPageService.build_page_context(
         _session(),
@@ -67,6 +53,7 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
             timeout=60,
         ),
         question_voice_enabled=False,
+        interview_model_accepts_audio=True,
     )
     disabled = SessionPageService.build_page_context(
         _session(),
@@ -75,6 +62,7 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
             timeout=60,
         ),
         question_voice_enabled=False,
+        interview_model_accepts_audio=False,
     )
 
     assert enabled.interview_model_accepts_audio is True
