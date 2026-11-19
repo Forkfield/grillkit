@@ -12,7 +12,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.session_page import ActiveSessionPage as SessionPageService
+from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.config import AppConfig
@@ -58,7 +58,7 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
     """Page context reflects whether the configured LLM accepts audio input."""
     del isolated_db
 
-    enabled = SessionPageService.build_page_context(
+    enabled = ActiveSessionPage.build_page_context(
         _session(),
         config=AppConfig(
             llm_preset_id="audio-model",
@@ -67,7 +67,7 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
         question_voice_enabled=False,
         interview_model_accepts_audio=True,
     )
-    disabled = SessionPageService.build_page_context(
+    disabled = ActiveSessionPage.build_page_context(
         _session(),
         config=AppConfig(
             llm_preset_id="text-model",
@@ -118,7 +118,7 @@ def test_build_page_context_coding_only_session(isolated_db):
         answers=[],
     )
 
-    context = SessionPageService.build_page_context(
+    context = ActiveSessionPage.build_page_context(
         interview,
         config=None,
         question_voice_enabled=False,
@@ -137,7 +137,7 @@ def test_prepare_page_issues_one_query_per_loaded_collection(isolated_db):
         InterviewUnitOfWork(auto_commit=True) as uow,
     ):
         render = asyncio.run(
-            SessionPageService(uow).prepare_page(interview_id, config=None)
+            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
         )
 
     assert render.context is not None
@@ -169,7 +169,7 @@ def test_prepare_page_activation_does_not_reread_sections(
         InterviewUnitOfWork(auto_commit=True) as uow,
     ):
         render = asyncio.run(
-            SessionPageService(uow).prepare_page(interview_id, config=None)
+            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
         )
 
     assert render.context is not None

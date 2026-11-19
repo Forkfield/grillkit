@@ -10,10 +10,8 @@ from dataclasses import replace
 import logging
 
 from app.ai.base import AIProvider
-from app.coding.queries.section_state import CodingSectionState as CodingSectionService
-from app.coding.queries.section_summary import (
-    CodingSectionSummary as CodingQueryService,
-)
+from app.coding.queries.section_state import CodingSectionState
+from app.coding.queries.section_summary import CodingSectionSummary
 from app.interview.domain.evaluation_aggregator import (
     SessionEvaluationAggregator,
     attach_session_score_breakdown,
@@ -29,8 +27,8 @@ from app.interview.domain.session_evaluation import SessionEvaluator
 from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.theory.queries.loader import TheorySectionLoader as TheoryQueryService
-from app.theory.queries.section_state import TheorySectionState as TheorySectionService
+from app.theory.queries.loader import TheorySectionLoader
+from app.theory.queries.section_state import TheorySectionState
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +73,10 @@ class CompleteInterviewSession:
         try:
             locale = aggregate.locale
             session = aggregate.selection
-            theory_query = TheoryQueryService(self._uow)
-            coding_query = CodingQueryService(self._uow)
-            theory_section = TheorySectionService(self._uow, query=theory_query)
-            coding_section = CodingSectionService(self._uow, query=coding_query)
+            theory_query = TheorySectionLoader(self._uow)
+            coding_query = CodingSectionSummary(self._uow)
+            theory_section = TheorySectionState(self._uow, query=theory_query)
+            coding_section = CodingSectionState(self._uow, query=coding_query)
 
             sources_parts: list[str] = []
             if session.theory.enabled:

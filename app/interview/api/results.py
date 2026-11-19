@@ -8,9 +8,9 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app.interview.api.deps import (
-    CodingReviewServiceDep,
+    CodingReviewPageDep,
     CompletedSessionResultsDep,
-    TheoryReviewServiceDep,
+    TheoryReviewPageDep,
 )
 
 api_router = APIRouter(prefix="/api/interview", tags=["interview-results"])
@@ -62,7 +62,7 @@ async def session_results_json(
 @api_router.get("/{interview_id}/theory", response_model=None)
 async def theory_review_json(
     interview_id: str,
-    service: TheoryReviewServiceDep,
+    service: TheoryReviewPageDep,
 ) -> dict[str, Any] | JSONResponse:
     """Return the completed theory section review JSON payload for the SPA.
 
@@ -86,7 +86,7 @@ async def theory_review_json(
 @api_router.get("/{interview_id}/coding", response_model=None)
 async def coding_review_json(
     interview_id: str,
-    service: CodingReviewServiceDep,
+    service: CodingReviewPageDep,
 ) -> dict[str, Any] | JSONResponse:
     """Return the completed coding section review JSON payload for the SPA.
 

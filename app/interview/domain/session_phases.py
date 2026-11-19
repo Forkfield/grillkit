@@ -100,23 +100,17 @@ def section_services(
     Returns:
         Mapping from section kind to the corresponding section service instance.
     """
-    from app.coding.queries.section_state import (
-        CodingSectionState as CodingSectionService,
-    )
-    from app.coding.queries.section_summary import (
-        CodingSectionSummary as CodingQueryService,
-    )
-    from app.theory.queries.loader import TheorySectionLoader as TheoryQueryService
-    from app.theory.queries.section_state import (
-        TheorySectionState as TheorySectionService,
-    )
+    from app.coding.queries.section_state import CodingSectionState
+    from app.coding.queries.section_summary import CodingSectionSummary
+    from app.theory.queries.loader import TheorySectionLoader
+    from app.theory.queries.section_state import TheorySectionState
 
-    theory_query = TheoryQueryService(uow)
-    coding_query = CodingQueryService(uow)
+    theory_query = TheorySectionLoader(uow)
+    coding_query = CodingSectionSummary(uow)
     return cast(
         dict[SectionKind, SectionService],
         {
-            "theory": TheorySectionService(uow, query=theory_query),
-            "coding": CodingSectionService(uow, query=coding_query),
+            "theory": TheorySectionState(uow, query=theory_query),
+            "coding": CodingSectionState(uow, query=coding_query),
         },
     )

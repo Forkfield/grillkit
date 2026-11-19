@@ -1,6 +1,6 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for TheoryTimerService."""
+"""Tests for TaskTimer."""
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -11,7 +11,7 @@ from app.interview.domain.events import AnswerFeedbackEvent
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.theory.domain.entities import TheorySection, TheoryTask
 from app.theory.domain.exceptions import TheorySectionNotFoundError
-from app.theory.domain.timer import TaskTimer as TheoryTimerService
+from app.theory.domain.timer import TaskTimer
 from app.theory.use_cases.navigate_tasks import TheoryTaskNavigation
 
 
@@ -68,7 +68,7 @@ def test_persist_timed_out_round_saves_timeout_with_zero_score() -> None:
     mock_nav = MagicMock(spec=TheoryTaskNavigation)
     mock_nav.advance_to_next_unanswered.return_value = (None, None)
 
-    service = TheoryTimerService(mock_uow, navigation=mock_nav)
+    service = TaskTimer(mock_uow, navigation=mock_nav)
 
     with patch(
         "app.theory.domain.timer.timeout_feedback_for_locale",
@@ -104,7 +104,7 @@ def test_persist_timed_out_round_returns_feedback_event() -> None:
         45,
     )
 
-    service = TheoryTimerService(mock_uow, navigation=mock_nav)
+    service = TaskTimer(mock_uow, navigation=mock_nav)
 
     with patch(
         "app.theory.domain.timer.timeout_feedback_for_locale",
@@ -139,7 +139,7 @@ def test_persist_timed_out_round_advances_to_next_question() -> None:
     mock_nav = MagicMock(spec=TheoryTaskNavigation)
     mock_nav.advance_to_next_unanswered.return_value = (None, None)
 
-    service = TheoryTimerService(mock_uow, navigation=mock_nav)
+    service = TaskTimer(mock_uow, navigation=mock_nav)
 
     with patch(
         "app.theory.domain.timer.timeout_feedback_for_locale",
@@ -171,7 +171,7 @@ def test_persist_timed_out_round_uses_locale_specific_feedback() -> None:
     mock_nav = MagicMock(spec=TheoryTaskNavigation)
     mock_nav.advance_to_next_unanswered.return_value = (None, None)
 
-    service = TheoryTimerService(mock_uow, navigation=mock_nav)
+    service = TaskTimer(mock_uow, navigation=mock_nav)
 
     with patch(
         "app.theory.domain.timer.timeout_feedback_for_locale",
@@ -194,7 +194,7 @@ def test_persist_timed_out_round_raises_when_section_not_found() -> None:
     mock_uow = MagicMock(spec=InterviewUnitOfWork)
     mock_uow.theory_sections.get_aggregate.return_value = None
 
-    service = TheoryTimerService(mock_uow)
+    service = TaskTimer(mock_uow)
 
     with pytest.raises(TheorySectionNotFoundError):
         service.persist_timed_out_round(

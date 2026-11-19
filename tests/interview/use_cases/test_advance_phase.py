@@ -19,7 +19,7 @@ from app.interview.use_cases.advance_phase import (
     activate_current_section,
     active_section,
 )
-from app.theory.queries.section_state import TheorySectionState as TheorySectionService
+from app.theory.queries.section_state import TheorySectionState
 from tests.helpers.session_creation import create_session
 
 
@@ -183,7 +183,7 @@ def test_notify_theory_complete_activates_pending_coding(
     _complete_theory_section(interview.id)
 
     with (
-        patch.object(TheorySectionService, "on_phase_complete"),
+        patch.object(TheorySectionState, "on_phase_complete"),
         InterviewUnitOfWork(auto_commit=True) as uow,
     ):
         AdvanceSessionPhase(uow).notify_section_complete(

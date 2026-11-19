@@ -9,8 +9,7 @@ import pytest
 
 from app.ai.audio_probe import minimal_wav_bytes
 from app.ai.llm_models import LLMModelEntry
-from app.interview.queries.session_page import ActiveSessionPage as SessionPageService
-from app.interview.queries.session_page import SessionPageRender
+from app.interview.queries.session_page import ActiveSessionPage, SessionPageRender
 from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import QuestionVoicePageContext
@@ -241,7 +240,7 @@ class TestInterviewAudioAnswerPage:
         """Record / Send audio buttons render when LLM and Whisper are ready."""
         del isolated_db
         interview = _active_interview_read("audio-ui-1")
-        page_context = SessionPageService.build_page_context(
+        page_context = ActiveSessionPage.build_page_context(
             interview,
             config=AppConfig(
                 llm_preset_id="audio-model",
@@ -273,7 +272,7 @@ class TestInterviewAudioAnswerPage:
         """Audio controls stay hidden when the configured model is text-only."""
         del isolated_db
         interview = _active_interview_read("audio-ui-2")
-        page_context = SessionPageService.build_page_context(
+        page_context = ActiveSessionPage.build_page_context(
             interview,
             config=AppConfig(
                 llm_preset_id="text-model",

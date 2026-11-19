@@ -9,12 +9,10 @@ from fastapi import Depends, HTTPException
 
 from app.ai.base import AIProvider
 from app.ai.stt import Stt
-from app.coding.queries.loader import CodingTaskLoader as CodingStateService
-from app.coding.queries.review_page import CodingReviewPage as CodingReviewService
+from app.coding.queries.loader import CodingTaskLoader
+from app.coding.queries.review_page import CodingReviewPage
 from app.coding.use_cases.create_section import CreateCodingSection
-from app.coding.use_cases.submit_solution import (
-    SubmitCodingSolution as CodingSubmissionService,
-)
+from app.coding.use_cases.submit_solution import SubmitCodingSolution
 from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.loader import InterviewLoader
 from app.interview.queries.results_page import CompletedSessionResults
@@ -28,11 +26,9 @@ from app.speech.domain.stt_resolver import (
     resolve_stt,
     stt_unavailable_message,
 )
-from app.theory.queries.review_page import TheoryReviewPage as TheoryReviewService
+from app.theory.queries.review_page import TheoryReviewPage
 from app.theory.use_cases.create_section import CreateTheorySection
-from app.theory.use_cases.submit_answer import (
-    SubmitTheoryAnswer as TheorySubmissionService,
-)
+from app.theory.use_cases.submit_answer import SubmitTheoryAnswer
 
 
 async def get_ai_provider() -> AsyncIterator[AIProvider]:
@@ -106,7 +102,7 @@ def get_session_completion_service(
     return CompleteInterviewSession(uow)
 
 
-def get_theory_submission_service(uow: UoWDep) -> TheorySubmissionService:
+def get_theory_submission_service(uow: UoWDep) -> SubmitTheoryAnswer:
     """Build a theory submission service bound to the request UoW.
 
     Args:
@@ -115,10 +111,10 @@ def get_theory_submission_service(uow: UoWDep) -> TheorySubmissionService:
     Returns:
         Theory submission service instance.
     """
-    return TheorySubmissionService(uow)
+    return SubmitTheoryAnswer(uow)
 
 
-def get_coding_submission_service(uow: UoWDep) -> CodingSubmissionService:
+def get_coding_submission_service(uow: UoWDep) -> SubmitCodingSolution:
     """Build a coding submission service bound to the request UoW.
 
     Args:
@@ -127,12 +123,12 @@ def get_coding_submission_service(uow: UoWDep) -> CodingSubmissionService:
     Returns:
         Coding submission service instance.
     """
-    return CodingSubmissionService(uow)
+    return SubmitCodingSolution(uow)
 
 
-def get_coding_state_service(uow: UoWDep) -> CodingStateService:
+def get_coding_state_service(uow: UoWDep) -> CodingTaskLoader:
     """Build a coding state service bound to the request UoW."""
-    return CodingStateService(uow)
+    return CodingTaskLoader(uow)
 
 
 def get_session_results_page_service(
@@ -142,7 +138,7 @@ def get_session_results_page_service(
     return CompletedSessionResults(uow)
 
 
-def get_theory_review_service(uow: UoWDep) -> TheoryReviewService:
+def get_theory_review_service(uow: UoWDep) -> TheoryReviewPage:
     """Build a theory review service bound to the request UoW.
 
     Args:
@@ -151,10 +147,10 @@ def get_theory_review_service(uow: UoWDep) -> TheoryReviewService:
     Returns:
         Theory review service instance.
     """
-    return TheoryReviewService(uow)
+    return TheoryReviewPage(uow)
 
 
-def get_coding_review_service(uow: UoWDep) -> CodingReviewService:
+def get_coding_review_service(uow: UoWDep) -> CodingReviewPage:
     """Build a coding review service bound to the request UoW.
 
     Args:
@@ -163,7 +159,7 @@ def get_coding_review_service(uow: UoWDep) -> CodingReviewService:
     Returns:
         Coding review service instance.
     """
-    return CodingReviewService(uow)
+    return CodingReviewPage(uow)
 
 
 InterviewLoaderDep = Annotated[InterviewLoader, Depends(get_interview_query)]
@@ -180,16 +176,16 @@ CompleteSessionDep = Annotated[
     CompleteInterviewSession,
     Depends(get_session_completion_service),
 ]
-TheorySubmissionServiceDep = Annotated[
-    TheorySubmissionService,
+SubmitTheoryAnswerDep = Annotated[
+    SubmitTheoryAnswer,
     Depends(get_theory_submission_service),
 ]
-CodingSubmissionServiceDep = Annotated[
-    CodingSubmissionService,
+SubmitCodingSolutionDep = Annotated[
+    SubmitCodingSolution,
     Depends(get_coding_submission_service),
 ]
-CodingStateServiceDep = Annotated[
-    CodingStateService,
+CodingTaskLoaderDep = Annotated[
+    CodingTaskLoader,
     Depends(get_coding_state_service),
 ]
 CreateTheorySectionDep = Annotated[
@@ -204,12 +200,12 @@ CompletedSessionResultsDep = Annotated[
     CompletedSessionResults,
     Depends(get_session_results_page_service),
 ]
-TheoryReviewServiceDep = Annotated[
-    TheoryReviewService,
+TheoryReviewPageDep = Annotated[
+    TheoryReviewPage,
     Depends(get_theory_review_service),
 ]
-CodingReviewServiceDep = Annotated[
-    CodingReviewService,
+CodingReviewPageDep = Annotated[
+    CodingReviewPage,
     Depends(get_coding_review_service),
 ]
 AIProviderDep = Annotated[AIProvider, Depends(get_ai_provider)]
