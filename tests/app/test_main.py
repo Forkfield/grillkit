@@ -37,9 +37,7 @@ class TestCreateApp:
             getattr(r, "path", "") for r in app.routes
         ]
         # Check config router paths exist (they have /config prefix)
-        config_routes = [
-            r for r in app.routes if "/config" in getattr(r, "path", "")
-        ]
+        config_routes = [r for r in app.routes if "/config" in getattr(r, "path", "")]
         assert len(config_routes) > 0
 
 
@@ -92,7 +90,7 @@ class TestAppIntegration:
     def test_dashboard_endpoint(self, client):
         """Test that the home page returns the dashboard HTML."""
         with patch(
-            "app.interview.queries.dashboard.DashboardBuilder.list_rows",
+            "app.interview.queries.dashboard.InterviewDashboard.list_rows",
             return_value=[],
         ):
             response = client.get("/api/dashboard")

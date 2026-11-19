@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.interview.queries.loader import InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.speech.api.dictation_protocol import (
     DICTATION_CLIENT_START,
@@ -68,7 +68,7 @@ async def interview_dictation_ws(
         interview_id: Interview session UUID.
     """
     coordinator: SpeechRuntimeCoordinator = websocket.app.state.speech_runtime
-    interview = InterviewQuery.load(interview_id)
+    interview = InterviewLoader.load(interview_id)
     if interview is None:
         await _reject_dictation(websocket, "Interview not found")
         return

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for full theory flow: submit answers, next questions, finish, end interview."""
 
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.shared.infrastructure.models import Answer, Interview
 from tests.fakes import answer_evaluation_json, follow_up_evaluation_json
 from tests.helpers.interview_seed import persist_interview_with_answers
@@ -88,7 +88,7 @@ class TestTheoryFullFlow:
             assert complete["type"] == "interview_completed"
 
         # Check DB state
-        reloaded = InterviewQuery.load(interview_id)
+        reloaded = InterviewLoader.load(interview_id)
         assert reloaded is not None
         assert reloaded.status == "completed"
         q1 = next(a for a in reloaded.answers if a.question_id == "q1")
@@ -201,6 +201,6 @@ class TestTheoryFullFlow:
             msg = ws.receive_json()
             assert msg["type"] == "interview_completed"
 
-        reloaded = InterviewQuery.load(interview_id)
+        reloaded = InterviewLoader.load(interview_id)
         assert reloaded is not None
         assert reloaded.status == "completed"

@@ -57,6 +57,3 @@ class CodingTaskNavigation:
                 interview_id,
                 "coding",
             )
-
-
-CodingNavigationService = CodingTaskNavigation

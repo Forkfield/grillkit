@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.config import AppConfig
 from app.question_voice.use_cases.generate_question_audio import (
     GenerateQuestionAudio,
@@ -16,6 +16,7 @@ from app.question_voice.use_cases.generate_question_audio import (
 )
 from app.shared.infrastructure.gateways.tts_exceptions import QuestionVoiceDisabledError
 from app.speech.domain.tts_engine import TtsEngine
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 def _engine():
@@ -28,9 +29,9 @@ def _make_answer(
     answer_id: int = 1,
     question_text: str = "What is Python?",
     answer_text: str | None = None,
-) -> AnswerRead:
-    """Build an AnswerRead for tests."""
-    return AnswerRead(
+) -> TheoryTaskRead:
+    """Build an TheoryTaskRead for tests."""
+    return TheoryTaskRead(
         id=answer_id,
         question_id="q1",
         order=1,
@@ -44,7 +45,7 @@ def _make_answer(
     )
 
 
-def _make_interview(answers: list[AnswerRead]) -> InterviewRead:
+def _make_interview(answers: list[TheoryTaskRead]) -> InterviewRead:
     """Build an InterviewRead for tests."""
     return InterviewRead(
         id="test-interview-id",
@@ -108,7 +109,7 @@ class TestGetQuestionAudioPath:
                 return_value=MagicMock(get_config=MagicMock(return_value=config)),
             ),
             patch(
-                "app.question_voice.use_cases.generate_question_audio.InterviewQuery.get_active_interview_or_raise",
+                "app.question_voice.use_cases.generate_question_audio.InterviewLoader.get_active_interview_or_raise",
                 return_value=interview,
             ),
             patch(
@@ -148,7 +149,7 @@ class TestGetQuestionAudioPath:
                 return_value=MagicMock(get_config=MagicMock(return_value=config)),
             ),
             patch(
-                "app.question_voice.use_cases.generate_question_audio.InterviewQuery.get_active_interview_or_raise",
+                "app.question_voice.use_cases.generate_question_audio.InterviewLoader.get_active_interview_or_raise",
                 return_value=interview,
             ),
             patch(

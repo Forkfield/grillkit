@@ -11,11 +11,12 @@ from app.ai.audio_probe import minimal_wav_bytes
 from app.ai.llm_models import LLMModelEntry
 from app.interview.queries.session_page import ActiveSessionPage as SessionPageService
 from app.interview.queries.session_page import SessionPageRender
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import QuestionVoicePageContext
 from app.speech.schemas.page import SttModelPageContext
 from app.speech.schemas.status import WhisperModelStatusRead
+from app.theory.schemas.theory import TheoryTaskRead
 from tests.fakes import answer_evaluation_json
 from tests.helpers.interview_seed import seed_two_question_interview
 from tests.helpers.selection import minimal_selection_spec
@@ -79,7 +80,7 @@ def _active_interview_read(interview_id: str) -> InterviewRead:
         question_count=1,
         question_time_limit_seconds=None,
         answers=[
-            AnswerRead(
+            TheoryTaskRead(
                 id=1,
                 question_id="q1",
                 order=1,

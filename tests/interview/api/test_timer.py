@@ -10,7 +10,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.shared.infrastructure.models import Answer, Interview
 from app.theory.domain.entities import TheoryTask
@@ -62,7 +62,7 @@ class TestTheoryTimer:
         assert feedback["timed_out"] is True
         assert feedback["next_question"]["question_id"] == "q2"
 
-        reloaded = InterviewQuery.load(interview_id)
+        reloaded = InterviewLoader.load(interview_id)
         assert reloaded is not None
         q1 = next(a for a in reloaded.answers if a.question_id == "q1")
         assert q1.answer_text == TheoryTask.TIME_EXPIRED_ANSWER_TEXT

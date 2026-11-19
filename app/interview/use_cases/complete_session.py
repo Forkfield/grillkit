@@ -25,8 +25,8 @@ from app.interview.domain.events import (
 )
 from app.interview.domain.exceptions import InterviewNotFoundError
 from app.interview.domain.rules.selection import selection_sources_summary
-from app.interview.domain.session_evaluation import SessionEvaluatorService
-from app.interview.queries.dashboard import DashboardBuilder
+from app.interview.domain.session_evaluation import SessionEvaluator
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.theory.queries.loader import TheorySectionLoader as TheoryQueryService
@@ -118,7 +118,7 @@ class CompleteInterviewSession:
 
             events: list[InterviewEvent] = [EvaluatingEvent()]
 
-            session_eval = await SessionEvaluatorService.evaluate_session(
+            session_eval = await SessionEvaluator.evaluate_session(
                 merged,
                 provider=provider,
                 locale=locale,
@@ -138,7 +138,7 @@ class CompleteInterviewSession:
                 interview_eval.score_breakdown
             )
 
-            max_score = DashboardBuilder.compute_max_score(
+            max_score = InterviewDashboard.compute_max_score(
                 interview_read,
                 interview_eval.score_breakdown or None,
                 uow=self._uow,

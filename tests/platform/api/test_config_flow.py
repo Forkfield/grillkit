@@ -78,7 +78,7 @@ class TestFirstTimeConfigFlow:
             stack.enter_context(self._config_service_patch(None))
             stack.enter_context(
                 patch(
-                    "app.interview.queries.dashboard.DashboardBuilder.list_rows",
+                    "app.interview.queries.dashboard.InterviewDashboard.list_rows",
                     return_value=[],
                 )
             )
@@ -161,7 +161,9 @@ class TestFirstTimeConfigFlow:
                     "app.platform.repo.config_composition.get_default_catalog_service"
                 )
             )
-            mock_catalog.return_value.add_user_model.return_value = self._catalog_entry()
+            mock_catalog.return_value.add_user_model.return_value = (
+                self._catalog_entry()
+            )
             mock_catalog.return_value.list_models.return_value = [self._catalog_entry()]
             response = client.post(
                 "/api/config/llm-models",

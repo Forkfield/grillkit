@@ -12,7 +12,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.shared.infrastructure.models import Answer, Interview
 from tests.fakes import answer_evaluation_json
@@ -235,7 +235,7 @@ class TestCombinedPhaseSwitch:
             assert fb.get("next_task") is None
 
         # Interview page should now show theory
-        reloaded = InterviewQuery.load(interview_id)
+        reloaded = InterviewLoader.load(interview_id)
         assert reloaded is not None
         # Theory section should be discoverable
         with InterviewUnitOfWork() as uow:

@@ -241,6 +241,3 @@ class SessionEvaluator:
                 exc,
             )
             return SessionEvaluator._synthesize_from_merged(merged)
-
-
-SessionEvaluatorService = SessionEvaluator

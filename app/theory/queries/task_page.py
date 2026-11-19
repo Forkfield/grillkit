@@ -4,7 +4,7 @@
 
 from app.interview.domain.serialization import parse_session_spec
 from app.interview.domain.value_objects import SessionSelection
-from app.interview.queries.loader import InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.schemas.interview import InterviewRead
 from app.shared.task_timer import remaining_seconds
 from app.theory.schemas.page import TheoryPageContext
@@ -33,7 +33,7 @@ def build_theory_context(
     if not session.theory.enabled:
         return None
 
-    current = InterviewQuery.get_current_unanswered(interview)
+    current = InterviewLoader.get_current_unanswered(interview)
     timer_enabled = interview.question_time_limit_seconds is not None
     remaining = (
         remaining_seconds(current.started_at, interview.question_time_limit_seconds)

@@ -39,6 +39,3 @@ class VoicePage:
             tts_voice_status=status,
             tts_voice_banner=show_banner and VoicePage._show_voice_banner(status),
         )
-
-
-TTSPageService = VoicePage

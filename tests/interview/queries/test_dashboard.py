@@ -14,7 +14,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_recent_interview_reads
 from app.interview.repositories.mappers import interview_read_from_orm
 from app.interview.repositories.uow import InterviewUnitOfWork
@@ -47,7 +47,7 @@ def db_session(engine):
 def test_format_local_datetime_utc():
     """UTC datetimes are converted to local formatted strings."""
     dt = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
-    result = DashboardBuilder.format_local_datetime(dt)
+    result = InterviewDashboard.format_local_datetime(dt)
     assert "2026" in result
     assert ":" in result
 
@@ -59,7 +59,7 @@ def test_interview_display_title():
         selection_spec=minimal_selection_spec(categories=["data-structures"]),
     )
     read_model = interview_read_from_orm(interview)
-    assert DashboardBuilder.interview_display_title(read_model) == "Python Interview"
+    assert InterviewDashboard.interview_display_title(read_model) == "Python Interview"
 
 
 def test_interview_display_title_coding_only():
@@ -89,7 +89,7 @@ def test_interview_display_title_coding_only():
     )
     interview = Interview(id="coding-1", selection_spec=spec)
     read_model = interview_read_from_orm(interview)
-    assert DashboardBuilder.interview_display_title(read_model) == "Python Interview"
+    assert InterviewDashboard.interview_display_title(read_model) == "Python Interview"
 
 
 def test_list_recent_ordering(db_session):
@@ -157,7 +157,7 @@ def test_compute_max_score_uses_nested_breakdown_for_coding_only():
         },
     )
     assert (
-        DashboardBuilder.compute_max_score(
+        InterviewDashboard.compute_max_score(
             interview,
             interview.overall_feedback["score_breakdown"],
         )
@@ -211,7 +211,7 @@ def test_list_dashboard_rows(monkeypatch):
     class _FakeUow:
         coding_sections = _FakeCodingSections()
 
-    rows = DashboardBuilder(_FakeUow()).list_rows(limit=20)  # type: ignore[arg-type]
+    rows = InterviewDashboard(_FakeUow()).list_rows(limit=20)  # type: ignore[arg-type]
     assert len(rows) == 2
     assert rows[0].title == "Python Interview"
     assert rows[0].session_mode_label == "Theory"

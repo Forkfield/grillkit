@@ -10,7 +10,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.platform.domain.config import AppConfig
 from tests.fakes import answer_evaluation_json
@@ -54,7 +54,7 @@ class TestE2EFullLifecycle:
         from app.interview.repositories.uow import InterviewUnitOfWork
 
         with InterviewUnitOfWork() as uow:
-            interview = InterviewQuery(uow).get_interview(interview_id)
+            interview = InterviewLoader(uow).get_interview(interview_id)
             assert interview is not None
             question_ids = [a.question_id for a in interview.answers]
         assert len(question_ids) == 2

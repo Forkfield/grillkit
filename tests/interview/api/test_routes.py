@@ -26,7 +26,7 @@ class TestDashboardRouter:
             )
         ]
         with patch(
-            "app.interview.queries.dashboard.DashboardBuilder.list_rows",
+            "app.interview.queries.dashboard.InterviewDashboard.list_rows",
             return_value=mock_rows,
         ):
             response = client.get("/api/dashboard")
@@ -38,7 +38,7 @@ class TestDashboardRouter:
     def test_dashboard_returns_json(self, client):
         """Dashboard returns JSON without any provider config."""
         with patch(
-            "app.interview.queries.dashboard.DashboardBuilder.list_rows",
+            "app.interview.queries.dashboard.InterviewDashboard.list_rows",
             return_value=[],
         ):
             response = client.get("/api/dashboard")

@@ -21,7 +21,6 @@ from app.interview.queries.projection import (
 )
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.schemas.interview import (
-    AnswerRead,
     InterviewPageContext,
     InterviewRead,
 )
@@ -40,6 +39,7 @@ from app.shared.locales import (
 from app.speech.queries.speech_page import SttModelPageService
 from app.theory.queries.task_page import build_theory_context
 from app.theory.schemas.page import TheoryPageContext
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 @dataclass(frozen=True)
@@ -152,7 +152,7 @@ class ActiveSessionPage:
             )
         if theory is None:
             theory = build_theory_context(interview, session=session)
-        current_question: AnswerRead | None = (
+        current_question: TheoryTaskRead | None = (
             theory.current_question if theory is not None else None
         )
         overall_feedback_data = interview.overall_feedback

@@ -172,7 +172,7 @@ class TestTheoryWebSocket:
 
         with (
             patch(
-                "app.interview.queries.loader.InterviewQuery.get_interview",
+                "app.interview.queries.loader.InterviewLoader.get_interview",
                 return_value=mock_session,
             ),
             client.websocket_connect("/interview/test-id/theory/ws") as ws,
@@ -188,7 +188,7 @@ class TestTheoryWebSocket:
 
         with (
             patch(
-                "app.interview.queries.loader.InterviewQuery.get_interview",
+                "app.interview.queries.loader.InterviewLoader.get_interview",
                 return_value=mock_session,
             ),
             client.websocket_connect("/interview/test-id/theory/ws") as ws,

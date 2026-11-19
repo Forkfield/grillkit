@@ -212,6 +212,3 @@ class InterviewDashboard:
                 )
             )
         return rows
-
-
-DashboardBuilder = InterviewDashboard

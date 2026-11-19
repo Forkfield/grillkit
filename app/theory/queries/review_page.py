@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from app.interview.queries.review_context import (
-    CompletedInterviewSnapshot,
+    CompletedInterviewContext,
     load_completed_interview,
     resolved_section_feedback,
     review_score_fields,
@@ -32,7 +32,7 @@ class TheoryReviewPage:
     def build_context(
         self,
         interview_id: str,
-        snapshot: CompletedInterviewSnapshot,
+        snapshot: CompletedInterviewContext,
     ) -> TheoryReviewContext | None:
         """Assemble theory review context for a completed session.
 

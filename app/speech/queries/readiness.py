@@ -21,6 +21,3 @@ class SttModelReadiness:
         """
         size = normalize_stt_model_size(speech_model_size)
         return is_installed(size)
-
-
-WhisperReadinessService = SttModelReadiness

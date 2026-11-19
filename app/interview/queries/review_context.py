@@ -12,7 +12,7 @@ from app.interview.domain.section_feedback import resolve_section_feedback
 from app.interview.domain.serialization import parse_session_spec
 from app.interview.domain.session_phases import SectionEvaluationSummary
 from app.interview.domain.value_objects import SectionKind, SessionSelection
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.schemas.interview import InterviewRead
@@ -30,9 +30,6 @@ class CompletedInterviewContext:
 
     interview: InterviewRead
     session: SessionSelection
-
-
-CompletedInterviewSnapshot = CompletedInterviewContext
 
 
 def load_completed_interview(
@@ -102,7 +99,7 @@ def shared_review_fields(
     interview = snapshot.interview
     return {
         "interview_id": interview_id,
-        "interview_title": DashboardBuilder.interview_display_title(
+        "interview_title": InterviewDashboard.interview_display_title(
             interview, session=snapshot.session
         ),
         "selection_lines": session_selection_summary_lines(snapshot.session),

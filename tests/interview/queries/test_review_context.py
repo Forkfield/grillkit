@@ -12,7 +12,7 @@ from app.interview.domain.value_objects import (
     TrackSelection,
 )
 from app.interview.queries.review_context import (
-    CompletedInterviewSnapshot,
+    CompletedInterviewContext,
     item_id_key_for,
     load_completed_interview,
     resolved_section_feedback,
@@ -42,7 +42,7 @@ def _completed_read(
     )
 
 
-def _snapshot() -> CompletedInterviewSnapshot:
+def _snapshot() -> CompletedInterviewContext:
     selection = SessionSelection.theory_only(
         sources=(
             TrackSelection(
@@ -53,7 +53,7 @@ def _snapshot() -> CompletedInterviewSnapshot:
         )
     )
     interview = _completed_read(selection_spec=session_to_spec(selection))
-    return CompletedInterviewSnapshot(
+    return CompletedInterviewContext(
         interview=interview,
         session=selection,
     )
@@ -101,7 +101,7 @@ class TestLoadCompletedInterview:
         ):
             result = load_completed_interview(uow, "iv-1")
         assert result is not None
-        assert isinstance(result, CompletedInterviewSnapshot)
+        assert isinstance(result, CompletedInterviewContext)
         assert result.interview.id == "iv-1"
         assert result.interview.status == "completed"
 
@@ -148,7 +148,7 @@ class TestSharedReviewFields:
             started_at=datetime(2026, 1, 1, tzinfo=UTC),
             completed_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        snapshot = CompletedInterviewSnapshot(
+        snapshot = CompletedInterviewContext(
             interview=interview,
             session=selection,
         )

@@ -8,7 +8,7 @@ from typing import Any
 
 from app.ai.base import AIProvider
 from app.interview.domain.exceptions import InterviewDomainError
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.support.ai_errors import ai_error_message_for_client
 from app.interview.use_cases.complete_session import (
     CompleteInterviewSession as SessionCompletionService,
@@ -37,7 +37,7 @@ class TheoryWebSocketService:
         provider: AIProvider,
         submission_service: TheorySubmissionService,
         session_completion: SessionCompletionService,
-        interview_query: InterviewQuery,
+        interview_query: InterviewLoader,
     ) -> AsyncIterator[dict[str, Any]]:
         """Handle one client message and yield JSON payloads for the socket.
 
@@ -170,7 +170,7 @@ class TheoryWebSocketService:
     def _handle_ping(
         interview_id: str,
         *,
-        interview_query: InterviewQuery,
+        interview_query: InterviewLoader,
     ) -> dict[str, Any]:
         try:
             interview = interview_query.get_interview(interview_id)

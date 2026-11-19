@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Negative scenarios: 404s, bad UUID, bad WS msg, invalid WAV, active→results 404."""
 
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.shared.infrastructure.models import Answer, Interview
 from tests.fakes import answer_evaluation_json
@@ -89,6 +89,6 @@ class TestNegativeScenarios:
 
         # Session still valid
         with InterviewUnitOfWork() as uow:
-            interview = InterviewQuery(uow).get_interview(interview_id)
+            interview = InterviewLoader(uow).get_interview(interview_id)
             assert interview is not None
             assert interview.status == "active"

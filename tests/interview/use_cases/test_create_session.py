@@ -13,7 +13,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from tests.helpers.session_creation import create_session
 
@@ -72,7 +72,7 @@ def test_create_interview_persists_questions(
     assert len(question_ids) == 1
     assert question_ids[0] == "ds-001"
 
-    reloaded = InterviewQuery.load(interview.id)
+    reloaded = InterviewLoader.load(interview.id)
     assert reloaded is not None
     assert len(reloaded.answers) == 1
     answer = reloaded.answers[0]
@@ -103,7 +103,7 @@ def test_create_interview_with_timer_starts_first_round(
 
     assert interview.question_time_limit_seconds == 180
 
-    reloaded = InterviewQuery.load(interview.id)
+    reloaded = InterviewLoader.load(interview.id)
     assert reloaded is not None
     assert len(reloaded.answers) == 1
     assert reloaded.answers[0].started_at is not None
@@ -165,7 +165,7 @@ def test_create_multi_topic_interview(isolated_db, temp_questions_dir, monkeypat
     assert "data-structures" in interview.selection_spec
     assert "algorithms" in interview.selection_spec
 
-    reloaded = InterviewQuery.load(interview.id)
+    reloaded = InterviewLoader.load(interview.id)
     assert reloaded is not None
     parsed = get_interview_selection(reloaded)
     assert len(parsed.sources[0].categories) == 2

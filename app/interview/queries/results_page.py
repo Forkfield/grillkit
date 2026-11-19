@@ -15,7 +15,7 @@ from app.interview.domain.session_phases import (
     section_services,
 )
 from app.interview.domain.value_objects import SectionKind, session_mode_label
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.queries.review_context import (
     item_id_key_for,
@@ -138,7 +138,7 @@ class CompletedSessionResults:
 
         session = parse_session_spec(interview.selection_spec)
         breakdown = interview.overall_feedback.get("score_breakdown")
-        max_score = DashboardBuilder.compute_max_score(
+        max_score = InterviewDashboard.compute_max_score(
             interview,
             breakdown if isinstance(breakdown, dict) else None,
             uow=self._uow,
@@ -168,7 +168,7 @@ class CompletedSessionResults:
 
         return SessionResultsContext(
             interview=interview,
-            interview_title=DashboardBuilder.interview_display_title(
+            interview_title=InterviewDashboard.interview_display_title(
                 interview, session=session
             ),
             selection_lines=session_selection_summary_lines(session),

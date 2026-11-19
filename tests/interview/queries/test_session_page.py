@@ -14,9 +14,10 @@ from app.interview.domain.value_objects import (
 )
 from app.interview.queries.session_page import ActiveSessionPage as SessionPageService
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.config import AppConfig
 from app.shared.infrastructure.models import Answer, Interview
+from app.theory.schemas.theory import TheoryTaskRead
 from tests.helpers.interview_seed import (
     persist_interview_with_answers,
     seed_two_question_interview,
@@ -38,7 +39,7 @@ def _session() -> InterviewRead:
         question_count=1,
         question_time_limit_seconds=None,
         answers=[
-            AnswerRead(
+            TheoryTaskRead(
                 id=1,
                 question_id="q1",
                 order=1,

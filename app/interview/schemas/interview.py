@@ -10,9 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.coding.schemas.coding import CodingTaskRead
 from app.theory.schemas.theory import TheoryTaskRead
 
-AnswerRead = TheoryTaskRead
-"""Alias for theory task read models composed into session page context."""
-
 
 class InterviewRead(BaseModel):
     """Read-only snapshot of an interview session.
@@ -42,7 +39,7 @@ class InterviewRead(BaseModel):
     question_ids: str
     question_count: int
     question_time_limit_seconds: int | None
-    answers: list[AnswerRead]
+    answers: list[TheoryTaskRead]
     coding_tasks: list[CodingTaskRead] = []
     score: int | None = None
     overall_feedback: dict[str, Any] | None = None
@@ -78,8 +75,8 @@ class InterviewPageContext(BaseModel):
     interview: InterviewRead
     interview_title: str
     selection_lines: list[str]
-    answers: list[AnswerRead]
-    current_question: AnswerRead | None
+    answers: list[TheoryTaskRead]
+    current_question: TheoryTaskRead | None
     current_answer_id: int | None
     question_voice_enabled: bool
     overall_feedback: dict[str, Any] | None

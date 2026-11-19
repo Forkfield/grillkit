@@ -14,7 +14,7 @@ from app.coding.domain.evaluator_models import (
 from app.coding.domain.exceptions import CodingSectionNotFoundError
 from app.coding.schemas.ws import next_task_payload
 from app.coding.support.events import CodingFeedbackEvent
-from app.coding.use_cases.navigate_tasks import CodingNavigationService
+from app.coding.use_cases.navigate_tasks import CodingTaskNavigation
 from app.interview.repositories.uow import InterviewUnitOfWork
 
 
@@ -25,7 +25,7 @@ class CommitEvaluationResult:
         self,
         uow: InterviewUnitOfWork,
         *,
-        navigation: CodingNavigationService | None = None,
+        navigation: CodingTaskNavigation | None = None,
     ) -> None:
         """Initialize with the active unit of work.
 
@@ -34,7 +34,7 @@ class CommitEvaluationResult:
             navigation: Optional navigation collaborator sharing the same uow.
         """
         self._uow = uow
-        self._navigation = navigation or CodingNavigationService(uow)
+        self._navigation = navigation or CodingTaskNavigation(uow)
 
     @staticmethod
     def _apply_hidden_test_cap(

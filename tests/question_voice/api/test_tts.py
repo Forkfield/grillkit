@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import PiperVoiceStatusRead
 from tests.helpers.session_creation import create_session
@@ -252,7 +252,7 @@ class TestQuestionAudioApi:
             ),
             locale="en",
         )
-        reloaded = InterviewQuery.load(interview.id)
+        reloaded = InterviewLoader.load(interview.id)
         assert reloaded is not None
         answer = reloaded.answers[0]
         wav_path = tmp_path / "question.wav"
