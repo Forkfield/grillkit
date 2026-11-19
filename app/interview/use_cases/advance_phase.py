@@ -52,6 +52,8 @@ def active_section(snapshot: SessionSnapshot) -> SectionKind:
 def activate_current_section(
     uow: InterviewUnitOfWork,
     snapshot: SessionSnapshot,
+    *,
+    start_timer: bool = True,
 ) -> SessionSnapshot:
     """Promote the active section and start its timer when needed.
 
@@ -62,6 +64,9 @@ def activate_current_section(
     Args:
         uow: Active unit of work used to persist the change.
         snapshot: Loaded session with section aggregates.
+        start_timer: Whether to start the first pending task timer. Page loads
+            pass True; phase-completion hooks pass False so the clock starts
+            only once the user is shown the question.
 
     Returns:
         Snapshot with the updated section aggregate.
@@ -71,7 +76,9 @@ def activate_current_section(
         theory = snapshot.theory
         if theory is None:
             return snapshot
-        updated_theory = theory.with_activated().start_next_task_timer()
+        updated_theory = theory.with_activated()
+        if start_timer:
+            updated_theory = updated_theory.start_next_task_timer()
         if updated_theory is theory:
             return snapshot
         uow.theory_sections.save_aggregate(updated_theory)
@@ -80,7 +87,9 @@ def activate_current_section(
     coding = snapshot.coding
     if coding is None:
         return snapshot
-    updated_coding = coding.with_activated().start_next_task_timer()
+    updated_coding = coding.with_activated()
+    if start_timer:
+        updated_coding = updated_coding.start_next_task_timer()
     if updated_coding is coding:
         return snapshot
     uow.coding_sections.save_aggregate(updated_coding)
@@ -107,6 +116,9 @@ class AdvanceSessionPhase:
 
         Runs on the orchestrator's unit of work so phase transitions do not open
         a second SQLite connection while the caller still holds a write lock.
+        The next phase timer is left untouched: the session page starts it when
+        the user opens the section, so the clock does not run while the finished
+        phase is still on screen.
 
         Args:
             interview_id: Parent interview UUID.
@@ -116,4 +128,4 @@ class AdvanceSessionPhase:
         services[section_kind].on_phase_complete(interview_id)
         snapshot = load_session_snapshot(self._uow, interview_id)
         if snapshot is not None:
-            _ = activate_current_section(self._uow, snapshot)
+            _ = activate_current_section(self._uow, snapshot, start_timer=False)

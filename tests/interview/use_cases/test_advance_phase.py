@@ -6,6 +6,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 from app.coding.domain.value_objects import CodingRunResult
+from app.coding.queries.section_state import CodingSectionState
 from app.interview.domain.value_objects import (
     SectionBranchSpec,
     SessionSelection,
@@ -54,6 +55,37 @@ def _theory_then_coding_session() -> SessionSelection:
     )
 
 
+def _coding_then_theory_session() -> SessionSelection:
+    """Build a minimal coding-then-theory session selection for tests."""
+    return SessionSelection(
+        session_mode="coding_then_theory",
+        theory=SectionBranchSpec(
+            enabled=True,
+            question_count=1,
+            task_time_limit_seconds=120,
+            sources=(
+                TrackSelection(
+                    track="python",
+                    level="junior",
+                    categories=("data-structures",),
+                ),
+            ),
+        ),
+        coding=SectionBranchSpec(
+            enabled=True,
+            question_count=1,
+            task_time_limit_seconds=600,
+            sources=(
+                TrackSelection(
+                    track="python",
+                    level="junior",
+                    categories=("basics",),
+                ),
+            ),
+        ),
+    )
+
+
 def _complete_theory_section(interview_id: str) -> None:
     """Mark every theory task in a section as answered."""
     with InterviewUnitOfWork(auto_commit=True) as uow:
@@ -63,6 +95,15 @@ def _complete_theory_section(interview_id: str) -> None:
             replace(task, answer_text="done", score=5) for task in section.tasks
         )
         uow.theory_sections.save_aggregate(replace(section, tasks=tasks))
+
+
+def _complete_coding_section(interview_id: str) -> None:
+    """Mark every coding task in a section as submitted."""
+    with InterviewUnitOfWork(auto_commit=True) as uow:
+        section = uow.coding_sections.get_aggregate(interview_id)
+        assert section is not None
+        tasks = tuple(replace(task, submitted_code="done") for task in section.tasks)
+        uow.coding_sections.save_aggregate(replace(section, tasks=tasks))
 
 
 def test_pending_coding_section_does_not_start_timer_at_creation(
@@ -91,33 +132,7 @@ def test_coding_then_theory_defers_theory_timer_until_theory_phase(
     del temp_questions_dir
     monkeypatch.setattr("random.shuffle", lambda items: None)
 
-    session = SessionSelection(
-        session_mode="coding_then_theory",
-        theory=SectionBranchSpec(
-            enabled=True,
-            question_count=1,
-            task_time_limit_seconds=120,
-            sources=(
-                TrackSelection(
-                    track="python",
-                    level="junior",
-                    categories=("data-structures",),
-                ),
-            ),
-        ),
-        coding=SectionBranchSpec(
-            enabled=True,
-            question_count=1,
-            task_time_limit_seconds=600,
-            sources=(
-                TrackSelection(
-                    track="python",
-                    level="junior",
-                    categories=("basics",),
-                ),
-            ),
-        ),
-    )
+    session = _coding_then_theory_session()
     interview = create_session(session, locale="en")
 
     with InterviewUnitOfWork() as uow:
@@ -195,6 +210,67 @@ def test_notify_theory_complete_activates_pending_coding(
         section = uow.coding_sections.get_aggregate(interview.id)
     assert section is not None
     assert section.status == "active"
+
+
+def test_notify_theory_complete_defers_coding_timer_until_page_load(
+    isolated_db, temp_questions_dir, monkeypatch
+) -> None:
+    """Phase completion promotes coding but leaves its timer for the page load."""
+    del temp_questions_dir
+    monkeypatch.setattr("random.shuffle", lambda items: None)
+
+    interview = create_session(_theory_then_coding_session(), locale="en")
+    _complete_theory_section(interview.id)
+
+    with (
+        patch.object(TheorySectionState, "on_phase_complete"),
+        InterviewUnitOfWork(auto_commit=True) as uow,
+    ):
+        AdvanceSessionPhase(uow).notify_section_complete(interview.id, "theory")
+
+    with InterviewUnitOfWork() as uow:
+        coding = uow.coding_sections.get_aggregate(interview.id)
+    assert coding is not None
+    assert coding.status == "active"
+    assert coding.tasks[0].started_at is None
+
+    with InterviewUnitOfWork(auto_commit=True) as uow:
+        _ = ActiveSessionPage(uow).load(interview.id)
+
+    with InterviewUnitOfWork() as uow:
+        coding = uow.coding_sections.get_aggregate(interview.id)
+    assert coding is not None
+    assert coding.tasks[0].started_at is not None
+
+
+def test_notify_coding_complete_defers_theory_timer_until_page_load(
+    isolated_db, temp_questions_dir, monkeypatch
+) -> None:
+    """Theory timer starts on the page load, not when coding finishes."""
+    del temp_questions_dir
+    monkeypatch.setattr("random.shuffle", lambda items: None)
+
+    interview = create_session(_coding_then_theory_session(), locale="en")
+    _complete_coding_section(interview.id)
+
+    with (
+        patch.object(CodingSectionState, "on_phase_complete"),
+        InterviewUnitOfWork(auto_commit=True) as uow,
+    ):
+        AdvanceSessionPhase(uow).notify_section_complete(interview.id, "coding")
+
+    with InterviewUnitOfWork() as uow:
+        theory = uow.theory_sections.get_aggregate(interview.id)
+    assert theory is not None
+    assert theory.tasks[0].started_at is None
+
+    with InterviewUnitOfWork(auto_commit=True) as uow:
+        _ = ActiveSessionPage(uow).load(interview.id)
+
+    with InterviewUnitOfWork() as uow:
+        theory = uow.theory_sections.get_aggregate(interview.id)
+    assert theory is not None
+    assert theory.tasks[0].started_at is not None
 
 
 def test_coding_run_works_after_theory_phase_activation(
