@@ -174,3 +174,35 @@ def test_prepare_page_activation_does_not_reread_sections(
 
     assert render.context is not None
     assert len(trace.statements) == 4
+
+
+def test_prepare_page_reports_the_timer_started_by_activation(isolated_db):
+    """The payload reflects the theory timer that page activation just started."""
+    interview_id = persist_interview_with_answers(
+        Interview(
+            id="page-timer-1",
+            locale="en",
+            selection_spec=minimal_selection_spec(categories=["basics"]),
+            status="active",
+        ),
+        [
+            Answer(question_id="q1", order=1, round=0, question_text="Question one?"),
+            Answer(question_id="q2", order=2, round=0, question_text="Question two?"),
+        ],
+        question_count=2,
+        task_time_limit_seconds=120,
+    )
+
+    with InterviewUnitOfWork(auto_commit=True) as uow:
+        render = asyncio.run(
+            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
+        )
+
+    context = render.context
+    assert context is not None
+    assert context["question_timer_enabled"] is True
+    assert 0 < context["timer_remaining_seconds"] <= 120
+    current = context["current_question"]
+    assert current is not None
+    assert current["started_at"] is not None
+    assert context["interview"]["answers"][0]["started_at"] is not None

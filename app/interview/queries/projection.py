@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 from app.coding.domain.entities import CodingSection as DomainCodingSection
 from app.coding.repositories.mappers import coding_section_from_orm
@@ -26,17 +27,26 @@ from app.theory.repositories.mappers import theory_section_from_orm
 class SessionSnapshot:
     """One consistent read of a session shell and its section aggregates.
 
+    The API read model is derived from the aggregates rather than stored
+    alongside them, so replacing a section (for example after activating it)
+    can never leave a stale read model behind.
+
     Attributes:
-        interview: Composed read model for API consumers.
+        shell: Interview shell aggregate as loaded from storage.
         session: Parsed selection (session mode, enabled sections, timers).
         theory: Theory section aggregate with tasks, if present.
         coding: Coding section aggregate with tasks, if present.
     """
 
-    interview: InterviewRead
+    shell: DomainInterview
     session: SessionSelection
     theory: DomainTheorySection | None
     coding: DomainCodingSection | None
+
+    @cached_property
+    def interview(self) -> InterviewRead:
+        """Compose the API read model from the current section aggregates."""
+        return assemble_interview_read(self.shell, self.theory, self.coding)
 
 
 def assemble_interview_read(
@@ -93,9 +103,10 @@ def load_session_snapshot(
         uow.theory_sections.remember(orm_interview.theory_section)
     if orm_interview.coding_section is not None:
         uow.coding_sections.remember(orm_interview.coding_section)
+    # Compose once for the legacy-spec fallbacks used when parsing the session.
     interview = assemble_interview_read(shell, theory, coding)
     return SessionSnapshot(
-        interview=interview,
+        shell=shell,
         session=parse_session_spec(
             interview.selection_spec,
             question_count=interview.question_count,
