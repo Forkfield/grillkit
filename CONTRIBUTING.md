@@ -152,7 +152,7 @@ uv run pytest
 ```
 
 - Type hints on public APIs; `mypy --strict` must pass
-- Follow layer boundaries in [ARCHITECTURE.md](ARCHITECTURE.md): `api/` → `services/` → `schemas/` / `repositories/`; API handlers use Pydantic read models, not SQLAlchemy ORM types
+- Follow layer boundaries in [ARCHITECTURE.md](ARCHITECTURE.md): `api/` → `use_cases/` or `queries/` → `domain/` / `schemas/` / `repositories/`. `queries/` stays read-only; anything that writes (including starting a section timer) belongs in `use_cases/`. API handlers use Pydantic read models, not SQLAlchemy ORM types
 
 ## Pull Request Process
 

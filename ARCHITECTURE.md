@@ -71,14 +71,15 @@ grillkit/
 │   │   ├── use_cases/
 │   │   │   ├── create_session.py   # CreateInterviewSession
 │   │   │   ├── complete_session.py # CompleteInterviewSession
-│   │   │   └── advance_phase.py    # SessionPhaseOrchestrator
+│   │   │   ├── session_page.py     # OpenSessionPage (start phase clock + build context)
+│   │   │   └── advance_phase.py    # AdvanceSessionPhase, activate_current_section
 │   │   ├── queries/
-│   │   │   ├── loader.py       # InterviewLoader (was InterviewQuery)
-│   │   │   ├── session_page.py # ActiveSessionPage
+│   │   │   ├── loader.py       # InterviewLoader
+│   │   │   ├── session_page.py # ActiveSessionPage (read-only context builder)
 │   │   │   ├── dashboard.py    # InterviewDashboard
 │   │   │   ├── results_page.py # CompletedSessionResults
 │   │   │   ├── review_context.py
-│   │   │   └── projection.py
+│   │   │   └── projection.py   # SessionSnapshot, active_section, load_* helpers
 │   │   └── support/
 │   │       ├── known_questions.py, bank_text.py
 │   │       ├── feedback_prefetch.py
@@ -99,11 +100,11 @@ grillkit/
 │   │   ├── use_cases/
 │   │   │   ├── create_section.py   # CreateCodingSection
 │   │   │   ├── navigate_tasks.py
-│   │   │   ├── run_tests.py        # CodingRunExecutionService
-│   │   │   └── submit_solution.py  # CodingSubmissionService
+│   │   │   ├── run_tests.py        # CodingRunnerService
+│   │   │   └── submit_solution.py  # SubmitCodingSolution
 │   │   ├── queries/
 │   │   │   ├── loader.py
-│   │   │   ├── task_page.py        # ActiveCodingTaskPage
+│   │   │   ├── task_page.py        # build_coding_context
 │   │   │   ├── section_state.py
 │   │   │   ├── section_summary.py
 │   │   │   └── review_page.py
@@ -124,7 +125,7 @@ grillkit/
 │   │   │   └── create_section.py   # CreateTheorySection
 │   │   ├── queries/
 │   │   │   ├── loader.py
-│   │   │   ├── task_page.py        # ActiveTheoryTaskPage
+│   │   │   ├── task_page.py        # build_theory_context
 │   │   │   ├── section_state.py
 │   │   │   ├── section_summary.py
 │   │   │   └── review_page.py
@@ -266,6 +267,10 @@ grillkit/
 
 Workflow use cases (submit, create, complete, section creation, evaluation persistence, navigation) are **instance classes** constructed with `InterviewUnitOfWork`. FastAPI dependencies in `interview/api/deps.py` yield scoped UoW instances. Read-only helpers live in `*/queries/` and may remain static until migrated.
 
+`GET /api/interview/{id}` is intentionally not a pure read: opening the page promotes the next section and starts its timer. `interview/use_cases/session_page.py::OpenSessionPage` owns that command and then calls the read-only `ActiveSessionPage.build_context`. Do not reuse `open_session` from other read paths — it would mutate the session on a GET.
+
+`interview/queries/projection.py` is the session composition point: it loads the shell and both section aggregates into one `SessionSnapshot` and is the intentional place where a read model spans several features. Section mappers are imported there on purpose; feature use cases should keep going through their own repositories.
+
 ## Module Dependency Graph
 
 Dependencies flow **downward** (caller → callee). Plain-text diagram for editors that do not render Mermaid.
@@ -290,12 +295,14 @@ question_voice/use_cases/
 interview/use_cases/
   ├── create_session.py ──► CreateInterviewSession + section creation use cases
   ├── complete_session.py ──► CompleteInterviewSession, SessionEvaluationAggregator
-  └── advance_phase.py ──► SessionPhaseOrchestrator
+  ├── session_page.py ──► OpenSessionPage ──► advance_phase.open_session + queries.session_page
+  └── advance_phase.py ──► AdvanceSessionPhase, activate_current_section, open_session
 
 interview/queries/
-  ├── session_page.py ──► ActiveSessionPage, TheoryPageService, CodingPageService
+  ├── session_page.py ──► ActiveSessionPage (read-only context builder)
+  ├── projection.py ──► SessionSnapshot, section_complete, active_section, load_* helpers
   ├── results_page.py ──► CompletedSessionResults; review links via section registry
-  ├── loader.py ──► InterviewLoader (was InterviewQuery)
+  ├── loader.py ──► InterviewLoader
   ├── dashboard.py ──► InterviewDashboard
   └── review_context.py
 
@@ -303,18 +310,18 @@ theory/use_cases/
   └── create_section.py ──► CreateTheorySection
 
 theory/queries/
-  ├── task_page.py ──► ActiveTheoryTaskPage
+  ├── task_page.py ──► build_theory_context
   ├── section_state.py, section_summary.py
   └── review_page.py ──► theory review context builder
 
 coding/use_cases/
   ├── create_section.py ──► CreateCodingSection
   ├── navigate_tasks.py
-  ├── run_tests.py ──► CodingRunExecutionService
-  └── submit_solution.py ──► CodingSubmissionService
+  ├── run_tests.py ──► CodingRunnerService
+  └── submit_solution.py ──► SubmitCodingSolution
 
 coding/queries/
-  ├── task_page.py ──► ActiveCodingTaskPage
+  ├── task_page.py ──► build_coding_context
   ├── section_state.py, section_summary.py
   └── review_page.py ──► coding review context builder
 
@@ -466,7 +473,7 @@ flowchart TB
 | Results hub | `CompletedSessionResults.prepare_page()` |
 | UoW repositories | `uow.interviews`, `uow.theory_sections`, `uow.coding_sections`, `uow.code_run_attempts`, `uow.known_questions` (single `InterviewUnitOfWork`) |
 | Theory submit | Theory use cases in `theory/api/routes.py` + `theory/api/ws_session.py` (WS + audio + timeouts) |
-| Coding submit | `CodingSubmissionService` via `coding/use_cases/submit_solution.py` (WS submit after Run history) |
+| Coding submit | `SubmitCodingSolution` via `coding/use_cases/submit_solution.py` (WS submit after Run history) |
 | SQLAlchemy session | `uow.session` |
 
 ## Key Models
@@ -589,9 +596,10 @@ User → POST /setup (selection_json v2: session_mode, theory/coding branches, c
 Client → WS /interview/{id}/theory/ws {"type":"answer",...}
   → theory/api/ws_session.py (timer, navigation, theory evaluation)
   → Commits the saved answer row before long-running AI evaluation (releases SQLite write lock)
-  → On section complete: SessionPhaseOrchestrator(uow).notify_section_complete
+  → On section complete: AdvanceSessionPhase(uow).notify_section_complete
        → on_phase_complete (may schedule background section-feedback prefetch)
-       → activate_if_pending("coding") on the same UoW (no second SQLite connection)
+       → promote the next section on the same UoW (no second SQLite connection)
+       → next section timer starts later, when the page is opened
   → Session complete: CompleteInterviewSession via WS "complete" message
 
 Client → WS {"type":"timeout",...} → theory timeout path (score 0)
@@ -608,7 +616,7 @@ Client → POST /interview/{id}/theory/audio-answer (multipart: question_id, fil
   → Client: static/js/interview_audio_answer.js
 ```
 
-Gated on the interview page when dictation is available **and** `interview_model_accepts_audio` (`ActiveSessionPage` + catalog `accepts_audio_input`). Configuration save / add-model tests audio capability with `app/ai/audio_probe.py` when the flag is enabled.
+Gated on the interview page when dictation is available **and** `interview_model_accepts_audio` (`OpenSessionPage` + catalog `accepts_audio_input`). Configuration save / add-model tests audio capability with `app/ai/audio_probe.py` when the flag is enabled.
 
 ## Data Flow: Coding Run and Submit
 
@@ -892,7 +900,7 @@ File-backed SQLite databases enable **WAL journal mode** and a **busy timeout** 
 | Pattern | Where | Why |
 |---------|-------|-----|
 | Commit answer before AI eval | `TheorySubmissionService._release_submission_write_lock()` | Theory submit persists the task row, then calls the LLM on an uncommitted-free connection |
-| Phase transition on caller UoW | `SessionPhaseOrchestrator(uow).notify_section_complete(…)` | Activating a pending coding section during theory navigation uses the orchestrator's unit of work — avoids `database is locked` from a nested `InterviewUnitOfWork` |
+| Phase transition on caller UoW | `AdvanceSessionPhase(uow).notify_section_complete(…)` | Promoting a pending section during theory navigation uses the caller's unit of work — avoids `database is locked` from a nested `InterviewUnitOfWork` |
 | Background prefetch | `SectionFeedbackPrefetch._run_in_background` | Section narrative feedback opens a dedicated UoW after the foreground workflow commits |
 | Audio last-round eval | `_evaluate_last_follow_up_in_background` | Score-only persistence for the final follow-up runs in `InterviewUnitOfWork(auto_commit=True)` after navigation events are sent |
 
