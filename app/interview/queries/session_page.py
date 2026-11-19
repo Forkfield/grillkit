@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Interview session page context builder."""
 
-from dataclasses import dataclass
 from typing import Any
 
 from app.coding.domain.entities import CodingSection
@@ -15,18 +14,10 @@ from app.interview.domain.serialization import parse_session_spec
 from app.interview.domain.session_phases import phase_order_for_mode
 from app.interview.domain.value_objects import SESSION_MODE_LABELS, SessionSelection
 from app.interview.queries.dashboard import InterviewDashboard
-from app.interview.queries.projection import (
-    SessionSnapshot,
-    load_session_snapshot,
-)
-from app.interview.repositories.uow import InterviewUnitOfWork
+from app.interview.queries.projection import SessionSnapshot, active_section
 from app.interview.schemas.interview import (
     InterviewPageContext,
     InterviewRead,
-)
-from app.interview.use_cases.advance_phase import (
-    activate_current_section,
-    active_section,
 )
 from app.platform.domain.config import AppConfig
 from app.question_voice.queries.voice_page import VoicePage
@@ -42,79 +33,12 @@ from app.theory.schemas.page import TheoryPageContext
 from app.theory.schemas.theory import TheoryTaskRead
 
 
-@dataclass(frozen=True)
-class SessionPageRender:
-    """Result of preparing the interview page.
-
-    Exactly one of ``context``, ``redirect_url`` and ``not_found`` is set.
-
-    Attributes:
-        context: Page context when the session is active.
-        redirect_url: Redirect target for completed sessions.
-        not_found: True when the session does not exist.
-    """
-
-    context: dict[str, Any] | None = None
-    redirect_url: str | None = None
-    not_found: bool = False
-
-
 class ActiveSessionPage:
-    """Compose session shell and section contexts for the interview page."""
+    """Compose session shell and section contexts for the interview page.
 
-    def __init__(self, uow: InterviewUnitOfWork) -> None:
-        """Initialize with the active unit of work."""
-        self._uow: InterviewUnitOfWork = uow
-
-    def load(self, interview_id: str) -> SessionSnapshot | None:
-        """Load a session and start the active section timer when applicable.
-
-        Args:
-            interview_id: The session UUID.
-
-        Returns:
-            Session snapshot, or None when the session does not exist.
-        """
-        snapshot = load_session_snapshot(self._uow, interview_id)
-        if snapshot is None or snapshot.interview.status != "active":
-            return snapshot
-        return activate_current_section(self._uow, snapshot)
-
-    async def prepare_page(
-        self,
-        interview_id: str,
-        *,
-        config: AppConfig | None,
-        accepts_audio_input: bool = False,
-        whisper_model_service: WhisperModelService | None = None,
-    ) -> SessionPageRender:
-        """Load a session and build context for the interview page.
-
-        Args:
-            interview_id: The session UUID.
-            config: Saved provider configuration, if any.
-            accepts_audio_input: Whether the configured LLM accepts audio answers.
-            whisper_model_service: Whisper model service instance (injectable).
-
-        Returns:
-            Page context, a redirect for completed sessions, or ``not_found``.
-        """
-        snapshot = self.load(interview_id)
-        if snapshot is None:
-            return SessionPageRender(not_found=True)
-
-        interview = snapshot.interview
-        if interview.status == "completed":
-            return SessionPageRender(redirect_url=f"/interview/{interview_id}/results")
-
-        return SessionPageRender(
-            context=await self.build_context(
-                snapshot,
-                config=config,
-                accepts_audio_input=accepts_audio_input,
-                whisper_model_service=whisper_model_service,
-            )
-        )
+    Stateless: callers load a snapshot first (``load_session_snapshot`` or the
+    ``OpenSessionPage`` command) and pass it to :meth:`build_context`.
+    """
 
     @staticmethod
     def build_page_context(
@@ -192,8 +116,8 @@ class ActiveSessionPage:
             interview_model_accepts_audio=interview_model_accepts_audio,
         )
 
+    @staticmethod
     async def build_context(
-        self,
         snapshot: SessionSnapshot,
         *,
         config: AppConfig | None,

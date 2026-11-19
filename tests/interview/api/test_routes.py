@@ -79,9 +79,9 @@ class TestInterviewPageJson:
         ):
             return render
 
-        from app.interview.queries.session_page import ActiveSessionPage
+        from app.interview.use_cases.session_page import OpenSessionPage
 
-        monkeypatch.setattr(ActiveSessionPage, "prepare_page", fake_prepare_page)
+        monkeypatch.setattr(OpenSessionPage, "prepare_page", fake_prepare_page)
 
     def _get(
         self,
@@ -92,7 +92,7 @@ class TestInterviewPageJson:
         redirect_url=None,
         not_found=False,
     ):
-        from app.interview.queries.session_page import SessionPageRender
+        from app.interview.use_cases.session_page import SessionPageRender
 
         self._mock_page(
             monkeypatch,

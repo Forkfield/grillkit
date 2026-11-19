@@ -12,7 +12,8 @@ from app.coding.repositories.mappers import coding_section_from_orm
 from app.interview.domain.entities import Interview as DomainInterview
 from app.interview.domain.scoring import resolve_completed_read_score
 from app.interview.domain.serialization import parse_session_spec
-from app.interview.domain.value_objects import SessionSelection
+from app.interview.domain.session_phases import phase_order_for_mode
+from app.interview.domain.value_objects import SectionKind, SessionSelection
 from app.interview.repositories.mappers import (
     compose_interview_read,
     interview_from_orm,
@@ -47,6 +48,42 @@ class SessionSnapshot:
     def interview(self) -> InterviewRead:
         """Compose the API read model from the current section aggregates."""
         return assemble_interview_read(self.shell, self.theory, self.coding)
+
+
+def section_complete(snapshot: SessionSnapshot, kind: SectionKind) -> bool:
+    """Return whether one section has no remaining user work.
+
+    Args:
+        snapshot: Loaded session with section aggregates.
+        kind: Section to inspect.
+
+    Returns:
+        True when the section exists and has no remaining user work.
+    """
+    if kind == "theory":
+        theory = snapshot.theory
+        return theory is not None and theory.is_complete()
+
+    coding = snapshot.coding
+    if coding is None:
+        return False
+    return coding.status in {"skipped", "completed"} or coding.is_complete()
+
+
+def active_section(snapshot: SessionSnapshot) -> SectionKind:
+    """Return the section the user should interact with now.
+
+    Args:
+        snapshot: Loaded session with section aggregates.
+
+    Returns:
+        First incomplete section in phase order, or the last phase when done.
+    """
+    order = phase_order_for_mode(snapshot.session.session_mode)
+    for kind in order:
+        if not section_complete(snapshot, kind):
+            return kind
+    return order[-1]
 
 
 def assemble_interview_read(

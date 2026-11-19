@@ -15,6 +15,7 @@ from app.interview.domain.value_objects import (
 from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.schemas.interview import InterviewRead
+from app.interview.use_cases.session_page import OpenSessionPage
 from app.platform.domain.config import AppConfig
 from app.shared.infrastructure.models import Answer, Interview
 from app.theory.schemas.theory import TheoryTaskRead
@@ -137,7 +138,7 @@ def test_prepare_page_issues_one_query_per_loaded_collection(isolated_db):
         InterviewUnitOfWork(auto_commit=True) as uow,
     ):
         render = asyncio.run(
-            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
+            OpenSessionPage(uow).prepare_page(interview_id, config=None)
         )
 
     assert render.context is not None
@@ -169,7 +170,7 @@ def test_prepare_page_activation_does_not_reread_sections(
         InterviewUnitOfWork(auto_commit=True) as uow,
     ):
         render = asyncio.run(
-            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
+            OpenSessionPage(uow).prepare_page(interview_id, config=None)
         )
 
     assert render.context is not None
@@ -195,7 +196,7 @@ def test_prepare_page_reports_the_timer_started_by_activation(isolated_db):
 
     with InterviewUnitOfWork(auto_commit=True) as uow:
         render = asyncio.run(
-            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
+            OpenSessionPage(uow).prepare_page(interview_id, config=None)
         )
 
     context = render.context

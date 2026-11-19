@@ -9,8 +9,9 @@ import pytest
 
 from app.ai.audio_probe import minimal_wav_bytes
 from app.ai.llm_models import LLMModelEntry
-from app.interview.queries.session_page import ActiveSessionPage, SessionPageRender
+from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.schemas.interview import InterviewRead
+from app.interview.use_cases.session_page import SessionPageRender
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import QuestionVoicePageContext
 from app.speech.schemas.page import SttModelPageContext
@@ -251,7 +252,7 @@ class TestInterviewAudioAnswerPage:
 
         with (
             patch(
-                "app.interview.queries.session_page.ActiveSessionPage.prepare_page",
+                "app.interview.use_cases.session_page.OpenSessionPage.prepare_page",
                 new=AsyncMock(
                     return_value=SessionPageRender(
                         redirect_url=None,
@@ -282,7 +283,7 @@ class TestInterviewAudioAnswerPage:
 
         with (
             patch(
-                "app.interview.queries.session_page.ActiveSessionPage.prepare_page",
+                "app.interview.use_cases.session_page.OpenSessionPage.prepare_page",
                 new=AsyncMock(
                     return_value=SessionPageRender(
                         redirect_url=None,

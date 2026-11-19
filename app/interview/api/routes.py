@@ -9,7 +9,7 @@ delegated to the service layer; theory transport lives under ``/theory/``.
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.interview.api.deps import ActiveSessionPageDep
+from app.interview.api.deps import OpenSessionPageDep
 from app.interview.api.errors import http_exception_from_domain_error
 from app.interview.domain.exceptions import InterviewDomainError
 from app.platform.api.deps import ConfigServiceDep, SpeechRuntimeDep
@@ -30,7 +30,7 @@ async def interview_page_json(
     interview_id: str,
     config_service: ConfigServiceDep,
     whisper_model_service: WhisperModelServiceDep,
-    page_service: ActiveSessionPageDep,
+    page_service: OpenSessionPageDep,
     coordinator: SpeechRuntimeDep,
 ) -> dict[str, object] | JSONResponse:
     """Return the interview page JSON payload for the SPA.
@@ -39,7 +39,7 @@ async def interview_page_json(
         interview_id: The session UUID.
         config_service: Provider configuration service.
         whisper_model_service: Whisper model download service.
-        page_service: Active session page service.
+        page_service: Open-session-page use case (starts the active phase clock).
         coordinator: App-lifetime speech runtime coordinator.
 
     Returns:

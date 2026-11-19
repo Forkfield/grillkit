@@ -4,49 +4,14 @@
 
 from dataclasses import replace
 
-from app.interview.domain.session_phases import (
-    phase_order_for_mode,
-    section_services,
-)
+from app.interview.domain.session_phases import section_services
 from app.interview.domain.value_objects import SectionKind
-from app.interview.queries.projection import SessionSnapshot, load_session_snapshot
+from app.interview.queries.projection import (
+    SessionSnapshot,
+    active_section,
+    load_session_snapshot,
+)
 from app.interview.repositories.uow import InterviewUnitOfWork
-
-
-def section_complete(snapshot: SessionSnapshot, kind: SectionKind) -> bool:
-    """Return whether one section has no remaining user work.
-
-    Args:
-        snapshot: Loaded session with section aggregates.
-        kind: Section to inspect.
-
-    Returns:
-        True when the section exists and has no remaining user work.
-    """
-    if kind == "theory":
-        theory = snapshot.theory
-        return theory is not None and theory.is_complete()
-
-    coding = snapshot.coding
-    if coding is None:
-        return False
-    return coding.status in {"skipped", "completed"} or coding.is_complete()
-
-
-def active_section(snapshot: SessionSnapshot) -> SectionKind:
-    """Return the section the user should interact with now.
-
-    Args:
-        snapshot: Loaded session with section aggregates.
-
-    Returns:
-        First incomplete section in phase order, or the last phase when done.
-    """
-    order = phase_order_for_mode(snapshot.session.session_mode)
-    for kind in order:
-        if not section_complete(snapshot, kind):
-            return kind
-    return order[-1]
 
 
 def activate_current_section(
@@ -96,6 +61,29 @@ def activate_current_section(
     return replace(snapshot, coding=updated_coding)
 
 
+def open_session(
+    uow: InterviewUnitOfWork,
+    interview_id: str,
+) -> SessionSnapshot | None:
+    """Load a session and start the clock of the phase the user should see.
+
+    Opening the page is the only place that starts a section timer. Phase
+    completion hooks call :func:`activate_current_section` without a timer so
+    the clock does not run while the finished phase is still on screen.
+
+    Args:
+        uow: Active unit of work used to persist the started timer.
+        interview_id: Parent session UUID.
+
+    Returns:
+        Snapshot with the activated section, or None when the session is missing.
+    """
+    snapshot = load_session_snapshot(uow, interview_id)
+    if snapshot is None or snapshot.interview.status != "active":
+        return snapshot
+    return activate_current_section(uow, snapshot)
+
+
 class AdvanceSessionPhase:
     """Coordinate phase completion hooks across interview sections."""
 
@@ -114,7 +102,7 @@ class AdvanceSessionPhase:
     ) -> None:
         """Run section hooks and promote the next phase when a phase finishes.
 
-        Runs on the orchestrator's unit of work so phase transitions do not open
+        Runs on the caller's unit of work so phase transitions do not open
         a second SQLite connection while the caller still holds a write lock.
         The next phase timer is left untouched: the session page starts it when
         the user opens the section, so the clock does not run while the finished

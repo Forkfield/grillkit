@@ -7,8 +7,8 @@ import json
 
 from app.coding.queries.task_page import build_coding_context
 from app.interview.queries.projection import load_session_snapshot
-from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.repositories.uow import InterviewUnitOfWork
+from app.interview.use_cases.session_page import OpenSessionPage
 from tests.helpers.coding_seed import seed_active_coding_interview
 
 
@@ -42,7 +42,7 @@ def test_full_template_context_includes_coding_key(isolated_db):
 
     with InterviewUnitOfWork() as uow:
         render = asyncio.run(
-            ActiveSessionPage(uow).prepare_page(interview_id, config=None)
+            OpenSessionPage(uow).prepare_page(interview_id, config=None)
         )
 
     context = render.context

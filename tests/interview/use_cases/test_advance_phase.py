@@ -12,13 +12,12 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.projection import load_session_snapshot
-from app.interview.queries.session_page import ActiveSessionPage
+from app.interview.queries.projection import active_section, load_session_snapshot
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.use_cases.advance_phase import (
     AdvanceSessionPhase,
     activate_current_section,
-    active_section,
+    open_session,
 )
 from app.theory.queries.section_state import TheorySectionState
 from tests.helpers.session_creation import create_session
@@ -235,7 +234,7 @@ def test_notify_theory_complete_defers_coding_timer_until_page_load(
     assert coding.tasks[0].started_at is None
 
     with InterviewUnitOfWork(auto_commit=True) as uow:
-        _ = ActiveSessionPage(uow).load(interview.id)
+        _ = open_session(uow, interview.id)
 
     with InterviewUnitOfWork() as uow:
         coding = uow.coding_sections.get_aggregate(interview.id)
@@ -265,7 +264,7 @@ def test_notify_coding_complete_defers_theory_timer_until_page_load(
     assert theory.tasks[0].started_at is None
 
     with InterviewUnitOfWork(auto_commit=True) as uow:
-        _ = ActiveSessionPage(uow).load(interview.id)
+        _ = open_session(uow, interview.id)
 
     with InterviewUnitOfWork() as uow:
         theory = uow.theory_sections.get_aggregate(interview.id)
@@ -286,7 +285,7 @@ def test_coding_run_works_after_theory_phase_activation(
     )
     _complete_theory_section(interview.id)
     with InterviewUnitOfWork(auto_commit=True) as uow:
-        _ = ActiveSessionPage(uow).load(interview.id)
+        _ = open_session(uow, interview.id)
 
     with InterviewUnitOfWork() as uow:
         section = uow.coding_sections.get_aggregate(interview.id)

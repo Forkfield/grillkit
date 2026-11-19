@@ -16,9 +16,9 @@ from app.coding.use_cases.submit_solution import SubmitCodingSolution
 from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.loader import InterviewLoader
 from app.interview.queries.results_page import CompletedSessionResults
-from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.use_cases.complete_session import CompleteInterviewSession
 from app.interview.use_cases.create_session import CreateInterviewSession
+from app.interview.use_cases.session_page import OpenSessionPage
 from app.platform.api.deps import SpeechRuntimeDep
 from app.shared.application.uow_deps import UoWAutoCommitDep, UoWDep
 from app.shared.infrastructure.gateways.ai_context import ai_provider_from_config
@@ -54,9 +54,9 @@ def get_dashboard_builder(uow: UoWDep) -> InterviewDashboard:
     return InterviewDashboard(uow)
 
 
-def get_session_page_service(uow: UoWAutoCommitDep) -> ActiveSessionPage:
-    """Build a session page service bound to an auto-commit UoW."""
-    return ActiveSessionPage(uow)
+def get_open_session_page(uow: UoWAutoCommitDep) -> OpenSessionPage:
+    """Build the open-session-page use case bound to an auto-commit UoW."""
+    return OpenSessionPage(uow)
 
 
 def get_create_theory_section(
@@ -164,9 +164,9 @@ def get_coding_review_service(uow: UoWDep) -> CodingReviewPage:
 
 InterviewLoaderDep = Annotated[InterviewLoader, Depends(get_interview_query)]
 InterviewDashboardDep = Annotated[InterviewDashboard, Depends(get_dashboard_builder)]
-ActiveSessionPageDep = Annotated[
-    ActiveSessionPage,
-    Depends(get_session_page_service),
+OpenSessionPageDep = Annotated[
+    OpenSessionPage,
+    Depends(get_open_session_page),
 ]
 CreateSessionDep = Annotated[
     CreateInterviewSession,
