@@ -3,18 +3,11 @@
 """Tests for dashboard HTTP API (interview/api/dashboard.py)."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
-from app.platform.domain.config import AppConfig
 from app.shared.infrastructure.models import Interview
+from tests.helpers.completed_session_seed import seed_completed_theory_interview
 from tests.helpers.interview_seed import persist_interview_with_answers
 from tests.helpers.selection import minimal_selection_spec
-
-
-def _config_with_locale(locale: str = "en") -> AppConfig:
-    return AppConfig(
-        locale=locale,
-    )
 
 
 def _ids(rows: list[dict]) -> list[str]:
@@ -26,11 +19,7 @@ class TestDashboardApi:
 
     def test_empty_state(self, client, isolated_db):
         """Dashboard returns an empty list when no sessions exist."""
-        with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=_config_with_locale(),
-        ):
-            response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard")
         assert response.status_code == 200
         assert response.json() == []
 
@@ -50,11 +39,7 @@ class TestDashboardApi:
                 question_count=5,
             )
 
-        with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=_config_with_locale(),
-        ):
-            response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard")
         assert response.status_code == 200
         ids = _ids(response.json())
         assert "dash-0" in ids
@@ -76,11 +61,7 @@ class TestDashboardApi:
                 question_count=5,
             )
 
-        with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=_config_with_locale(),
-        ):
-            response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard")
         assert response.status_code == 200
         ids = _ids(response.json())
         # newest should appear before older
@@ -89,15 +70,9 @@ class TestDashboardApi:
 
     def test_completed_session_links_to_results(self, client, isolated_db):
         """Completed sessions have a url pointing to /results."""
-        from tests.helpers.completed_session_seed import seed_completed_theory_interview
-
         interview_id = seed_completed_theory_interview("dash-results-1")
 
-        with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=_config_with_locale(),
-        ):
-            response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard")
         assert response.status_code == 200
         rows = response.json()
         url = next(row["url"] for row in rows if row["id"] == interview_id)
@@ -118,11 +93,7 @@ class TestDashboardApi:
             question_count=5,
         )
 
-        with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=_config_with_locale(),
-        ):
-            response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard")
         assert response.status_code == 200
         rows = response.json()
         url = next(row["url"] for row in rows if row["id"] == interview_id)
@@ -143,11 +114,7 @@ class TestDashboardApi:
                 question_count=5,
             )
 
-        with patch(
-            "app.platform.domain.config.ConfigService.get_config",
-            return_value=_config_with_locale(),
-        ):
-            response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard")
         assert response.status_code == 200
         ids = _ids(response.json())
         # The 21st (index 20) should NOT appear

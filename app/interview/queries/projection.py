@@ -171,19 +171,24 @@ def load_interview_read(
     return snapshot.interview if snapshot is not None else None
 
 
-def load_recent_interview_reads(
+def load_recent_session_snapshots(
     uow: InterviewUnitOfWork,
     *,
     limit: int = 20,
-) -> list[InterviewRead]:
-    """Load recent interview read models, newest first.
+) -> list[SessionSnapshot]:
+    """Load recent session snapshots, newest first.
+
+    Each shell is loaded with its section aggregates exactly once, so list
+    views never re-query sections. ``session`` is the shell's own parsed
+    selection: list rows only need mode and sources, not the legacy fallback
+    counts that the single-session loader resolves.
 
     Args:
         uow: Active application unit of work.
         limit: Maximum number of sessions to return.
 
     Returns:
-        Composed interview read models with theory tasks when present.
+        Session snapshots in dashboard display order.
     """
     shells = uow.interviews.list_recent_aggregates(limit=limit)
     if not shells:
@@ -192,10 +197,11 @@ def load_recent_interview_reads(
     theory_by_id = uow.theory_sections.get_aggregates_by_interview_ids(interview_ids)
     coding_by_id = uow.coding_sections.get_aggregates_by_interview_ids(interview_ids)
     return [
-        assemble_interview_read(
-            shell,
-            theory_by_id.get(shell.id),
-            coding_by_id.get(shell.id),
+        SessionSnapshot(
+            shell=shell,
+            session=shell.selection,
+            theory=theory_by_id.get(shell.id),
+            coding=coding_by_id.get(shell.id),
         )
         for shell in shells
     ]

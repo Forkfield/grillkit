@@ -12,9 +12,10 @@ from app.interview.domain.value_objects import (
     TrackSelection,
 )
 from app.interview.queries.projection import (
+    SessionSnapshot,
     assemble_interview_read,
     load_interview_read,
-    load_recent_interview_reads,
+    load_recent_session_snapshots,
 )
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.schemas.interview import InterviewRead
@@ -142,16 +143,16 @@ def test_load_interview_read_returns_assembled_model(isolated_db) -> None:
     assert [answer.question_id for answer in result.answers] == ["q1", "q2"]
 
 
-def test_load_recent_interview_reads_empty_list() -> None:
-    """load_recent_interview_reads returns an empty list when there are no shells."""
+def test_load_recent_session_snapshots_empty_list() -> None:
+    """load_recent_session_snapshots returns an empty list when there are no shells."""
     uow = MagicMock()
     uow.interviews.list_recent_aggregates.return_value = []
-    assert load_recent_interview_reads(uow, limit=20) == []
+    assert load_recent_session_snapshots(uow, limit=20) == []
     uow.interviews.list_recent_aggregates.assert_called_once_with(limit=20)
 
 
-def test_load_recent_interview_reads_returns_list() -> None:
-    """load_recent_interview_reads loads and assembles multiple reads."""
+def test_load_recent_session_snapshots_returns_list() -> None:
+    """load_recent_session_snapshots wraps each shell in a snapshot."""
     shell1 = Interview.start_shell(
         "iv-1",
         selection=SessionSelection.theory_only(
@@ -185,15 +186,15 @@ def test_load_recent_interview_reads_returns_list() -> None:
     uow.theory_sections.get_aggregates_by_interview_ids.return_value = {}
     uow.coding_sections.get_aggregates_by_interview_ids.return_value = {}
 
-    results = load_recent_interview_reads(uow, limit=10)
+    results = load_recent_session_snapshots(uow, limit=10)
     assert len(results) == 2
-    assert results[0].id == "iv-1"
-    assert results[1].id == "iv-2"
+    assert results[0].shell.id == "iv-1"
+    assert results[1].shell.id == "iv-2"
     uow.interviews.list_recent_aggregates.assert_called_once_with(limit=10)
 
 
-def test_load_recent_interview_reads_with_sections() -> None:
-    """Recent reads include theory and coding sections when present."""
+def test_load_recent_session_snapshots_with_sections() -> None:
+    """Recent snapshots load shells once with their section aggregates."""
     shell = Interview.start_shell(
         "iv-1",
         selection=SessionSelection.theory_only(
@@ -226,6 +227,10 @@ def test_load_recent_interview_reads_with_sections() -> None:
     uow.theory_sections.get_aggregates_by_interview_ids.return_value = {"iv-1": theory}
     uow.coding_sections.get_aggregates_by_interview_ids.return_value = {}
 
-    results = load_recent_interview_reads(uow, limit=10)
+    results = load_recent_session_snapshots(uow, limit=10)
     assert len(results) == 1
-    assert results[0].id == "iv-1"
+    snapshot = results[0]
+    assert isinstance(snapshot, SessionSnapshot)
+    assert snapshot.shell.id == "iv-1"
+    assert snapshot.theory is theory
+    assert snapshot.coding is None

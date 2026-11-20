@@ -23,4 +23,4 @@ async def dashboard_rows(dashboard: InterviewDashboardDep) -> list[DashboardRowR
     Returns:
         JSON list of dashboard rows, newest-first.
     """
-    return dashboard.list_rows(limit=20)
+    return dashboard.list_rows()
