@@ -29,6 +29,7 @@ from app.shared.infrastructure.audio_wav import (
     validate_wav_bytes,
     wav_bytes_to_float32,
 )
+from app.theory.domain.entities import TheorySection, TheoryTask
 from app.theory.domain.evaluator import TheoryEvaluator
 from app.theory.domain.exceptions import (
     TaskTimerNotEnabledError,
@@ -250,33 +251,12 @@ class SubmitTheoryAnswer:
         if limit and current.is_timer_expired(limit, grace_seconds=0):
             timed_out_round = round_num
         else:
-            updated = section.with_task_text(current.id, answer_text)
-            self._uow.theory_sections.save_aggregate(updated)
-            self._uow.flush()
-            saved = next(task for task in updated.tasks if task.id == current.id)
-
-            initial_question_text = saved.question_text
-            initial_answer_text = ""
-            if round_num > 0:
-                initial = next(
-                    task
-                    for task in updated.tasks
-                    if task.question_id == question_id and task.round == 0
-                )
-                initial_question_text = initial.question_text
-                initial_answer_text = initial.answer_text or ""
-
-            submission = TheorySubmissionContext(
+            submission = self._persist_answer_context(
+                section=section,
+                current=current,
                 question_id=question_id,
-                round_num=round_num,
-                order=saved.order,
-                question_text=saved.question_text,
-                question_code=saved.question_code,
-                initial_question_text=initial_question_text,
-                initial_answer_text=initial_answer_text,
-                expected_points=saved.expected_points,
-                locale=updated.locale,
                 answer_text=answer_text,
+                round_num=round_num,
             )
 
         if timed_out_round is not None:
@@ -290,6 +270,55 @@ class SubmitTheoryAnswer:
 
         if submission is not None:
             yield submission
+
+    def _persist_answer_context(
+        self,
+        section: TheorySection,
+        current: TheoryTask,
+        question_id: str,
+        answer_text: str,
+        round_num: int,
+    ) -> TheorySubmissionContext:
+        """Persist the answer text and build the submission context.
+
+        Args:
+            section: Active theory section aggregate.
+            current: Unanswered task row for ``question_id``.
+            question_id: The question ID.
+            answer_text: Text to store on the task row (empty for audio).
+            round_num: Follow-up round of the task.
+
+        Returns:
+            Context for evaluating this round.
+        """
+        updated = section.with_task_text(current.id, answer_text)
+        self._uow.theory_sections.save_aggregate(updated)
+        self._uow.flush()
+        saved = next(task for task in updated.tasks if task.id == current.id)
+
+        initial_question_text = saved.question_text
+        initial_answer_text = ""
+        if round_num > 0:
+            initial = next(
+                task
+                for task in updated.tasks
+                if task.question_id == question_id and task.round == 0
+            )
+            initial_question_text = initial.question_text
+            initial_answer_text = initial.answer_text or ""
+
+        return TheorySubmissionContext(
+            question_id=question_id,
+            round_num=round_num,
+            order=saved.order,
+            question_text=saved.question_text,
+            question_code=saved.question_code,
+            initial_question_text=initial_question_text,
+            initial_answer_text=initial_answer_text,
+            expected_points=saved.expected_points,
+            locale=updated.locale,
+            answer_text=answer_text,
+        )
 
     async def _transcribe_and_persist(
         self,

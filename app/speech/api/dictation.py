@@ -8,7 +8,9 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.ai.stt import Stt
 from app.interview.queries.loader import InterviewLoader
+from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.speech.api.dictation_protocol import (
     DICTATION_CLIENT_START,
@@ -41,6 +43,113 @@ async def _reject_dictation(websocket: WebSocket, message: str) -> None:
         dictation_message(DICTATION_SERVER_ERROR, message=message)
     )
     await websocket.close(code=1008, reason=message[:120])
+
+
+async def _handle_stop(
+    websocket: WebSocket,
+    stt: Stt,
+    interview: InterviewRead,
+    session: DictationSession | None,
+) -> tuple[DictationSession | None, bool]:
+    """Finalize the dictation session and send the transcript.
+
+    Args:
+        websocket: Dictation WebSocket connection.
+        stt: Speech-to-text backend.
+        interview: Interview the dictation belongs to.
+        session: Active session, or ``None`` if ``start`` was not sent.
+
+    Returns:
+        Tuple of (session, done) where ``done`` closes the connection.
+    """
+    if session is None:
+        await websocket.send_json(
+            dictation_message(
+                DICTATION_SERVER_ERROR,
+                message="Send start before stop",
+            )
+        )
+        return None, False
+    final_text = await session.finalize(stt, interview.locale)
+    await websocket.send_json(
+        dictation_message(
+            DICTATION_SERVER_FINAL,
+            text=final_text,
+        )
+    )
+    return session, True
+
+
+async def _handle_text_message(
+    websocket: WebSocket,
+    stt: Stt,
+    interview: InterviewRead,
+    incoming_text: str,
+    session: DictationSession | None,
+) -> tuple[DictationSession | None, bool]:
+    """Process one text JSON message from the client.
+
+    Args:
+        websocket: Dictation WebSocket connection.
+        stt: Speech-to-text backend.
+        interview: Interview the dictation belongs to.
+        incoming_text: Raw JSON text frame.
+        session: Active session, or ``None`` before ``start``.
+
+    Returns:
+        Tuple of (updated session, done) where ``done`` closes the connection.
+    """
+    try:
+        payload = json.loads(incoming_text)
+    except json.JSONDecodeError:
+        await websocket.send_json(
+            dictation_message(
+                DICTATION_SERVER_ERROR,
+                message="Invalid JSON message",
+            )
+        )
+        return session, False
+
+    msg_type = payload.get("type")
+    if msg_type == DICTATION_CLIENT_START:
+        await websocket.send_json(dictation_message(DICTATION_SERVER_READY))
+        return DictationSession(), False
+    if msg_type == DICTATION_CLIENT_STOP:
+        return await _handle_stop(websocket, stt, interview, session)
+    await websocket.send_json(
+        dictation_message(
+            DICTATION_SERVER_ERROR,
+            message=f"Unknown message type: {msg_type}",
+        )
+    )
+    return session, False
+
+
+async def _handle_audio_chunk(
+    websocket: WebSocket,
+    session: DictationSession | None,
+    chunk: bytes,
+) -> DictationSession | None:
+    """Append one PCM chunk to the active session.
+
+    Args:
+        websocket: Dictation WebSocket connection.
+        session: Active session, or ``None`` before ``start``.
+        chunk: Raw 16-bit LE mono PCM bytes.
+
+    Returns:
+        The (unchanged) session after appending, or ``None`` on protocol error.
+    """
+    if session is None:
+        await websocket.send_json(
+            dictation_message(
+                DICTATION_SERVER_ERROR,
+                message="Send start before audio chunks",
+            )
+        )
+        return None
+    session.append_pcm(chunk)
+    return session
 
 
 @router.websocket("/{interview_id}/dictation")
@@ -95,57 +204,17 @@ async def interview_dictation_ws(
                 break
 
             if "text" in incoming:
-                try:
-                    payload = json.loads(incoming["text"])
-                except json.JSONDecodeError:
-                    await websocket.send_json(
-                        dictation_message(
-                            DICTATION_SERVER_ERROR,
-                            message="Invalid JSON message",
-                        )
-                    )
-                    continue
-
-                msg_type = payload.get("type")
-                if msg_type == DICTATION_CLIENT_START:
-                    session = DictationSession()
-                    await websocket.send_json(dictation_message(DICTATION_SERVER_READY))
-                elif msg_type == DICTATION_CLIENT_STOP:
-                    if session is None:
-                        await websocket.send_json(
-                            dictation_message(
-                                DICTATION_SERVER_ERROR,
-                                message="Send start before stop",
-                            )
-                        )
-                        continue
-                    final_text = await session.finalize(stt, interview.locale)
-                    await websocket.send_json(
-                        dictation_message(
-                            DICTATION_SERVER_FINAL,
-                            text=final_text,
-                        )
-                    )
+                session, done = await _handle_text_message(
+                    websocket, stt, interview, incoming["text"], session
+                )
+                if done:
                     break
-                else:
-                    await websocket.send_json(
-                        dictation_message(
-                            DICTATION_SERVER_ERROR,
-                            message=f"Unknown message type: {msg_type}",
-                        )
-                    )
                 continue
 
             if "bytes" in incoming:
-                if session is None:
-                    await websocket.send_json(
-                        dictation_message(
-                            DICTATION_SERVER_ERROR,
-                            message="Send start before audio chunks",
-                        )
-                    )
-                    continue
-                session.append_pcm(incoming["bytes"])
+                session = await _handle_audio_chunk(
+                    websocket, session, incoming["bytes"]
+                )
     except WebSocketDisconnect:
         logger.debug("Dictation WebSocket disconnected for session %s", interview_id)
     except Exception as exc:
