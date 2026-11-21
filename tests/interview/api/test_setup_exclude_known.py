@@ -38,14 +38,13 @@ class TestSetupExcludeKnown:
         assert session.exclude_known is True
 
     def test_known_question_can_be_marked(self, client, isolated_db):
-        """POST /known-questions adds a theory item to known list."""
+        """POST /api/known-questions adds a theory item to known list."""
         response = client.post(
-            "/known-questions",
+            "/api/known-questions",
             json={"branch": "theory", "item_id": "q-known-1"},
-            follow_redirects=False,
         )
         assert response.status_code == 200
-        known = client.get("/known-questions").json()
+        known = client.get("/api/known-questions").json()
         assert "theory" in known
         assert "q-known-1" in known["theory"]
 

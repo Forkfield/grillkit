@@ -200,7 +200,7 @@ class TestE2EFullLifecycle:
         """E2E-4: mark known → create new session with exclude_known."""
         # Mark a question as known
         response = client.post(
-            "/known-questions",
+            "/api/known-questions",
             json={"branch": "theory", "item_id": "q-known-exclude"},
         )
         assert response.status_code == 200

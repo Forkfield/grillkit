@@ -14,10 +14,12 @@ from app.coding.queries.review_page import CodingReviewPage
 from app.coding.use_cases.create_section import CreateCodingSection
 from app.coding.use_cases.submit_solution import SubmitCodingSolution
 from app.interview.queries.dashboard import InterviewDashboard
+from app.interview.queries.known_questions import KnownQuestionsQuery
 from app.interview.queries.loader import InterviewLoader
 from app.interview.queries.results_page import CompletedSessionResults
 from app.interview.use_cases.complete_session import CompleteInterviewSession
 from app.interview.use_cases.create_session import CreateInterviewSession
+from app.interview.use_cases.known_questions import MarkKnownItem, UnmarkKnownItem
 from app.interview.use_cases.session_page import OpenSessionPage
 from app.interview.use_cases.setup_session import StartSessionFromSetup
 from app.platform.api.deps import SpeechRuntimeDep
@@ -94,6 +96,21 @@ def get_session_creation_service(
         create_theory_section=create_theory,
         create_coding_section=create_coding,
     )
+
+
+def get_known_questions_query(uow: UoWAutoCommitDep) -> KnownQuestionsQuery:
+    """Build the known-questions read query bound to an auto-commit UoW."""
+    return KnownQuestionsQuery(uow)
+
+
+def get_mark_known_item(uow: UoWAutoCommitDep) -> MarkKnownItem:
+    """Build the mark-known-item use case bound to an auto-commit UoW."""
+    return MarkKnownItem(uow)
+
+
+def get_unmark_known_item(uow: UoWAutoCommitDep) -> UnmarkKnownItem:
+    """Build the unmark-known-item use case bound to an auto-commit UoW."""
+    return UnmarkKnownItem(uow)
 
 
 def get_start_session_from_setup(
@@ -189,6 +206,18 @@ OpenSessionPageDep = Annotated[
 CreateSessionDep = Annotated[
     CreateInterviewSession,
     Depends(get_session_creation_service),
+]
+KnownQuestionsQueryDep = Annotated[
+    KnownQuestionsQuery,
+    Depends(get_known_questions_query),
+]
+MarkKnownItemDep = Annotated[
+    MarkKnownItem,
+    Depends(get_mark_known_item),
+]
+UnmarkKnownItemDep = Annotated[
+    UnmarkKnownItem,
+    Depends(get_unmark_known_item),
 ]
 StartSetupSessionDep = Annotated[
     StartSessionFromSetup,

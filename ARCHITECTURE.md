@@ -83,7 +83,7 @@ grillkit/
 │   │   │   ├── review_context.py
 │   │   │   └── projection.py   # SessionSnapshot, active_section, load_* helpers
 │   │   └── support/
-│   │       ├── known_questions.py, bank_text.py
+│   │       ├── bank_text.py
 │   │       ├── feedback_prefetch.py
 │   │       └── ai_errors.py
 │   │   └── api/
@@ -92,7 +92,7 @@ grillkit/
 │   │       ├── setup.py        # /api/setup: page, create, cascaded options
 │   │       ├── routes.py       # /api/interview/{id} (JSON page) + /interview/{id}/question-audio (media)
 │   │       ├── results.py      # /api/interview/{id}/{results,theory,coding} (JSON)
-│   │       ├── known_questions.py  # GET/POST/DELETE /known-questions, GET /api/known-questions/manage
+│   │       ├── known_questions.py  # GET/POST/DELETE /api/known-questions, GET /api/known-questions/manage
 │   │       └── errors.py
 │   ├── coding/                 # Coding section (tasks, Judge0 runner, WS/API, evaluator)
 │   │   ├── domain/             # CodingSection, CodingTask, CodeRunAttempt aggregates
@@ -203,9 +203,9 @@ grillkit/
 | GET | `/api/setup/options` | `interview/api/setup.py` | Cascaded JSON: theory tracks → levels → categories |
 | GET | `/api/setup/coding-options` | `interview/api/setup.py` | Cascaded JSON: coding tracks → levels → categories |
 | GET | `/api/setup/coding-available` | `interview/api/setup.py` | JSON: whether coding modes are offered (Judge0 health) |
-| GET | `/known-questions` | `interview/api/known_questions.py` | JSON: known bank item IDs grouped by `theory` / `coding` |
-| POST | `/known-questions` | `interview/api/known_questions.py` | Mark a bank item as known (`{branch, item_id}`) |
-| DELETE | `/known-questions` | `interview/api/known_questions.py` | Unmark a known bank item |
+| GET | `/api/known-questions` | `interview/api/known_questions.py` | JSON: known bank item IDs grouped by `theory` / `coding` |
+| POST | `/api/known-questions` | `interview/api/known_questions.py` | Mark a bank item as known (`{branch, item_id}`) |
+| DELETE | `/api/known-questions` | `interview/api/known_questions.py` | Unmark a known bank item (query `branch`, `item_id`) |
 | GET | `/api/known-questions/manage` | `interview/api/known_questions.py` | JSON manage page (resolved question text, `theory_items`/`coding_items`/`total_count`) |
 | GET | `/api/config` | `platform/api/config.py` | AI provider configuration context (JSON) |
 | POST | `/api/config` | `platform/api/config.py` | Test connection, then save (`{success, message, page}`) |
@@ -557,7 +557,7 @@ Initial task rows are created with the theory section; follow-ups append via `Th
 | `bank_item_id` | `str` | ID from the YAML bank for that branch |
 | `created_at` | `datetime` | When the item was marked as known |
 
-Instance-wide list (no user accounts). When setup sends `exclude_known: true`, `CreateInterviewSession` loads IDs per branch and `plan_questions(..., excluded_ids=...)` removes them from pools before selection. Mark/unmark via `POST`/`DELETE /known-questions` with `{branch, item_id}`, **I know this** buttons during active interviews, or the `#/known-questions` SPA page (backed by `GET /api/known-questions/manage`). Display text for the manage page is resolved from YAML banks via `interview/support/bank_text.py` (full-bank `id → text` indexes cached per process with `@lru_cache`).
+Instance-wide list (no user accounts). When setup sends `exclude_known: true`, `CreateInterviewSession` loads IDs per branch and `plan_questions(..., excluded_ids=...)` removes them from pools before selection. Mark/unmark via `POST`/`DELETE /api/known-questions` (`{branch, item_id}` body / query params), **I know this** buttons during active interviews, or the `#/known-questions` SPA page (backed by `GET /api/known-questions/manage`). Display text for the manage page is resolved from YAML banks via `interview/support/bank_text.py` (full-bank `id → text` indexes cached per process with `@lru_cache`).
 
 ## Data Flow: Configure Provider
 

@@ -289,11 +289,12 @@
       }
       var branch = button.dataset.branch;
       var itemId = button.dataset.itemId;
+      var params =
+        "branch=" + encodeURIComponent(branch) +
+        "&item_id=" + encodeURIComponent(itemId);
       button.disabled = true;
-      fetchJSON("/known-questions", {
+      fetchJSON("/api/known-questions?" + params, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch: branch, item_id: itemId }),
       })
         .then(function () {
           return renderKnownView(container);
@@ -1388,7 +1389,7 @@
         hint.innerHTML = "Known questions will be included in this session. " + linkHtml;
         return;
       }
-      fetchJSON("/known-questions")
+      fetchJSON("/api/known-questions")
         .then(function (known) {
           var count = (known.theory || []).length + (known.coding || []).length;
           var note = count === 0

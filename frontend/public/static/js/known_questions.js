@@ -2,7 +2,7 @@
     "use strict";
 
     async function fetchKnown() {
-        const response = await fetch("/known-questions");
+        const response = await fetch("/api/known-questions");
         if (!response.ok) {
             throw new Error("Failed to load known questions");
         }
@@ -10,7 +10,7 @@
     }
 
     async function markKnown(branch, itemId) {
-        const response = await fetch("/known-questions", {
+        const response = await fetch("/api/known-questions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ branch: branch, item_id: itemId }),
@@ -22,10 +22,10 @@
     }
 
     async function unmarkKnown(branch, itemId) {
-        const response = await fetch("/known-questions", {
+        const params = "branch=" + encodeURIComponent(branch) +
+            "&item_id=" + encodeURIComponent(itemId);
+        const response = await fetch("/api/known-questions?" + params, {
             method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ branch: branch, item_id: itemId }),
         });
         if (!response.ok) {
             throw new Error("Failed to unmark question");
