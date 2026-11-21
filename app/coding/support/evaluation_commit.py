@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Literal
 
+from app.coding.domain.entities import CodingSection as DomainCodingSection
 from app.coding.domain.evaluator_models import (
     CodingAnswerEvaluation,
     CodingFollowUpEvaluation,
@@ -121,7 +122,68 @@ class CommitEvaluationResult:
         if section is None:
             raise CodingSectionNotFoundError(interview_id)
         section.ensure_active()
+        updated, follow_up_round = self._apply_evaluation(
+            section,
+            task_id=task_id,
+            round_num=round_num,
+            evaluation=evaluation,
+            follow_up_needed=follow_up_needed,
+            follow_up_text=follow_up_text,
+            follow_up_mode=resolved_follow_up_mode,
+            submit_test_summary=submit_test_summary,
+            submitted_source_code=submitted_source_code,
+        )
+        self._uow.coding_sections.save_aggregate(updated)
 
+        next_task_data, timer_remaining = self._resolve_next_task(
+            interview_id,
+            task_id=task_id,
+            round_num=round_num,
+            follow_up_needed=follow_up_needed,
+            follow_up_round=follow_up_round,
+        )
+
+        return CodingFeedbackEvent(
+            task_id=task_id,
+            order=order,
+            round=round_num,
+            follow_up_needed=follow_up_needed,
+            follow_up_text=follow_up_text,
+            follow_up_mode=resolved_follow_up_mode,
+            next_task=next_task_data,
+            feedback=evaluation.feedback,
+            timer_remaining_seconds=timer_remaining,
+        )
+
+    def _apply_evaluation(
+        self,
+        section: DomainCodingSection,
+        *,
+        task_id: str,
+        round_num: int,
+        evaluation: CodingAnswerEvaluation | CodingFollowUpEvaluation,
+        follow_up_needed: bool,
+        follow_up_text: str | None,
+        follow_up_mode: Literal["code", "explanation"] | None,
+        submit_test_summary: dict[str, Any] | None,
+        submitted_source_code: str,
+    ) -> tuple[DomainCodingSection, int | None]:
+        """Apply the evaluation to the section and create a follow-up round.
+
+        Args:
+            section: Active coding section aggregate.
+            task_id: YAML task ID for the evaluated round.
+            round_num: Follow-up round (0 = initial).
+            evaluation: Parsed AI evaluation (already capped by hidden tests).
+            follow_up_needed: Whether a follow-up row is requested.
+            follow_up_text: Follow-up prompt when applicable.
+            follow_up_mode: Composer mode for the follow-up round.
+            submit_test_summary: Hidden test summary from submit.
+            submitted_source_code: Code submitted for the evaluated round.
+
+        Returns:
+            Updated aggregate and the follow-up round number, or ``None``.
+        """
         existing_task = section.find_task(task_id, round_num)
         updated = section.with_evaluation(
             task_id,
@@ -135,18 +197,36 @@ class CommitEvaluationResult:
         )
         follow_up_round: int | None = None
         if follow_up_needed:
-            starter_code = (
-                submitted_source_code if resolved_follow_up_mode == "code" else None
-            )
+            starter_code = submitted_source_code if follow_up_mode == "code" else None
             updated, pending = updated.with_follow_up(
                 task_id,
                 follow_up_text or "",
                 starter_code=starter_code,
             )
             follow_up_round = pending.round
+        return updated, follow_up_round
 
-        self._uow.coding_sections.save_aggregate(updated)
+    def _resolve_next_task(
+        self,
+        interview_id: str,
+        *,
+        task_id: str,
+        round_num: int,
+        follow_up_needed: bool,
+        follow_up_round: int | None,
+    ) -> tuple[dict[str, Any] | None, int | None]:
+        """Start the follow-up round timer or advance to the next task.
 
+        Args:
+            interview_id: Parent interview UUID.
+            task_id: YAML task ID for the evaluated round.
+            round_num: Follow-up round (0 = initial).
+            follow_up_needed: Whether a follow-up row was created.
+            follow_up_round: Follow-up round number, when created.
+
+        Returns:
+            Next task payload and its remaining timer seconds (both nullable).
+        """
         if follow_up_needed and follow_up_round is not None:
             self._uow.flush()
             reloaded = self._uow.coding_sections.get_aggregate(interview_id)
@@ -156,25 +236,14 @@ class CommitEvaluationResult:
             timed = reloaded.start_timer_for_task(follow_up.id)
             self._uow.coding_sections.save_aggregate(timed)
             activated = next(task for task in timed.tasks if task.id == follow_up.id)
-            timer_remaining = activated.remaining_seconds(timed.task_time_limit_seconds)
-            next_task_data = next_task_payload(activated)
-        elif not follow_up_needed:
-            next_task_data, timer_remaining = (
-                self._navigation.advance_to_next_unsubmitted(
-                    interview_id,
-                    task_id=task_id,
-                    round_num=round_num,
-                )
+            return (
+                next_task_payload(activated),
+                activated.remaining_seconds(timed.task_time_limit_seconds),
             )
-
-        return CodingFeedbackEvent(
-            task_id=task_id,
-            order=order,
-            round=round_num,
-            follow_up_needed=follow_up_needed,
-            follow_up_text=follow_up_text,
-            follow_up_mode=resolved_follow_up_mode,
-            next_task=next_task_data,
-            feedback=evaluation.feedback,
-            timer_remaining_seconds=timer_remaining,
-        )
+        if not follow_up_needed:
+            return self._navigation.advance_to_next_unsubmitted(
+                interview_id,
+                task_id=task_id,
+                round_num=round_num,
+            )
+        return None, None
