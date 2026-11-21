@@ -28,7 +28,7 @@ class Question:
         id: Unique question identifier.
         type: Question type (e.g., "technical", "behavioral").
         difficulty: Difficulty level (1-5 scale).
-        tags: List of topic tags.
+        tags: Topic tags.
         text: The question text.
         code: Optional code snippet (None if not applicable).
         expected_points: Rubric bullets for AI evaluation.
@@ -37,7 +37,7 @@ class Question:
     id: str
     type: str
     difficulty: int
-    tags: list[str]
+    tags: tuple[str, ...]
     text: str
     code: str | None
     expected_points: tuple[str, ...] = ()
@@ -137,7 +137,7 @@ def _load_category_cached(path: Path, locale: str) -> tuple[Question, ...]:
                 id=qid,
                 type=q["type"],
                 difficulty=q["difficulty"],
-                tags=q.get("tags", []),
+                tags=tuple(q.get("tags", [])),
                 text=_resolve_localized_string(
                     q["question"]["text"],
                     locale,

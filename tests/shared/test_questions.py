@@ -152,7 +152,7 @@ class TestQuestions:
         assert q.id == "ds-001"
         assert q.type == "knowledge"
         assert q.difficulty == 1
-        assert q.tags == ["list", "tuple"]
+        assert q.tags == ("list", "tuple")
         assert q.text == "What is the difference between a list and a tuple?"
         assert q.code is None
 

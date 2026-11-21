@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import json
 import random
 
@@ -336,34 +337,44 @@ def plan_questions(
     _validate_filtered_pools(filtered_pools, question_count)
     track_pools = filtered_pools
 
-    picked: list[PlannedQuestion] = []
-    picked_ids: set[str] = set()
-    question_track: dict[str, str] = {}
-
-    pools_by_source = _pick_one_per_category(
-        track_pools, picked, picked_ids, question_track
-    )
-    _fill_proportional_extra(
-        pools_by_source, question_count, picked, picked_ids, question_track
-    )
-    ordered = _order_by_track(picked, question_track, selection)
+    state = _QuestionPickState()
+    pools_by_source = _pick_one_per_category(track_pools, state)
+    _fill_proportional_extra(pools_by_source, question_count, state)
+    ordered = _order_by_track(state, selection)
 
     return ordered[:question_count]
 
 
+@dataclass
+class _QuestionPickState:
+    """Mutable planning state: picked questions plus their track origins.
+
+    Attributes:
+        picked: Questions in pick order.
+        picked_ids: IDs already picked (dedup and leftover filtering).
+        track_by_id: Question id to track slug mapping.
+    """
+
+    picked: list[PlannedQuestion] = field(default_factory=list)
+    picked_ids: set[str] = field(default_factory=set)
+    track_by_id: dict[str, str] = field(default_factory=dict)
+
+    def add(self, question: PlannedQuestion, track: str) -> None:
+        """Record one picked question and its track."""
+        self.picked.append(question)
+        self.picked_ids.add(question.id)
+        self.track_by_id[question.id] = track
+
+
 def _pick_one_per_category(
     track_pools: list[TrackQuestionPools],
-    picked: list[PlannedQuestion],
-    picked_ids: set[str],
-    question_track: dict[str, str],
+    state: _QuestionPickState,
 ) -> list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]]:
     """Pick one random question per selected category and track its origin.
 
     Args:
         track_pools: Filtered pools aligned with ``selection.sources``.
-        picked: Accumulator of picked questions (mutated).
-        picked_ids: IDs already picked (mutated).
-        question_track: Question id to track slug mapping (mutated).
+        state: Planning state (mutated).
 
     Returns:
         Pools by source, in form order.
@@ -385,39 +396,32 @@ def _pick_one_per_category(
                 raise ValueError(
                     f"No questions found for {source.track}/{source.level}/{category}"
                 )
-            available = [q for q in category_pool if q.id not in picked_ids]
+            available = [q for q in category_pool if q.id not in state.picked_ids]
             if not available:
                 available = list(category_pool)
-            question = random.choice(available)
-            picked.append(question)
-            picked_ids.add(question.id)
-            question_track[question.id] = source.track
+            state.add(random.choice(available), source.track)
     return pools_by_source
 
 
 def _fill_proportional_extra(
     pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]],
     question_count: int,
-    picked: list[PlannedQuestion],
-    picked_ids: set[str],
-    question_track: dict[str, str],
+    state: _QuestionPickState,
 ) -> None:
     """Distribute remaining slots across tracks proportionally to pool size.
 
     Args:
         pools_by_source: Pools by source, in form order.
         question_count: Target number of questions.
-        picked: Accumulator of picked questions (mutated).
-        picked_ids: IDs already picked (mutated).
-        question_track: Question id to track slug mapping (mutated).
+        state: Planning state (mutated).
     """
-    extra = question_count - len(picked)
+    extra = question_count - len(state.picked)
     if extra <= 0:
         return
 
     remaining_by_track: list[tuple[str, list[PlannedQuestion]]] = []
     for source, full_pool in pools_by_source:
-        remaining_pool = [q for q in full_pool if q.id not in picked_ids]
+        remaining_pool = [q for q in full_pool if q.id not in state.picked_ids]
         if remaining_pool:
             remaining_by_track.append((source.track, remaining_pool))
 
@@ -431,30 +435,26 @@ def _fill_proportional_extra(
         if count <= 0:
             continue
         sampled = random.sample(pool, min(count, len(pool)))
-        picked.extend(sampled)
         for question in sampled:
-            picked_ids.add(question.id)
-            question_track[question.id] = track_slug
+            state.add(question, track_slug)
 
 
 def _order_by_track(
-    picked: list[PlannedQuestion],
-    question_track: dict[str, str],
+    state: _QuestionPickState,
     selection: InterviewSelection,
 ) -> list[PlannedQuestion]:
     """Group questions by track (form order) and shuffle within each block.
 
     Args:
-        picked: Questions in pick order.
-        question_track: Question id to track slug mapping.
+        state: Planning state with picked questions.
         selection: Validated interview selection.
 
     Returns:
         Questions grouped by track block, shuffled inside each block.
     """
     by_track: dict[str, list[PlannedQuestion]] = {}
-    for question in picked:
-        track_key = question_track[question.id]
+    for question in state.picked:
+        track_key = state.track_by_id[question.id]
         by_track.setdefault(track_key, []).append(question)
 
     ordered: list[PlannedQuestion] = []
