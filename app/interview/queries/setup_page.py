@@ -4,7 +4,7 @@
 
 from collections.abc import Callable
 
-from app.coding.support.coding_availability import is_coding_available_async
+from app.coding.support.coding_availability import is_coding_available
 from app.interview.domain.rules.bank_selection import track_label
 from app.interview.schemas.setup import (
     SetupPageRead,
@@ -120,7 +120,7 @@ async def build_setup_page(
     Returns:
         Frozen page read model.
     """
-    coding_available = await is_coding_available_async()
+    coding_available = await is_coding_available()
     locale_code = normalize_locale(config.locale)
     speech = SttModelPageService.build_page_context(
         config,

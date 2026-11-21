@@ -24,7 +24,7 @@ class TestSetupExcludeKnown:
 
     def test_exclude_known_reads_from_json(self, client, isolated_db):
         """selection_json with exclude_known=true is parsed correctly."""
-        from app.interview.domain.rules.selection import parse_session_json
+        from app.interview.domain.rules.selection import parse_session_payload
 
         raw = (
             '{"version":2,"session_mode":"theory_only","exclude_known":true,'
@@ -34,7 +34,7 @@ class TestSetupExcludeKnown:
             '"categories":["basics"]}]},'
             '"coding":{"enabled":false}}'
         )
-        session = parse_session_json(raw)
+        session = parse_session_payload(raw)
         assert session.exclude_known is True
 
     def test_known_question_can_be_marked(self, client, isolated_db):

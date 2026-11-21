@@ -9,7 +9,7 @@ endpoint.
 
 from fastapi import APIRouter, HTTPException
 
-from app.coding.support.coding_availability import is_coding_available_async
+from app.coding.support.coding_availability import is_coding_available
 from app.interview.api.deps import StartSetupSessionDep
 from app.interview.queries.setup_options import (
     UnknownSetupOptionError,
@@ -92,7 +92,7 @@ async def setup_coding_available() -> SetupCodingAvailableRead:
     Returns:
         JSON with ``available`` boolean.
     """
-    return SetupCodingAvailableRead(available=await is_coding_available_async())
+    return SetupCodingAvailableRead(available=await is_coding_available())
 
 
 @router.get("", response_model=SetupPageRead, response_model_exclude_unset=True)

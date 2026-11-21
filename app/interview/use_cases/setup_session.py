@@ -4,7 +4,7 @@
 
 from dataclasses import dataclass, replace
 
-from app.coding.support.coding_availability import is_coding_available_async
+from app.coding.support.coding_availability import is_coding_available
 from app.interview.domain.rules.selection import (
     parse_session_payload,
     validate_session_selection,
@@ -129,7 +129,7 @@ class StartSessionFromSetup:
         min_theory, min_coding = _minimum_counts(session)
         try:
             coding_available = (
-                await is_coding_available_async() if session.coding.enabled else False
+                await is_coding_available() if session.coding.enabled else False
             )
             validate_session_selection(session, coding_available=coding_available)
             interview = self._create_session.create_session(

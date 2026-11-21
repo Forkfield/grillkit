@@ -104,7 +104,7 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.use_cases.setup_session.is_coding_available_async",
+                "app.interview.use_cases.setup_session.is_coding_available",
                 new=AsyncMock(return_value=True),
             ),
         ):
@@ -163,7 +163,7 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.use_cases.setup_session.is_coding_available_async",
+                "app.interview.use_cases.setup_session.is_coding_available",
                 new=AsyncMock(return_value=True),
             ),
         ):
@@ -226,7 +226,7 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.use_cases.setup_session.is_coding_available_async",
+                "app.interview.use_cases.setup_session.is_coding_available",
                 new=AsyncMock(return_value=True),
             ),
         ):

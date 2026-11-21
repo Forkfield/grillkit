@@ -86,7 +86,7 @@ class TestSetupCodingOptions:
     def test_coding_available_endpoint(self, client):
         """Coding availability endpoint reflects service flag."""
         with patch(
-            "app.interview.api.setup.is_coding_available_async",
+            "app.interview.api.setup.is_coding_available",
             new=AsyncMock(return_value=True),
         ):
             response = client.get("/api/setup/coding-available")
@@ -230,9 +230,9 @@ class TestSetupConfigRedirect:
 class TestSetupExcludeKnown:
     """Tests for exclude_known in setup selection JSON."""
 
-    def test_parse_session_json_reads_exclude_known(self):
+    def test_parse_session_payload_reads_exclude_known(self):
         """selection_json may disable known-question exclusion."""
-        from app.interview.domain.rules.selection import parse_session_json
+        from app.interview.domain.rules.selection import parse_session_payload
 
         raw = (
             '{"version":2,"session_mode":"theory_only","exclude_known":false,'
@@ -242,5 +242,5 @@ class TestSetupExcludeKnown:
             '"coding":{"enabled":false,"question_count":0,'
             '"task_time_limit_seconds":null,"sources":[]}}'
         )
-        session = parse_session_json(raw)
+        session = parse_session_payload(raw)
         assert session.exclude_known is False

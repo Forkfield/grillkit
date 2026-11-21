@@ -11,7 +11,6 @@ from app.coding.domain.task_planner import (
     validate_selection as validate_coding_selection,
 )
 from app.coding.domain.task_planner import validate_task_count
-from app.coding.support.coding_availability import is_coding_available
 from app.interview.domain.rules.bank_selection import track_label
 from app.interview.domain.serialization import (
     parse_session_spec,
@@ -159,14 +158,14 @@ def session_selection_summary_lines(session: SessionSelection) -> list[str]:
 def validate_session_selection(
     session: SessionSelection,
     *,
-    coding_available: bool | None = None,
+    coding_available: bool,
 ) -> None:
     """Validate a parsed session selection from setup.
 
     Args:
         session: Session selection including mode and branch specs.
-        coding_available: Whether coding can be started. ``None`` probes
-            Judge0 synchronously; async callers pass the awaited flag.
+        coding_available: Whether coding can be started; callers probe Judge0
+            asynchronously and pass the result.
 
     Raises:
         ValueError: If branches are inconsistent or banks reject the selection.
@@ -178,10 +177,7 @@ def validate_session_selection(
             raise ValueError("Select at least one theory track and topic")
         validate_question_count(session.theory_selection, session.theory.question_count)
     if session.coding.enabled:
-        available = (
-            is_coding_available() if coding_available is None else coding_available
-        )
-        if not available:
+        if not coding_available:
             raise ValueError(
                 "Coding is not available. Enable CODING_ENABLED and ensure "
                 "Judge0 is running, or choose a theory-only session."
@@ -211,23 +207,6 @@ def parse_session_payload(raw_json: str) -> SessionSelection:
     if not isinstance(data, dict):
         raise ValueError("Invalid selection JSON: expected object")
     return session_from_payload(data)
-
-
-def parse_session_json(raw_json: str) -> SessionSelection:
-    """Parse and validate setup form ``selection_json`` field (v2 spec).
-
-    Args:
-        raw_json: JSON string from POST body.
-
-    Returns:
-        Validated session selection.
-
-    Raises:
-        ValueError: If JSON is invalid or validation fails.
-    """
-    session = parse_session_payload(raw_json)
-    validate_session_selection(session)
-    return session
 
 
 def _filter_track_pools(
