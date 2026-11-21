@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Negative tests for interview setup POST (validation, clamping, errors)."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.interview.domain.serialization import session_to_spec
 from app.interview.domain.value_objects import (
@@ -101,23 +101,9 @@ class TestSetupNegative:
 
     def test_malformed_json_shows_error(self, client, isolated_db):
         """Malformed selection_json returns setup form with error."""
-        with (
-            patch(
-                "app.platform.domain.config.ConfigService.get_config",
-                return_value=self._config(),
-            ),
-            patch(
-                "app.interview.api.setup.list_tracks",
-                return_value=["python"],
-            ),
-            patch(
-                "app.interview.api.setup.list_levels",
-                return_value=["junior"],
-            ),
-            patch(
-                "app.interview.api.setup.list_categories",
-                return_value=["basics"],
-            ),
+        with patch(
+            "app.platform.domain.config.ConfigService.get_config",
+            return_value=self._config(),
         ):
             response = client.post(
                 "/api/setup",
@@ -141,23 +127,9 @@ class TestSetupNegative:
             ']},"coding":{"enabled":false}}'
         )
         # The error happens during plan validation, not JSON parse
-        with (
-            patch(
-                "app.platform.domain.config.ConfigService.get_config",
-                return_value=self._config(),
-            ),
-            patch(
-                "app.interview.api.setup.list_tracks",
-                return_value=["python"],
-            ),
-            patch(
-                "app.interview.api.setup.list_levels",
-                return_value=["junior"],
-            ),
-            patch(
-                "app.interview.api.setup.list_categories",
-                return_value=["basics"],
-            ),
+        with patch(
+            "app.platform.domain.config.ConfigService.get_config",
+            return_value=self._config(),
         ):
             response = client.post(
                 "/api/setup",
@@ -200,8 +172,8 @@ class TestSetupNegative:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available_async",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = client.post(
@@ -223,23 +195,9 @@ class TestSetupNegative:
             '{"track":"python","level":"junior","categories":["basics","oop"]}'
             ']},"coding":{"enabled":false}}'
         )
-        with (
-            patch(
-                "app.platform.domain.config.ConfigService.get_config",
-                return_value=self._config(),
-            ),
-            patch(
-                "app.interview.api.setup.list_tracks",
-                return_value=["python"],
-            ),
-            patch(
-                "app.interview.api.setup.list_levels",
-                return_value=["junior"],
-            ),
-            patch(
-                "app.interview.api.setup.list_categories",
-                return_value=["basics", "oop"],
-            ),
+        with patch(
+            "app.platform.domain.config.ConfigService.get_config",
+            return_value=self._config(),
         ):
             response = client.post(
                 "/api/setup",

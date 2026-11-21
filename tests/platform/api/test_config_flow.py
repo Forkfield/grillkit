@@ -248,14 +248,21 @@ class TestFirstTimeConfigFlow:
         with ExitStack() as stack:
             stack.enter_context(self._config_service_patch(mock_config))
             stack.enter_context(
-                patch("app.interview.api.setup.list_tracks", return_value=["python"])
-            )
-            stack.enter_context(
-                patch("app.interview.api.setup.list_levels", return_value=["junior"])
+                patch(
+                    "app.interview.queries.setup_page.list_tracks",
+                    return_value=["python"],
+                )
             )
             stack.enter_context(
                 patch(
-                    "app.interview.api.setup.list_categories", return_value=["basics"]
+                    "app.interview.queries.setup_page.list_levels",
+                    return_value=["junior"],
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.interview.queries.setup_page.list_categories",
+                    return_value=["basics"],
                 )
             )
             response = client.get("/api/setup")

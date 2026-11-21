@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for creating interviews in all 4 session modes."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.interview.domain.serialization import session_to_spec
 from app.interview.domain.value_objects import (
@@ -104,8 +104,8 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available_async",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = self._post_setup(
@@ -163,8 +163,8 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available_async",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = self._post_setup(
@@ -226,8 +226,8 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available_async",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = self._post_setup(

@@ -952,8 +952,8 @@
     }
     var level = levelSelect.value;
     var url = prefix
-      ? "/setup/coding-options?track=" + encodeURIComponent(track) + "&level=" + encodeURIComponent(level)
-      : "/setup/options?track=" + encodeURIComponent(track) + "&level=" + encodeURIComponent(level);
+      ? "/api/setup/coding-options?track=" + encodeURIComponent(track) + "&level=" + encodeURIComponent(level)
+      : "/api/setup/options?track=" + encodeURIComponent(track) + "&level=" + encodeURIComponent(level);
     var checkboxClass = prefix ? "coding-topic-checkbox" : "topic-checkbox";
     var checked = {};
     topicList.querySelectorAll("." + checkboxClass + ":checked").forEach(function (cb) {

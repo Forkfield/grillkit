@@ -9,15 +9,15 @@ from app.platform.domain.config import AppConfig
 
 
 class TestSetupOptions:
-    """Tests for GET /setup/options."""
+    """Tests for GET /api/setup/options."""
 
     def test_lists_tracks(self, client):
         """Options without params returns available question-bank tracks."""
         with patch(
-            "app.interview.api.setup.list_tracks",
+            "app.interview.queries.setup_options.list_tracks",
             return_value=["database", "python"],
         ):
-            response = client.get("/setup/options")
+            response = client.get("/api/setup/options")
         assert response.status_code == 200
         assert response.json() == {"tracks": ["database", "python"]}
 
@@ -25,15 +25,15 @@ class TestSetupOptions:
         """Options with track returns levels for that track."""
         with (
             patch(
-                "app.interview.api.setup.list_tracks",
+                "app.interview.queries.setup_options.list_tracks",
                 return_value=["python"],
             ),
             patch(
-                "app.interview.api.setup.list_levels",
+                "app.interview.queries.setup_options.list_levels",
                 return_value=["junior", "middle"],
             ),
         ):
-            response = client.get("/setup/options", params={"track": "python"})
+            response = client.get("/api/setup/options", params={"track": "python"})
         assert response.status_code == 200
         assert response.json() == {"levels": ["junior", "middle"]}
 
@@ -41,20 +41,20 @@ class TestSetupOptions:
         """Options with track and level returns topic categories."""
         with (
             patch(
-                "app.interview.api.setup.list_tracks",
+                "app.interview.queries.setup_options.list_tracks",
                 return_value=["python"],
             ),
             patch(
-                "app.interview.api.setup.list_levels",
+                "app.interview.queries.setup_options.list_levels",
                 return_value=["junior"],
             ),
             patch(
-                "app.interview.api.setup.list_categories",
+                "app.interview.queries.setup_options.list_categories",
                 return_value=["basics", "oop"],
             ),
         ):
             response = client.get(
-                "/setup/options",
+                "/api/setup/options",
                 params={"track": "python", "level": "junior"},
             )
         assert response.status_code == 200
@@ -63,23 +63,23 @@ class TestSetupOptions:
     def test_unknown_track_returns_404(self, client):
         """Unknown track slug returns 404."""
         with patch(
-            "app.interview.api.setup.list_tracks",
+            "app.interview.queries.setup_options.list_tracks",
             return_value=["python"],
         ):
-            response = client.get("/setup/options", params={"track": "java"})
+            response = client.get("/api/setup/options", params={"track": "java"})
         assert response.status_code == 404
 
 
 class TestSetupCodingOptions:
-    """Tests for GET /setup/coding-options and /setup/coding-available."""
+    """Tests for GET /api/setup/coding-options and /api/setup/coding-available."""
 
     def test_lists_coding_tracks(self, client):
         """Coding options without params returns available coding tracks."""
         with patch(
-            "app.interview.api.setup.coding_bank.list_tracks",
+            "app.interview.queries.setup_options.coding_bank.list_tracks",
             return_value=["python"],
         ):
-            response = client.get("/setup/coding-options")
+            response = client.get("/api/setup/coding-options")
         assert response.status_code == 200
         assert response.json() == {"tracks": ["python"]}
 
@@ -89,7 +89,7 @@ class TestSetupCodingOptions:
             "app.interview.api.setup.is_coding_available_async",
             new=AsyncMock(return_value=True),
         ):
-            response = client.get("/setup/coding-available")
+            response = client.get("/api/setup/coding-available")
         assert response.status_code == 200
         assert response.json() == {"available": True}
 
@@ -137,15 +137,15 @@ class TestSetupConfigRedirect:
                 return_value=mock_config,
             ),
             patch(
-                "app.interview.api.setup.list_tracks",
+                "app.interview.queries.setup_page.list_tracks",
                 return_value=["python"],
             ),
             patch(
-                "app.interview.api.setup.list_levels",
+                "app.interview.queries.setup_page.list_levels",
                 return_value=["junior"],
             ),
             patch(
-                "app.interview.api.setup.list_categories",
+                "app.interview.queries.setup_page.list_categories",
                 return_value=["basics"],
             ),
         ):
@@ -209,23 +209,9 @@ class TestSetupConfigRedirect:
             '{"sources":[{"track":"python","level":"junior",'
             '"categories":["basics","oop"]}]}'
         )
-        with (
-            patch(
-                "app.platform.domain.config.ConfigService.get_config",
-                return_value=mock_config,
-            ),
-            patch(
-                "app.interview.api.setup.list_tracks",
-                return_value=["python"],
-            ),
-            patch(
-                "app.interview.api.setup.list_levels",
-                return_value=["junior"],
-            ),
-            patch(
-                "app.interview.api.setup.list_categories",
-                return_value=["basics", "oop"],
-            ),
+        with patch(
+            "app.platform.domain.config.ConfigService.get_config",
+            return_value=mock_config,
         ):
             response = client.post(
                 "/api/setup",
@@ -252,8 +238,7 @@ class TestSetupExcludeKnown:
             '{"version":2,"session_mode":"theory_only","exclude_known":false,'
             '"theory":{"enabled":true,"question_count":1,'
             '"task_time_limit_seconds":null,'
-            '"sources":[{"track":"python","level":"junior",'
-            '"categories":["basics"]}]},'
+            '"sources":[{"track":"python","level":"junior","categories":["basics"]}]},'
             '"coding":{"enabled":false,"question_count":0,'
             '"task_time_limit_seconds":null,"sources":[]}}'
         )

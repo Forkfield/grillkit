@@ -76,6 +76,8 @@ grillkit/
 │   │   ├── queries/
 │   │   │   ├── loader.py       # InterviewLoader
 │   │   │   ├── session_page.py # ActiveSessionPage (read-only context builder)
+│   │   │   ├── setup_page.py   # build_setup_page (read-only context builder)
+│   │   │   ├── setup_options.py # theory/coding option cascade
 │   │   │   ├── dashboard.py    # InterviewDashboard
 │   │   │   ├── results_page.py # CompletedSessionResults
 │   │   │   ├── review_context.py
@@ -87,8 +89,7 @@ grillkit/
 │   │   └── api/
 │   │       ├── deps.py
 │   │       ├── dashboard.py    # GET / → GET /api/dashboard
-│   │       ├── setup.py        # /setup/*, /api/setup (JSON), cascaded options
-│   │       ├── setup_form.py
+│   │       ├── setup.py        # /api/setup: page, create, cascaded options
 │   │       ├── routes.py       # /api/interview/{id} (JSON page) + /interview/{id}/question-audio (media)
 │   │       ├── results.py      # /api/interview/{id}/{results,theory,coding} (JSON)
 │   │       ├── known_questions.py  # GET/POST/DELETE /known-questions, GET /api/known-questions/manage
@@ -199,9 +200,9 @@ grillkit/
 | GET | `/api/interview/{id}/results` | `interview/api/results.py` | Completed session hub context, JSON (SPA owns `/interview/{id}/results`) |
 | GET | `/api/interview/{id}/theory` | `interview/api/results.py` | Theory review context, JSON (SPA owns `/interview/{id}/theory`) |
 | GET | `/api/interview/{id}/coding` | `interview/api/results.py` | Coding review context, JSON (SPA owns `/interview/{id}/coding`) |
-| GET | `/setup/options` | `interview/api/setup.py` | Cascaded JSON: theory tracks → levels → categories |
-| GET | `/setup/coding-options` | `interview/api/setup.py` | Cascaded JSON: coding tracks → levels → categories |
-| GET | `/setup/coding-available` | `interview/api/setup.py` | JSON: whether coding modes are offered (Judge0 health) |
+| GET | `/api/setup/options` | `interview/api/setup.py` | Cascaded JSON: theory tracks → levels → categories |
+| GET | `/api/setup/coding-options` | `interview/api/setup.py` | Cascaded JSON: coding tracks → levels → categories |
+| GET | `/api/setup/coding-available` | `interview/api/setup.py` | JSON: whether coding modes are offered (Judge0 health) |
 | GET | `/known-questions` | `interview/api/known_questions.py` | JSON: known bank item IDs grouped by `theory` / `coding` |
 | POST | `/known-questions` | `interview/api/known_questions.py` | Mark a bank item as known (`{branch, item_id}`) |
 | DELETE | `/known-questions` | `interview/api/known_questions.py` | Unmark a known bank item |
@@ -577,7 +578,7 @@ User → POST /api/config/llm-models (display_name, base_url, model, optional ap
 ## Data Flow: Create Interview
 
 ```
-User → POST /setup (selection_json v2: session_mode, theory/coding branches, counts, timers)
+User → POST /api/setup (selection_json v2: session_mode, theory/coding branches, counts, timers)
   → parse SessionSelection; gate coding modes on CODING_ENABLED + Judge0 health
   → locale from ConfigService.get_config()
   → CreateInterviewSession.create_session(selection, locale)
@@ -807,7 +808,7 @@ Current top-level **tracks** under `data/questions/` (each has `junior` / `middl
 | **observability** | Prometheus, Grafana, Loki |
 | **airflow** | Scheduling, executors, TaskFlow, operations |
 
-`shared/questions.py` discovers theory tracks and categories from the filesystem (`questions_map.yaml` is metadata only). `shared/coding.py` mirrors the layout under `data/coding/`. Setup uses `GET /setup/options?track=…` and `GET /setup/coding-options?track=…` for cascaded form updates.
+`shared/questions.py` discovers theory tracks and categories from the filesystem (`questions_map.yaml` is metadata only). `shared/coding.py` mirrors the layout under `data/coding/`. Setup uses `GET /api/setup/options?track=…` and `GET /api/setup/coding-options?track=…` for cascaded form updates.
 
 ### Localization (YAML)
 

@@ -19,6 +19,7 @@ from app.interview.queries.results_page import CompletedSessionResults
 from app.interview.use_cases.complete_session import CompleteInterviewSession
 from app.interview.use_cases.create_session import CreateInterviewSession
 from app.interview.use_cases.session_page import OpenSessionPage
+from app.interview.use_cases.setup_session import StartSessionFromSetup
 from app.platform.api.deps import SpeechRuntimeDep
 from app.shared.application.uow_deps import UoWAutoCommitDep, UoWDep
 from app.shared.infrastructure.gateways.ai_context import ai_provider_from_config
@@ -93,6 +94,23 @@ def get_session_creation_service(
         create_theory_section=create_theory,
         create_coding_section=create_coding,
     )
+
+
+def get_start_session_from_setup(
+    create_session: Annotated[
+        CreateInterviewSession,
+        Depends(get_session_creation_service),
+    ],
+) -> StartSessionFromSetup:
+    """Build the setup submission use case around session creation.
+
+    Args:
+        create_session: Session creation use case.
+
+    Returns:
+        Setup submission use case instance.
+    """
+    return StartSessionFromSetup(create_session=create_session)
 
 
 def get_session_completion_service(
@@ -171,6 +189,10 @@ OpenSessionPageDep = Annotated[
 CreateSessionDep = Annotated[
     CreateInterviewSession,
     Depends(get_session_creation_service),
+]
+StartSetupSessionDep = Annotated[
+    StartSessionFromSetup,
+    Depends(get_start_session_from_setup),
 ]
 CompleteSessionDep = Annotated[
     CompleteInterviewSession,

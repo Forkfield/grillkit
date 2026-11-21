@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """E2E test: full lifecycle — theory only, mark known, exclude known next session."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.interview.domain.serialization import session_to_spec
 from app.interview.domain.value_objects import (
@@ -111,8 +111,8 @@ class TestE2EFullLifecycle:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available_async",
+                new=AsyncMock(return_value=True),
             ),
         ):
             session = SessionSelection(
@@ -152,8 +152,6 @@ class TestE2EFullLifecycle:
         task_id = state["current_task"]["task_id"]
 
         mock_judge0()
-
-        from unittest.mock import AsyncMock
 
         from app.coding.domain.evaluator_models import CodingAnswerEvaluation
 

@@ -156,11 +156,17 @@ def session_selection_summary_lines(session: SessionSelection) -> list[str]:
     return lines
 
 
-def validate_session_selection(session: SessionSelection) -> None:
+def validate_session_selection(
+    session: SessionSelection,
+    *,
+    coding_available: bool | None = None,
+) -> None:
     """Validate a parsed session selection from setup.
 
     Args:
         session: Session selection including mode and branch specs.
+        coding_available: Whether coding can be started. ``None`` probes
+            Judge0 synchronously; async callers pass the awaited flag.
 
     Raises:
         ValueError: If branches are inconsistent or banks reject the selection.
@@ -172,7 +178,10 @@ def validate_session_selection(session: SessionSelection) -> None:
             raise ValueError("Select at least one theory track and topic")
         validate_question_count(session.theory_selection, session.theory.question_count)
     if session.coding.enabled:
-        if not is_coding_available():
+        available = (
+            is_coding_available() if coding_available is None else coding_available
+        )
+        if not available:
             raise ValueError(
                 "Coding is not available. Enable CODING_ENABLED and ensure "
                 "Judge0 is running, or choose a theory-only session."
@@ -183,8 +192,29 @@ def validate_session_selection(session: SessionSelection) -> None:
         validate_task_count(session.coding_selection, session.coding.question_count)
 
 
+def parse_session_payload(raw_json: str) -> SessionSelection:
+    """Parse setup form ``selection_json`` field without validating it.
+
+    Args:
+        raw_json: JSON string from POST body.
+
+    Returns:
+        Parsed session selection.
+
+    Raises:
+        ValueError: If JSON is invalid or has the wrong shape.
+    """
+    try:
+        data = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid selection JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Invalid selection JSON: expected object")
+    return session_from_payload(data)
+
+
 def parse_session_json(raw_json: str) -> SessionSelection:
-    """Parse setup form ``selection_json`` field (v2 session selection).
+    """Parse and validate setup form ``selection_json`` field (v2 spec).
 
     Args:
         raw_json: JSON string from POST body.
@@ -195,13 +225,7 @@ def parse_session_json(raw_json: str) -> SessionSelection:
     Raises:
         ValueError: If JSON is invalid or validation fails.
     """
-    try:
-        data = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
-        raise ValueError("Invalid selection JSON") from exc
-    if not isinstance(data, dict):
-        raise ValueError("Invalid selection JSON: expected object")
-    session = session_from_payload(data)
+    session = parse_session_payload(raw_json)
     validate_session_selection(session)
     return session
 
