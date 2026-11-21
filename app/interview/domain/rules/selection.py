@@ -339,8 +339,39 @@ def plan_questions(
     picked: list[PlannedQuestion] = []
     picked_ids: set[str] = set()
     question_track: dict[str, str] = {}
-    pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]] = []
 
+    pools_by_source = _pick_one_per_category(
+        track_pools, picked, picked_ids, question_track
+    )
+    _fill_proportional_extra(
+        pools_by_source, question_count, picked, picked_ids, question_track
+    )
+    ordered = _order_by_track(picked, question_track, selection)
+
+    return ordered[:question_count]
+
+
+def _pick_one_per_category(
+    track_pools: list[TrackQuestionPools],
+    picked: list[PlannedQuestion],
+    picked_ids: set[str],
+    question_track: dict[str, str],
+) -> list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]]:
+    """Pick one random question per selected category and track its origin.
+
+    Args:
+        track_pools: Filtered pools aligned with ``selection.sources``.
+        picked: Accumulator of picked questions (mutated).
+        picked_ids: IDs already picked (mutated).
+        question_track: Question id to track slug mapping (mutated).
+
+    Returns:
+        Pools by source, in form order.
+
+    Raises:
+        ValueError: If a track or category pool is empty.
+    """
+    pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]] = []
     for pools in track_pools:
         source = pools.source
         full_pool = pools.full_pool
@@ -361,31 +392,66 @@ def plan_questions(
             picked.append(question)
             picked_ids.add(question.id)
             question_track[question.id] = source.track
+    return pools_by_source
 
+
+def _fill_proportional_extra(
+    pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]],
+    question_count: int,
+    picked: list[PlannedQuestion],
+    picked_ids: set[str],
+    question_track: dict[str, str],
+) -> None:
+    """Distribute remaining slots across tracks proportionally to pool size.
+
+    Args:
+        pools_by_source: Pools by source, in form order.
+        question_count: Target number of questions.
+        picked: Accumulator of picked questions (mutated).
+        picked_ids: IDs already picked (mutated).
+        question_track: Question id to track slug mapping (mutated).
+    """
     extra = question_count - len(picked)
-    if extra > 0:
-        remaining_by_track: list[tuple[str, list[PlannedQuestion]]] = []
-        for source, full_pool in pools_by_source:
-            remaining_pool = [q for q in full_pool if q.id not in picked_ids]
-            if remaining_pool:
-                remaining_by_track.append((source.track, remaining_pool))
+    if extra <= 0:
+        return
 
-        max_extra = sum(len(pool) for _, pool in remaining_by_track)
-        to_allocate = min(extra, max_extra)
-        if to_allocate > 0 and remaining_by_track:
-            sizes = [len(pool) for _, pool in remaining_by_track]
-            counts = _allocate_proportional(sizes, to_allocate)
-            for (track_slug, pool), count in zip(
-                remaining_by_track, counts, strict=True
-            ):
-                if count <= 0:
-                    continue
-                sampled = random.sample(pool, min(count, len(pool)))
-                picked.extend(sampled)
-                for question in sampled:
-                    picked_ids.add(question.id)
-                    question_track[question.id] = track_slug
+    remaining_by_track: list[tuple[str, list[PlannedQuestion]]] = []
+    for source, full_pool in pools_by_source:
+        remaining_pool = [q for q in full_pool if q.id not in picked_ids]
+        if remaining_pool:
+            remaining_by_track.append((source.track, remaining_pool))
 
+    max_extra = sum(len(pool) for _, pool in remaining_by_track)
+    to_allocate = min(extra, max_extra)
+    if to_allocate <= 0 or not remaining_by_track:
+        return
+    sizes = [len(pool) for _, pool in remaining_by_track]
+    counts = _allocate_proportional(sizes, to_allocate)
+    for (track_slug, pool), count in zip(remaining_by_track, counts, strict=True):
+        if count <= 0:
+            continue
+        sampled = random.sample(pool, min(count, len(pool)))
+        picked.extend(sampled)
+        for question in sampled:
+            picked_ids.add(question.id)
+            question_track[question.id] = track_slug
+
+
+def _order_by_track(
+    picked: list[PlannedQuestion],
+    question_track: dict[str, str],
+    selection: InterviewSelection,
+) -> list[PlannedQuestion]:
+    """Group questions by track (form order) and shuffle within each block.
+
+    Args:
+        picked: Questions in pick order.
+        question_track: Question id to track slug mapping.
+        selection: Validated interview selection.
+
+    Returns:
+        Questions grouped by track block, shuffled inside each block.
+    """
     by_track: dict[str, list[PlannedQuestion]] = {}
     for question in picked:
         track_key = question_track[question.id]
@@ -396,5 +462,4 @@ def plan_questions(
         block = by_track.get(source.track, [])
         random.shuffle(block)
         ordered.extend(block)
-
-    return ordered[:question_count]
+    return ordered
