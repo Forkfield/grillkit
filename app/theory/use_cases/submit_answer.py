@@ -611,41 +611,44 @@ class SubmitTheoryAnswer:
         yield AnswerSavedEvent()
 
         if ctx.round_num >= TheoryEvaluator.MAX_FOLLOW_UP_DEPTH:
-            yield self._persistence.advance_without_evaluation(
-                interview_id=interview_id,
-                question_id=ctx.question_id,
-                round_num=ctx.round_num,
-                order=ctx.order,
-            )
-            self._release_submission_write_lock()
-            transcript_task = asyncio.create_task(
-                self._transcribe_and_persist(
-                    interview_id=interview_id,
-                    question_id=ctx.question_id,
-                    round_num=ctx.round_num,
-                    wav_bytes=wav_bytes,
-                    transcriber=transcriber,
-                    locale=ctx.locale,
-                ),
-                name=f"audio-transcript-{interview_id}-{ctx.question_id}-r{ctx.round_num}",
-            )
-            self._schedule_last_follow_up_evaluation(
+            async for event in self._finish_audio_at_max_depth(
                 interview_id=interview_id,
                 ctx=ctx,
                 provider=provider,
-                audio_wav=wav_bytes,
-            )
-            transcript = await transcript_task
-            yield TranscriptEvent(
-                question_id=ctx.question_id,
-                round=ctx.round_num,
-                text=transcript,
-            )
+                wav_bytes=wav_bytes,
+                transcriber=transcriber,
+            ):
+                yield event
             return
 
-        yield EvaluatingEvent()
+        async for event in self._evaluate_audio_answer(
+            interview_id=interview_id,
+            ctx=ctx,
+            provider=provider,
+            wav_bytes=wav_bytes,
+            transcriber=transcriber,
+        ):
+            yield event
 
-        transcript_task = asyncio.create_task(
+    def _start_transcript_task(
+        self,
+        interview_id: str,
+        ctx: TheorySubmissionContext,
+        wav_bytes: bytes,
+        transcriber: Stt,
+    ) -> asyncio.Task[str]:
+        """Start background transcription and persistence for this round.
+
+        Args:
+            interview_id: Parent interview UUID.
+            ctx: Opened submission context for the current round.
+            wav_bytes: Uploaded WAV audio bytes.
+            transcriber: Speech-to-text backend.
+
+        Returns:
+            Task resolving to the stored transcript text.
+        """
+        return asyncio.create_task(
             self._transcribe_and_persist(
                 interview_id=interview_id,
                 question_id=ctx.question_id,
@@ -655,6 +658,77 @@ class SubmitTheoryAnswer:
                 locale=ctx.locale,
             ),
             name=f"audio-transcript-{interview_id}-{ctx.question_id}-r{ctx.round_num}",
+        )
+
+    async def _finish_audio_at_max_depth(
+        self,
+        interview_id: str,
+        ctx: TheorySubmissionContext,
+        provider: AIProvider,
+        wav_bytes: bytes,
+        transcriber: Stt,
+    ) -> AsyncIterator[InterviewEvent]:
+        """Advance past the follow-up depth limit, then transcribe and evaluate.
+
+        The section moves on without grading this round; transcription and the
+        final follow-up evaluation run in the background.
+
+        Args:
+            interview_id: Parent interview UUID.
+            ctx: Opened submission context for the current round.
+            provider: LLM provider for the last follow-up evaluation.
+            wav_bytes: Uploaded WAV audio bytes.
+            transcriber: Speech-to-text backend.
+
+        Yields:
+            The advance event, then the round transcript event.
+        """
+        yield self._persistence.advance_without_evaluation(
+            interview_id=interview_id,
+            question_id=ctx.question_id,
+            round_num=ctx.round_num,
+            order=ctx.order,
+        )
+        self._release_submission_write_lock()
+        transcript_task = self._start_transcript_task(
+            interview_id, ctx, wav_bytes, transcriber
+        )
+        self._schedule_last_follow_up_evaluation(
+            interview_id=interview_id,
+            ctx=ctx,
+            provider=provider,
+            audio_wav=wav_bytes,
+        )
+        yield TranscriptEvent(
+            question_id=ctx.question_id,
+            round=ctx.round_num,
+            text=await transcript_task,
+        )
+
+    async def _evaluate_audio_answer(
+        self,
+        interview_id: str,
+        ctx: TheorySubmissionContext,
+        provider: AIProvider,
+        wav_bytes: bytes,
+        transcriber: Stt,
+    ) -> AsyncIterator[InterviewEvent]:
+        """Evaluate this round while transcription runs in parallel.
+
+        Args:
+            interview_id: Parent interview UUID.
+            ctx: Opened submission context for the current round.
+            provider: LLM provider for evaluation.
+            wav_bytes: Uploaded WAV audio bytes.
+            transcriber: Speech-to-text backend.
+
+        Yields:
+            Evaluating, transcript, and persisted-result events.
+        """
+        yield EvaluatingEvent()
+
+        transcript_task = self._start_transcript_task(
+            interview_id, ctx, wav_bytes, transcriber
         )
         evaluation_task = asyncio.create_task(
             TheoryEvaluator.evaluate_submission(
@@ -671,11 +745,10 @@ class SubmitTheoryAnswer:
             name=f"audio-eval-{interview_id}-{ctx.question_id}-r{ctx.round_num}",
         )
 
-        transcript = await transcript_task
         yield TranscriptEvent(
             question_id=ctx.question_id,
             round=ctx.round_num,
-            text=transcript,
+            text=await transcript_task,
         )
 
         (
