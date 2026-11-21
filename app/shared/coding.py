@@ -7,6 +7,8 @@ track, level, and category under ``data/coding/``.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -256,18 +258,31 @@ def load_category(
     path = CODING_DIR / track / level / f"{category}.yaml"
     if not path.exists():
         return []
+    return list(_load_category_cached(path, locale))
 
+
+@lru_cache(maxsize=256)
+def _load_category_cached(path: Path, locale: str) -> tuple[CodingTask, ...]:
+    """Parse one coding category file (cached per absolute path and locale).
+
+    Args:
+        path: Absolute category YAML file path.
+        locale: Locale for task prompt text.
+
+    Returns:
+        Parsed tasks in file order.
+    """
     with open(path) as f:
         data = yaml.safe_load(f)
     if data is None:
-        return []
+        return ()
 
     tasks: list[CodingTask] = []
     for raw in data.get("tasks", []):
         if not isinstance(raw, dict):
             continue
         tasks.append(_parse_task(raw, locale=locale))
-    return tasks
+    return tuple(tasks)
 
 
 def load_categories(
