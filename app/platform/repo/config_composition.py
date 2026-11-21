@@ -63,16 +63,6 @@ def get_default_config_service() -> ConfigService:
     return _default_config_service
 
 
-def set_default_config_service(service: ConfigService | None) -> None:
-    """Override the shared config service (used by tests).
-
-    Args:
-        service: Replacement instance, or ``None`` to reset to a fresh default.
-    """
-    global _default_config_service
-    _default_config_service = service
-
-
 def get_llm_catalog_repository() -> LLMCatalogRepository:
     """Return an LLM catalog repository instance (FastAPI dependency)."""
     return LLMCatalogRepository()
@@ -105,13 +95,3 @@ def get_default_catalog_service() -> LLMCatalogService:
     if _default_catalog_service is None:
         _default_catalog_service = LLMCatalogService(get_llm_catalog_repository())
     return _default_catalog_service
-
-
-def set_default_catalog_service(service: LLMCatalogService | None) -> None:
-    """Override the shared LLM catalog service (used by tests).
-
-    Args:
-        service: Replacement instance, or ``None`` to reset to a fresh default.
-    """
-    global _default_catalog_service
-    _default_catalog_service = service

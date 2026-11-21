@@ -89,7 +89,6 @@ async def build_page_context(
         speech_model_specs=speech_model_specs_for_config(),
         speech_model_status=speech_model_status,
         speech_model_banner=speech_model_status.state == "missing",
-        status=speech_model_status,
         tts_voice_status=tts_voice_status,
         tts_voice_banner=tts_show_banner,
         llm_presets=list_preset_options(),

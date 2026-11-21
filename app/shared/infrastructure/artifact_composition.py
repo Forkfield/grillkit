@@ -30,16 +30,6 @@ def get_default_whisper_model_service() -> WhisperModelService:
     return _default_whisper_model_service
 
 
-def set_default_whisper_model_service(service: WhisperModelService | None) -> None:
-    """Override the shared Whisper model service (used by tests).
-
-    Args:
-        service: Replacement instance, or ``None`` to reset to a fresh default.
-    """
-    global _default_whisper_model_service
-    _default_whisper_model_service = service
-
-
 def get_default_piper_voice_service() -> PiperVoiceService:
     """Return the application-wide ``PiperVoiceService`` singleton.
 
@@ -50,13 +40,3 @@ def get_default_piper_voice_service() -> PiperVoiceService:
     if _default_piper_voice_service is None:
         _default_piper_voice_service = PiperVoiceService()
     return _default_piper_voice_service
-
-
-def set_default_piper_voice_service(service: PiperVoiceService | None) -> None:
-    """Override the shared Piper voice service (used by tests).
-
-    Args:
-        service: Replacement instance, or ``None`` to reset to a fresh default.
-    """
-    global _default_piper_voice_service
-    _default_piper_voice_service = service

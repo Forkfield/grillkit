@@ -103,7 +103,6 @@ class ConfigPageContext(BaseModel):
         speech_model_specs: Whisper size options keyed by size slug.
         speech_model_status: Whisper install/load status snapshot.
         speech_model_banner: Whether to show the speech model banner.
-        status: Alias for ``speech_model_status``.
         tts_voice_status: Piper question-voice status snapshot.
         tts_voice_banner: Whether to show the question-voice banner.
         llm_presets: Interview model catalog options.
@@ -119,7 +118,6 @@ class ConfigPageContext(BaseModel):
     speech_model_specs: dict[str, SpeechModelSpecRead]
     speech_model_status: WhisperModelStatusRead | None = None
     speech_model_banner: bool = False
-    status: WhisperModelStatusRead | None = None
     tts_voice_status: PiperVoiceStatusRead | None = None
     tts_voice_banner: bool = False
     llm_presets: list[LLMPresetOptionRead] = Field(default_factory=list)

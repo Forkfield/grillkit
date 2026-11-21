@@ -43,7 +43,7 @@ class AddLLMModelUseCase:
 
     async def execute(
         self,
-        payload: NewLLMModel, #TODO use case использует pydantic модель, нарушение слоев
+        payload: NewLLMModel,
     ) -> AddLLMModelResult:
         """Run the add-model flow.
 

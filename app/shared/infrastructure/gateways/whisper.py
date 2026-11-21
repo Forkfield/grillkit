@@ -57,10 +57,6 @@ class WhisperSttGateway(InProcessArtifactRuntime):
         """Return the currently loaded transcriber, if any."""
         return self._artifact
 
-    def loaded_size(self) -> str | None:
-        """Return the size of the model currently in memory, if any."""
-        return self.loaded_key()
-
     async def load_size(self, size: str) -> bool:
         """Load or reload the Whisper model for ``size`` from disk.
 

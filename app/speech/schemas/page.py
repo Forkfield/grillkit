@@ -15,11 +15,9 @@ class SttModelPageContext(BaseModel):
     Attributes:
         speech_model_status: Status snapshot for the UI.
         speech_model_banner: Whether to show the install/download banner.
-        status: Alias for ``speech_model_status``.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     speech_model_status: WhisperModelStatusRead | None
     speech_model_banner: bool
-    status: WhisperModelStatusRead | None = None  # TODO удалить легаси имя

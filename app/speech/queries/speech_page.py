@@ -36,5 +36,4 @@ class SttModelPageService:
         return SttModelPageContext(
             speech_model_status=status,
             speech_model_banner=status.state == "missing",
-            status=status,
         )
