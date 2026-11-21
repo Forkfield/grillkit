@@ -34,8 +34,3 @@ def test_coding_section_state_reports_incomplete_until_submitted(
     with InterviewUnitOfWork() as uow:
         service = CodingSectionState(uow)
         assert service.is_complete(interview_id) is False
-        context = service.get_page_context(interview_id)
-    assert context is not None
-    assert context.section == "coding"
-    assert context.active is True
-    assert context.complete is False

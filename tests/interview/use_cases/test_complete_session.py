@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.use_cases.complete_session import (
     CompleteInterviewSession as SessionCompletionService,
@@ -65,7 +65,7 @@ async def test_complete_interview_persists_completed_status(isolated_db):
     )
 
     with patch(
-        "app.interview.use_cases.complete_session.SessionEvaluatorService.evaluate_session",
+        "app.interview.use_cases.complete_session.SessionEvaluator.evaluate_session",
         new_callable=AsyncMock,
         return_value=mock_eval,
     ):
@@ -76,7 +76,7 @@ async def test_complete_interview_persists_completed_status(isolated_db):
 
     assert len(events) == 2
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     assert reloaded.status == "completed"
     assert reloaded.score == 5
@@ -117,7 +117,7 @@ async def test_complete_coding_only_session_includes_coding_breakdown(isolated_d
     )
 
     with patch(
-        "app.interview.use_cases.complete_session.SessionEvaluatorService.evaluate_session",
+        "app.interview.use_cases.complete_session.SessionEvaluator.evaluate_session",
         new_callable=AsyncMock,
         return_value=mock_eval,
     ):
@@ -127,7 +127,7 @@ async def test_complete_coding_only_session_includes_coding_breakdown(isolated_d
         )
 
     assert len(events) == 2
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     assert reloaded.status == "completed"
     assert reloaded.score == 4
@@ -181,7 +181,7 @@ async def test_complete_session_preserves_partial_theory_scores(isolated_db):
     )
 
     with patch(
-        "app.interview.use_cases.complete_session.SessionEvaluatorService.evaluate_session",
+        "app.interview.use_cases.complete_session.SessionEvaluator.evaluate_session",
         new_callable=AsyncMock,
         return_value=mock_eval,
     ):
@@ -191,7 +191,7 @@ async def test_complete_session_preserves_partial_theory_scores(isolated_db):
         )
 
     assert len(events) == 2
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     assert reloaded.status == "completed"
     assert reloaded.score == 4

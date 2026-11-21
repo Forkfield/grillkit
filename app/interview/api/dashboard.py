@@ -1,36 +1,26 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Dashboard endpoint module.
+"""Dashboard API endpoint.
 
-This module provides the home page with interview history.
+Returns interview history as JSON for the frontend SPA.
 """
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter
 
 from app.interview.api.deps import InterviewDashboardDep
-from app.templating import templates
+from app.interview.schemas.dashboard import DashboardRowRead
 
 router = APIRouter(tags=["dashboard"])
 
 
-@router.get("/", response_class=HTMLResponse)
-async def dashboard_page(
-    request: Request,
-    dashboard: InterviewDashboardDep,
-) -> HTMLResponse:
-    """Render the dashboard with recent interview history.
+@router.get("/api/dashboard", response_model=list[DashboardRowRead])
+async def dashboard_rows(dashboard: InterviewDashboardDep) -> list[DashboardRowRead]:
+    """Return recent interview history as JSON.
 
     Args:
-        request: FastAPI request object.
+        dashboard: Dashboard builder service for the request scope.
 
     Returns:
-        HTML response with the dashboard template.
+        JSON list of dashboard rows, newest-first.
     """
-    return templates.TemplateResponse(
-        request,
-        "dashboard.html",
-        {
-            "interview_history": dashboard.list_rows(limit=20),
-        },
-    )
+    return dashboard.list_rows()

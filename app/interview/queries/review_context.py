@@ -5,14 +5,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 from app.interview.domain.rules.selection import session_selection_summary_lines
 from app.interview.domain.section_feedback import resolve_section_feedback
 from app.interview.domain.serialization import parse_session_spec
 from app.interview.domain.session_phases import SectionEvaluationSummary
 from app.interview.domain.value_objects import SectionKind, SessionSelection
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.schemas.interview import InterviewRead
@@ -30,9 +30,6 @@ class CompletedInterviewContext:
 
     interview: InterviewRead
     session: SessionSelection
-
-
-CompletedInterviewSnapshot = CompletedInterviewContext
 
 
 def load_completed_interview(
@@ -76,10 +73,20 @@ def section_score_bounds(
     return total_score, max_score
 
 
+class SharedReviewFields(TypedDict):
+    """Shared review-page context fields used by theory and coding pages."""
+
+    interview_id: str
+    interview_title: str
+    selection_lines: list[str]
+    locale_label: str
+    results_url: str
+
+
 def shared_review_fields(
     interview_id: str,
     snapshot: CompletedInterviewContext,
-) -> dict[str, Any]:
+) -> SharedReviewFields:
     """Build review context fields shared by theory and coding pages.
 
     Args:
@@ -92,7 +99,9 @@ def shared_review_fields(
     interview = snapshot.interview
     return {
         "interview_id": interview_id,
-        "interview_title": DashboardBuilder.interview_display_title(interview),
+        "interview_title": InterviewDashboard.interview_display_title(
+            interview, session=snapshot.session
+        ),
         "selection_lines": session_selection_summary_lines(snapshot.session),
         "locale_label": SUPPORTED_LOCALES.get(interview.locale, interview.locale),
         "results_url": f"/interview/{interview_id}/results",
@@ -113,7 +122,7 @@ def resolved_section_feedback(
         cached_payload: Persisted section feedback payload, if any.
 
     Returns:
-        Section feedback dict for templates.
+        Section feedback dict for review pages.
     """
     return resolve_section_feedback(
         cached_payload,
@@ -128,7 +137,7 @@ def review_score_fields(
     total_score: int,
     max_score: int,
 ) -> dict[str, int]:
-    """Build normalized score fields for section review templates.
+    """Build normalized score fields for section review pages.
 
     Args:
         summary: Section evaluation summary.

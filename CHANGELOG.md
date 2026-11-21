@@ -10,6 +10,8 @@ Work in progress is accumulated under `[Unreleased]`; on release, that section b
 
 ### Changed
 
+- **STT/TTS naming** — unified entity naming: general speech-to-text / text-to-speech concepts are now `Stt` / `Tts`, concrete implementations are `WhisperStt` / `PiperTts` (e.g. `WhisperSttRuntime`, `PiperTtsRuntime`, `stt_models`, `whisper_stt`). Internal only; no API or config format changes.
+
 ### Fixed
 
 ### Removed

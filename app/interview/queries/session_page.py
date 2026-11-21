@@ -2,108 +2,43 @@
 # SPDX-License-Identifier: Apache-2.0
 """Interview session page context builder."""
 
-from dataclasses import dataclass
 from typing import Any
 
-from app.coding.queries.task_page import ActiveCodingTaskPage as CodingPageService
+from app.coding.domain.entities import CodingSection
+from app.coding.queries.task_page import build_coding_context
 from app.interview.domain.rules.selection import (
     session_display_title,
     session_selection_summary_lines,
 )
 from app.interview.domain.serialization import parse_session_spec
 from app.interview.domain.session_phases import phase_order_for_mode
-from app.interview.domain.value_objects import SESSION_MODE_LABELS
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
-from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.schemas.interview import InterviewPageContext, InterviewRead
-from app.interview.use_cases.advance_phase import (
-    AdvanceSessionPhase as SessionPhaseOrchestrator,
+from app.interview.domain.value_objects import SESSION_MODE_LABELS, SessionSelection
+from app.interview.queries.dashboard import InterviewDashboard
+from app.interview.queries.projection import SessionSnapshot, active_section
+from app.interview.schemas.interview import (
+    InterviewPageContext,
+    InterviewRead,
 )
 from app.platform.domain.config import AppConfig
-from app.platform.domain.llm_catalog import LLMCatalogService
-from app.question_voice.queries.voice_page import VoicePage as QuestionVoicePageService
+from app.question_voice.queries.voice_page import VoicePage
 from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 from app.shared.locales import (
     SUPPORTED_LOCALES,
     TIMEOUT_CHAT_LABELS,
     localized_string,
 )
-from app.speech.queries.speech_page import SpeechModelPageService
-from app.theory.queries.task_page import ActiveTheoryTaskPage as TheoryPageService
+from app.speech.queries.speech_page import SttModelPageService
+from app.theory.queries.task_page import build_theory_context
 from app.theory.schemas.page import TheoryPageContext
-
-
-@dataclass(frozen=True)
-class SessionPageRender:
-    """Result of preparing the interview HTML page.
-
-    Attributes:
-        redirect_url: Redirect target when the session is missing.
-        template_context: Jinja context when the page should render.
-        interview_active: Whether the loaded session is still active.
-    """
-
-    redirect_url: str | None
-    template_context: dict[str, Any] | None
-    interview_active: bool = False
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 class ActiveSessionPage:
-    """Compose session shell and section contexts for the interview page."""
+    """Compose session shell and section contexts for the interview page.
 
-    def __init__(self, uow: InterviewUnitOfWork) -> None:
-        """Initialize with the active unit of work."""
-        self._uow = uow
-
-    def load_interview(self, interview_id: str) -> InterviewRead | None:
-        """Load a session and start the active section timer when applicable.
-
-        Args:
-            interview_id: The session UUID.
-
-        Returns:
-            Interview read model, or None when not found.
-        """
-        orchestrator = SessionPhaseOrchestrator(self._uow)
-        active = orchestrator.active_phase(interview_id)
-        if active == "theory":
-            TheoryPageService(self._uow).activate_timer(interview_id)
-        elif active == "coding":
-            CodingPageService(self._uow).activate_timer(interview_id)
-        return InterviewQuery(self._uow).get_interview(interview_id)
-
-    async def prepare_page(
-        self,
-        interview_id: str,
-        *,
-        config: AppConfig | None,
-        whisper_model_service: type[WhisperModelService] = WhisperModelService,
-    ) -> SessionPageRender:
-        """Load a session and build template context for the interview page.
-
-        Args:
-            interview_id: The session UUID.
-            config: Saved provider configuration, if any.
-            whisper_model_service: Whisper model service class (injectable in tests).
-
-        Returns:
-            Redirect URL or template context for ``interview.html``.
-        """
-        interview = self.load_interview(interview_id)
-        if interview is None:
-            return SessionPageRender(redirect_url="/", template_context=None)
-
-        template_context = await self.build_full_template_context(
-            interview,
-            config=config,
-            whisper_model_service=whisper_model_service,
-        )
-        return SessionPageRender(
-            redirect_url=None,
-            template_context=template_context,
-            interview_active=interview.status == "active",
-        )
+    Stateless: callers load a snapshot first (``load_session_snapshot`` or the
+    ``OpenSessionPage`` command) and pass it to :meth:`build_context`.
+    """
 
     @staticmethod
     def build_page_context(
@@ -112,120 +47,111 @@ class ActiveSessionPage:
         config: AppConfig | None,
         question_voice_enabled: bool,
         theory: TheoryPageContext | None = None,
-        uow: InterviewUnitOfWork | None = None,
+        coding: CodingSection | None = None,
+        session: SessionSelection | None = None,
+        interview_model_accepts_audio: bool = False,
     ) -> InterviewPageContext:
-        """Assemble shell template context for ``interview.html``.
+        """Assemble the session shell context for the interview SPA.
 
-        Theory-specific fields are merged from ``TheoryPageService`` for template
-        compatibility while ``theory`` exposes the structured section context.
+        Theory-specific fields are mirrored on the shell for the theory panel
+        while ``theory`` exposes the structured section context.
 
         Args:
             interview: Loaded interview read model.
             config: Application config, if configured.
             question_voice_enabled: Whether Piper TTS is enabled in config.
             theory: Optional pre-built theory page context.
-            uow: Optional active unit of work for coding score fallback.
+            coding: Coding section aggregate for the score fallback.
+            session: Parsed selection; parsed from the read model when omitted.
+            interview_model_accepts_audio: Whether the configured model accepts audio.
 
         Returns:
-            Frozen page context for the interview template.
+            Frozen page context for the interview SPA.
         """
+        if session is None:
+            session = parse_session_spec(
+                interview.selection_spec,
+                question_count=interview.question_count,
+                task_time_limit_seconds=interview.question_time_limit_seconds,
+            )
         if theory is None:
-            theory = TheoryPageService.build_context_for(interview)
-        current_question = theory.current_question if theory is not None else None
-        question_timer_enabled = (
-            theory.question_timer_enabled if theory is not None else False
+            theory = build_theory_context(interview, session=session)
+        current_question: TheoryTaskRead | None = (
+            theory.current_question if theory is not None else None
         )
-        timer_remaining_seconds = (
-            theory.timer_remaining_seconds if theory is not None else None
-        )
-        current_round = theory.current_round if theory is not None else 0
-        answers = theory.answers if theory is not None else interview.answers
-
         overall_feedback_data = interview.overall_feedback
         score_breakdown = (
             overall_feedback_data.get("score_breakdown")
             if overall_feedback_data
             else None
         )
-        max_score = DashboardBuilder.compute_max_score(
+        max_score = InterviewDashboard.compute_max_score(
             interview,
             score_breakdown if isinstance(score_breakdown, dict) else None,
-            uow=uow,
+            coding_section=coding,
+            session=session,
         )
-        session = parse_session_spec(
-            interview.selection_spec,
-            question_count=interview.question_count,
-            task_time_limit_seconds=interview.question_time_limit_seconds,
-        )
-        selection_lines = session_selection_summary_lines(session)
-        interview_title = session_display_title(session)
-        interview_model_accepts_audio = False
-        if config is not None and config.llm_preset_id:
-            entry = LLMCatalogService.get_model(config.llm_preset_id)
-            interview_model_accepts_audio = (
-                entry is not None and entry.accepts_audio_input
-            )
 
         return InterviewPageContext(
             interview=interview,
-            interview_title=interview_title,
-            selection_lines=selection_lines,
-            answers=answers,
+            interview_title=session_display_title(session),
+            selection_lines=session_selection_summary_lines(session),
+            answers=theory.answers if theory is not None else interview.answers,
             current_question=current_question,
             current_answer_id=current_question.id if current_question else None,
             question_voice_enabled=question_voice_enabled,
             overall_feedback=overall_feedback_data,
             max_score=max_score,
             locale_label=SUPPORTED_LOCALES.get(interview.locale, interview.locale),
-            question_timer_enabled=question_timer_enabled,
+            question_timer_enabled=(
+                theory.question_timer_enabled if theory is not None else False
+            ),
             question_time_limit_seconds=interview.question_time_limit_seconds,
-            timer_remaining_seconds=timer_remaining_seconds,
-            current_round=current_round,
+            timer_remaining_seconds=(
+                theory.timer_remaining_seconds if theory is not None else None
+            ),
+            current_round=theory.current_round if theory is not None else 0,
             timeout_chat_label=localized_string(interview.locale, TIMEOUT_CHAT_LABELS),
             llm_request_timeout_seconds=int(config.timeout) if config else 60,
             interview_model_accepts_audio=interview_model_accepts_audio,
         )
 
-    async def build_full_template_context(
-        self,
-        interview: InterviewRead,
+    @staticmethod
+    async def build_context(
+        snapshot: SessionSnapshot,
         *,
         config: AppConfig | None,
-        whisper_model_service: type[WhisperModelService] = WhisperModelService,
+        accepts_audio_input: bool = False,
+        whisper_model_service: WhisperModelService | None = None,
     ) -> dict[str, Any]:
-        """Merge session shell, theory section, and audio keys for ``interview.html``.
+        """Merge session shell, section panels, and audio keys for the SPA.
 
         Args:
-            interview: Loaded interview read model.
+            snapshot: Loaded session with parsed selection and section aggregates.
             config: Application config, if configured.
-            whisper_model_service: Whisper model service class (injectable in tests).
+            accepts_audio_input: Whether the configured LLM accepts audio answers.
+            whisper_model_service: Whisper model service instance (injectable).
 
         Returns:
-            Flat dict for Jinja template rendering.
+            Flat dict for SPA rendering.
         """
-        session = parse_session_spec(
-            interview.selection_spec,
-            question_count=interview.question_count,
-            task_time_limit_seconds=interview.question_time_limit_seconds,
-        )
-        theory_service = TheoryPageService(self._uow)
-        coding_service = CodingPageService(self._uow)
-        orchestrator = SessionPhaseOrchestrator(self._uow)
-        theory = theory_service.build_context(interview)
-        coding = coding_service.build_context(interview.id)
-        active_phase = orchestrator.active_phase(interview.id)
+        theory = build_theory_context(snapshot.interview, session=snapshot.session)
+        coding = build_coding_context(snapshot.coding)
         base = ActiveSessionPage.build_page_context(
-            interview,
+            snapshot.interview,
             config=config,
             question_voice_enabled=bool(config and config.question_voice_enabled),
             theory=theory,
-            uow=self._uow,
+            coding=snapshot.coding,
+            session=snapshot.session,
+            interview_model_accepts_audio=accepts_audio_input,
         ).model_dump()
-        speech = SpeechModelPageService.build_page_context(
+        speech = SttModelPageService.build_page_context(
             config,
             whisper_model_service=whisper_model_service,
         ).model_dump()
-        voice = (await QuestionVoicePageService.build_page_context(config)).model_dump()
+        voice = (await VoicePage.build_page_context(config)).model_dump()
+        session = snapshot.session
         return {
             **base,
             **speech,
@@ -237,5 +163,5 @@ class ActiveSessionPage:
                 session.session_mode, session.session_mode
             ),
             "phase_order": list(phase_order_for_mode(session.session_mode)),
-            "active_phase": active_phase,
+            "active_phase": active_section(snapshot),
         }

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from app.coding.api.errors import http_exception_from_coding_error
 from app.coding.api.ws_session import CodingWebSocketService
 from app.coding.domain.exceptions import CodingDomainError
-from app.coding.domain.run_result import RunResultBuilder as CodingRunExecutionService
+from app.coding.domain.run_result import RunResultBuilder
 from app.coding.schemas.coding import (
     CodingRunRequest,
     CodingRunResponse,
@@ -20,8 +20,8 @@ from app.coding.schemas.coding import (
 )
 from app.interview.api.deps import (
     AIProviderDep,
-    CodingStateServiceDep,
-    CodingSubmissionServiceDep,
+    CodingTaskLoaderDep,
+    SubmitCodingSolutionDep,
 )
 from app.interview.domain.exceptions import InterviewDomainError
 from app.shared.api.negotiated_response import safe_send_json
@@ -49,7 +49,7 @@ async def coding_run(
         HTTPException: On validation, domain, or rate-limit errors.
     """
     try:
-        attempt = await CodingRunExecutionService.run_and_persist(
+        attempt = await RunResultBuilder.run_and_persist(
             interview_id=interview_id,
             task_id=body.task_id,
             source_code=body.source_code,
@@ -62,7 +62,7 @@ async def coding_run(
 @router.get("/{interview_id}/coding/state")
 async def coding_state(
     interview_id: str,
-    service: CodingStateServiceDep,
+    service: CodingTaskLoaderDep,
 ) -> JSONResponse:
     """Return coding session progress and Run history for the active task.
 
@@ -87,7 +87,7 @@ async def coding_ws(
     websocket: WebSocket,
     interview_id: str,
     provider: AIProviderDep,
-    submission_service: CodingSubmissionServiceDep,
+    submission_service: SubmitCodingSolutionDep,
 ) -> None:
     """WebSocket endpoint for coding task submit and feedback.
 

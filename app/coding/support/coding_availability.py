@@ -4,13 +4,6 @@
 
 import os
 
-import httpx
-
-from app.shared.infrastructure.gateways.judge0_config import (
-    judge0_auth_token,
-    judge0_url,
-)
-
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
@@ -23,54 +16,26 @@ def _coding_enabled_env() -> bool:
     return os.environ.get("CODING_ENABLED", "true").lower() in _TRUTHY
 
 
-def is_judge0_healthy() -> bool:
-    """Probe Judge0 synchronously for setup and validation paths.
+async def is_judge0_healthy() -> bool:
+    """Probe Judge0 via ``GET /about``.
 
     Returns:
-        True when ``GET /about`` responds with HTTP 200.
-    """
-    try:
-        headers: dict[str, str] = {}
-        token = judge0_auth_token()
-        if token:
-            headers["X-Auth-Token"] = token
-        with httpx.Client(timeout=2.0) as client:
-            response = client.get(f"{judge0_url()}/about", headers=headers)
-            return response.status_code == 200
-    except httpx.HTTPError:
-        return False
-
-
-async def is_judge0_healthy_async() -> bool:
-    """Probe Judge0 asynchronously for async API handlers.
-
-    Returns:
-        True when ``GET /about`` responds with HTTP 200.
+        True when the health endpoint responds with HTTP 200.
     """
     from app.shared.infrastructure.gateways.judge0 import Judge0Gateway
 
     return await Judge0Gateway.from_env().health_check()
 
 
-def is_coding_available() -> bool:
+async def is_coding_available() -> bool:
     """Return whether coding can be selected on setup and created.
 
-    Requires ``CODING_ENABLED`` and a healthy Judge0 instance.
+    Requires ``CODING_ENABLED`` and a healthy Judge0 instance. All callers are
+    async (API handlers and use cases); there is no synchronous variant.
 
     Returns:
         True when coding sessions may be started from setup.
     """
     if not _coding_enabled_env():
         return False
-    return is_judge0_healthy()
-
-
-async def is_coding_available_async() -> bool:
-    """Async variant of :func:`is_coding_available` for API handlers.
-
-    Returns:
-        True when coding sessions may be started from setup.
-    """
-    if not _coding_enabled_env():
-        return False
-    return await is_judge0_healthy_async()
+    return await is_judge0_healthy()

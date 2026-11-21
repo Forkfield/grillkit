@@ -15,7 +15,7 @@ from app.interview.domain.session_phases import (
     section_services,
 )
 from app.interview.domain.value_objects import SectionKind, session_mode_label
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.queries.review_context import (
     item_id_key_for,
@@ -34,11 +34,11 @@ _SECTION_LABELS: dict[SectionKind, str] = {
 
 @dataclass(frozen=True)
 class SessionResultsRender:
-    """Result of preparing a session results HTML page.
+    """Result of preparing a session results page.
 
     Attributes:
         redirect_url: Redirect target when the session is missing or not completed.
-        template_context: Jinja context when the page should render.
+        template_context: Page context when the session should render.
     """
 
     redirect_url: str | None
@@ -46,7 +46,7 @@ class SessionResultsRender:
 
 
 class CompletedSessionResults:
-    """Compose the completed session results hub template context."""
+    """Compose the completed session results hub context."""
 
     def __init__(self, uow: InterviewUnitOfWork) -> None:
         """Initialize with the active unit of work.
@@ -54,7 +54,7 @@ class CompletedSessionResults:
         Args:
             uow: Shared application unit of work for this page scope.
         """
-        self._uow = uow
+        self._uow: InterviewUnitOfWork = uow
 
     @staticmethod
     def _section_summary_text(
@@ -96,7 +96,7 @@ class CompletedSessionResults:
             breakdown: Nested session score breakdown, if present.
 
         Returns:
-            Section result card for the results hub template.
+            Section result card for the results hub.
         """
         section_data = breakdown.get(kind) if isinstance(breakdown, dict) else None
         score = (
@@ -138,10 +138,11 @@ class CompletedSessionResults:
 
         session = parse_session_spec(interview.selection_spec)
         breakdown = interview.overall_feedback.get("score_breakdown")
-        max_score = DashboardBuilder.compute_max_score(
+        max_score = InterviewDashboard.compute_max_score(
             interview,
             breakdown if isinstance(breakdown, dict) else None,
             uow=self._uow,
+            session=session,
         )
 
         services = section_services(self._uow)
@@ -167,7 +168,9 @@ class CompletedSessionResults:
 
         return SessionResultsContext(
             interview=interview,
-            interview_title=DashboardBuilder.interview_display_title(interview),
+            interview_title=InterviewDashboard.interview_display_title(
+                interview, session=session
+            ),
             selection_lines=session_selection_summary_lines(session),
             session_mode_label=session_mode_label(session.session_mode),
             locale_label=SUPPORTED_LOCALES.get(interview.locale, interview.locale),
@@ -185,7 +188,7 @@ class CompletedSessionResults:
             interview_id: Session UUID.
 
         Returns:
-            Redirect URL or template context for ``session_results.html``.
+            Redirect URL or JSON context for the results page.
         """
         interview = load_interview_read(self._uow, interview_id)
 

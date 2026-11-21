@@ -8,11 +8,11 @@ import os
 
 from faster_whisper import WhisperModel
 
-from app.ai.faster_whisper_transcriber import FasterWhisperTranscriber
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
+from app.ai.whisper_stt import WhisperStt
 from app.shared.infrastructure.gateways.whisper_storage import is_installed, model_dir
 from app.shared.infrastructure.in_process_runtime import InProcessArtifactRuntime
-from app.shared.speech_models import normalize_speech_model_size
+from app.shared.stt_models import normalize_stt_model_size
 
 logger = logging.getLogger(__name__)
 
@@ -20,22 +20,22 @@ WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE_TYPE = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
 
 
-class WhisperGateway(InProcessArtifactRuntime):
-    """Hold a loaded :class:`SpeechTranscriber` in this process.
+class WhisperSttGateway(InProcessArtifactRuntime):
+    """Hold a loaded :class:`Stt` in this process.
 
     Satisfies the :class:`SttModelLoader` protocol, so it can be injected into the
     :class:`SpeechRuntimeCoordinator` as the STT backend.
     """
 
     def _normalize_key(self, key: str) -> str:
-        """Normalize a speech model size identifier."""
-        return normalize_speech_model_size(key)
+        """Normalize a stt model size identifier."""
+        return normalize_stt_model_size(key)
 
     def _is_installed(self, key: str) -> bool:
         """Return whether a valid Whisper model is on disk for ``key``."""
         return is_installed(key)
 
-    def _load_sync(self, key: str) -> SpeechTranscriber:
+    def _load_sync(self, key: str) -> Stt:
         """Load ``WhisperModel`` and wrap it in a transcriber (blocking)."""
         path = model_dir(key)
         model = WhisperModel(
@@ -43,7 +43,7 @@ class WhisperGateway(InProcessArtifactRuntime):
             device=WHISPER_DEVICE,
             compute_type=WHISPER_COMPUTE_TYPE,
         )
-        return FasterWhisperTranscriber(model)
+        return WhisperStt(model)
 
     def is_installed(self, size: str) -> bool:
         """Return whether a valid Whisper model is on disk for ``size``."""
@@ -53,13 +53,9 @@ class WhisperGateway(InProcessArtifactRuntime):
         """Return whether the model for ``size`` is loaded in memory."""
         return self._has_loaded_key(size)
 
-    def get(self) -> SpeechTranscriber | None:
+    def get(self) -> Stt | None:
         """Return the currently loaded transcriber, if any."""
         return self._artifact
-
-    def loaded_size(self) -> str | None:
-        """Return the size of the model currently in memory, if any."""
-        return self.loaded_key()
 
     async def load_size(self, size: str) -> bool:
         """Load or reload the Whisper model for ``size`` from disk.
@@ -79,7 +75,7 @@ class WhisperGateway(InProcessArtifactRuntime):
             )
         return loaded
 
-    def on_loaded(self, key: str, artifact: SpeechTranscriber) -> None:
+    def on_loaded(self, key: str, artifact: Stt) -> None:
         """Log a successful load."""
         del artifact
         logger.debug("Whisper model %s loaded into memory", key)
@@ -91,4 +87,4 @@ class WhisperGateway(InProcessArtifactRuntime):
 
 
 # Single in-process runtime instance shared by the coordinator and status services.
-WhisperRuntime = WhisperGateway()
+WhisperSttRuntime = WhisperSttGateway()

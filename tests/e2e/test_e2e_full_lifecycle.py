@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """E2E test: full lifecycle — theory only, mark known, exclude known next session."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.interview.domain.serialization import session_to_spec
 from app.interview.domain.value_objects import (
@@ -10,7 +10,7 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.platform.domain.config import AppConfig
 from tests.fakes import answer_evaluation_json
@@ -21,9 +21,6 @@ class TestE2EFullLifecycle:
 
     def _config(self) -> AppConfig:
         return AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
         )
 
@@ -44,21 +41,21 @@ class TestE2EFullLifecycle:
                 question_count=2,
             )
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": session_to_spec(session),
-                    "question_count": "2",
+                    "question_count": 2,
                 },
-                follow_redirects=False,
             )
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = response.json()["redirect"].rsplit("/", 1)[-1]
 
         # Получаем текущие question_id через query
         from app.interview.repositories.uow import InterviewUnitOfWork
 
         with InterviewUnitOfWork() as uow:
-            interview = InterviewQuery(uow).get_interview(interview_id)
+            interview = InterviewLoader(uow).get_interview(interview_id)
+            assert interview is not None
             question_ids = [a.question_id for a in interview.answers]
         assert len(question_ids) == 2
 
@@ -100,9 +97,9 @@ class TestE2EFullLifecycle:
             completed = ws.receive_json()
             assert completed["type"] == "interview_completed"
 
-        # Results + review
-        assert client.get(f"/interview/{interview_id}/results").status_code == 200
-        assert client.get(f"/interview/{interview_id}/theory").status_code == 200
+        # Results + review (JSON API)
+        assert client.get(f"/api/interview/{interview_id}/results").status_code == 200
+        assert client.get(f"/api/interview/{interview_id}/theory").status_code == 200
 
     def test_coding_only_full_cycle(
         self, client, isolated_db, mock_judge0, override_ws_ai_provider
@@ -114,8 +111,8 @@ class TestE2EFullLifecycle:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available",
+                new=AsyncMock(return_value=True),
             ),
         ):
             session = SessionSelection(
@@ -140,34 +137,31 @@ class TestE2EFullLifecycle:
                 ),
             )
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": session_to_spec(session),
-                    "question_count": "0",
-                    "coding_question_count": "1",
+                    "question_count": 0,
+                    "coding_question_count": 1,
                 },
-                follow_redirects=False,
             )
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = response.json()["redirect"].rsplit("/", 1)[-1]
 
         # Получаем фактический task_id из coding state endpoint
         state = client.get(f"/interview/{interview_id}/coding/state").json()
         task_id = state["current_task"]["task_id"]
 
         mock_judge0()
-        evaluation = {
-            "score": 5,
-            "feedback": "Perfect.",
-            "follow_up_needed": False,
-            "follow_up_question": None,
-        }
-
-        from unittest.mock import AsyncMock
 
         from app.coding.domain.evaluator_models import CodingAnswerEvaluation
 
-        eval_obj = CodingAnswerEvaluation(**evaluation)
+        eval_obj = CodingAnswerEvaluation(
+            score=5,
+            feedback="Perfect.",
+            follow_up_needed=False,
+            follow_up_question=None,
+            follow_up_mode=None,
+        )
 
         override_ws_ai_provider(client, [])
         with (
@@ -196,8 +190,8 @@ class TestE2EFullLifecycle:
             fb = ws.receive_json()
             assert fb["type"] == "feedback"
 
-        # Results
-        results = client.get(f"/interview/{interview_id}/results")
+        # Results (JSON API)
+        results = client.get(f"/api/interview/{interview_id}/results")
         assert results.status_code == 200
 
     def test_mark_known_then_exclude_known(
@@ -206,7 +200,7 @@ class TestE2EFullLifecycle:
         """E2E-4: mark known → create new session with exclude_known."""
         # Mark a question as known
         response = client.post(
-            "/known-questions",
+            "/api/known-questions",
             json={"branch": "theory", "item_id": "q-known-exclude"},
         )
         assert response.status_code == 200
@@ -231,15 +225,14 @@ class TestE2EFullLifecycle:
             spec = json.loads(session_to_spec(session))
             spec["exclude_known"] = True
             response = client.post(
-                "/setup",
-                data={
+                "/api/setup",
+                json={
                     "selection_json": json.dumps(spec),
-                    "question_count": "3",
+                    "question_count": 3,
                 },
-                follow_redirects=False,
             )
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = response.json()["redirect"].rsplit("/", 1)[-1]
 
         # Verify session created successfully
         with InterviewUnitOfWork() as uow:

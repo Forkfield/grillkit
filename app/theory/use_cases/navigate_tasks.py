@@ -7,28 +7,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.use_cases.advance_phase import SessionPhaseOrchestrator
-from app.theory.domain.entities import TheorySection, TheoryTask
+from app.interview.use_cases.advance_phase import AdvanceSessionPhase
+from app.theory.domain.entities import TheorySection
 from app.theory.domain.exceptions import TheorySectionNotFoundError
-
-
-def next_task_payload(task: TheoryTask) -> dict[str, Any]:
-    """Build WebSocket/API payload for the next unanswered task.
-
-    Args:
-        task: Next unanswered theory task round.
-
-    Returns:
-        Dict with question fields for the client.
-    """
-    return {
-        "id": task.id,
-        "question_id": task.question_id,
-        "order": task.order,
-        "question_text": task.question_text,
-        "question_code": task.question_code,
-        "round": task.round,
-    }
+from app.theory.schemas.ws import next_task_payload
 
 
 class TheoryTaskNavigation:
@@ -98,7 +80,7 @@ class TheoryTaskNavigation:
             section: Theory section after the latest navigation update.
         """
         if section.is_complete():
-            SessionPhaseOrchestrator(self._uow).notify_section_complete(
+            AdvanceSessionPhase(self._uow).notify_section_complete(
                 interview_id,
                 "theory",
             )

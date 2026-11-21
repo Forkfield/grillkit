@@ -4,13 +4,14 @@
 
 from pathlib import Path
 
-from app.interview.queries.loader import InterviewQuery
-from app.interview.schemas.interview import AnswerRead, InterviewRead
-from app.platform.domain.config import ConfigService
+from app.interview.queries.loader import InterviewLoader
+from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.speech_settings import question_voice_settings_from_config
+from app.platform.repo.config_composition import get_default_config_service
 from app.shared.infrastructure.gateways.tts_cache import TtsCacheService
 from app.shared.infrastructure.gateways.tts_exceptions import QuestionVoiceDisabledError
 from app.speech.domain.tts_engine import TtsEngine
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 async def get_question_audio_path(
@@ -48,14 +49,14 @@ class GenerateQuestionAudio:
             ValueError: When no suitable unanswered answer exists.
             QuestionVoiceSynthesisError: When synthesis cannot complete.
         """
-        config = ConfigService.get_config()
+        config = get_default_config_service().get_config()
         if config is None:
             raise QuestionVoiceDisabledError()
         voice_settings = question_voice_settings_from_config(config)
         if not voice_settings.enabled:
             raise QuestionVoiceDisabledError()
 
-        interview = InterviewQuery.get_active_interview_or_raise(interview_id)
+        interview = InterviewLoader.get_active_interview_or_raise(interview_id)
         answer = _resolve_answer(interview, answer_id)
         return await TtsCacheService.get_or_fetch(
             engine,
@@ -68,7 +69,7 @@ class GenerateQuestionAudio:
 def _resolve_answer(
     interview: InterviewRead,
     answer_id: int | None,
-) -> AnswerRead:
+) -> TheoryTaskRead:
     """Pick the target answer row for audio synthesis.
 
     Args:
@@ -91,7 +92,7 @@ def _resolve_answer(
                 return answer
         raise ValueError(f"Answer not found in interview: {answer_id}")
 
-    current = InterviewQuery.get_current_unanswered(interview)
+    current = InterviewLoader.get_current_unanswered(interview)
     if current is None:
         raise ValueError("No unanswered question in this interview")
     if not current.question_text.strip():

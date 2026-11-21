@@ -44,11 +44,11 @@ class TestDictationWebSocket:
         """Connection closes with error when speech transcriber is absent."""
         with (
             patch(
-                "app.interview.queries.loader.InterviewQuery.load",
+                "app.interview.queries.loader.InterviewLoader.load",
                 return_value=_active_interview(),
             ),
             patch(
-                "app.speech.api.dictation.resolve_speech_transcriber",
+                "app.speech.api.dictation.resolve_stt",
                 new=AsyncMock(return_value=None),
             ),
             client.websocket_connect("/interview/test-session/dictation") as ws,
@@ -65,11 +65,11 @@ class TestDictationWebSocket:
 
         with (
             patch(
-                "app.interview.queries.loader.InterviewQuery.load",
+                "app.interview.queries.loader.InterviewLoader.load",
                 return_value=_active_interview(),
             ),
             patch(
-                "app.speech.api.dictation.resolve_speech_transcriber",
+                "app.speech.api.dictation.resolve_stt",
                 new=AsyncMock(return_value=mock_transcriber),
             ),
             patch(
@@ -92,7 +92,7 @@ class TestDictationWebSocket:
         interview.status = "completed"
         with (
             patch(
-                "app.interview.queries.loader.InterviewQuery.load",
+                "app.interview.queries.loader.InterviewLoader.load",
                 return_value=interview,
             ),
             client.websocket_connect("/interview/test-session/dictation") as ws,

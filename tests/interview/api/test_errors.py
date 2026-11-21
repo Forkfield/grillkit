@@ -26,15 +26,15 @@ def test_ai_error_message_model_not_found():
             "{'error': {'message': \"model 'qwen' not found\"}}"
         )
     )
-    assert "/config" in msg
     assert "model name" in msg.lower()
+    assert "Configuration" in msg
 
 
 def test_ai_error_message_timeout():
     """Timeout API errors suggest checking config timeout."""
     msg = ai_error_message_for_client(ValueError("API error: Request timed out."))
     assert "timed out" in msg.lower()
-    assert "/config" in msg
+    assert "Configuration" in msg
 
 
 def test_domain_error_to_wire():

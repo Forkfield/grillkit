@@ -13,7 +13,8 @@ from app.theory.domain.exceptions import (
     TheorySectionNotActiveError,
     TheorySectionNotFoundError,
 )
-from app.theory.use_cases.navigate_tasks import TheoryTaskNavigation, next_task_payload
+from app.theory.schemas.ws import next_task_payload
+from app.theory.use_cases.navigate_tasks import TheoryTaskNavigation
 
 
 def _section_with_tasks(

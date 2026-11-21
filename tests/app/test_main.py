@@ -21,24 +21,23 @@ class TestCreateApp:
         assert app.description == "AI Interview Trainer"
         assert app.version == "2026.8.9"
 
-    def test_static_files_mounted(self):
-        """Test that static files are mounted."""
+    def test_health_endpoint_registered(self):
+        """Test that the liveness probe route is registered."""
         app = create_app()
-        # Check that static route is mounted
-        routes = [route.path for route in app.routes]
-        assert any("/static" in route for route in routes)
+        routes = [getattr(route, "path", "") for route in app.routes]
+        assert "/health" in routes
 
     def test_routers_included(self):
         """Test that routers are included."""
         app = create_app()
-        routes = [route.path for route in app.routes]
+        routes = [getattr(route, "path", "") for route in app.routes]
 
-        # Check dashboard home path exists
-        assert "/" in routes or "/" in [r.path for r in app.routes]
-        # Check config router paths exist (they have /config prefix)
-        config_routes = [
-            r for r in app.routes if hasattr(r, "path") and "/config" in r.path
+        # Check dashboard API path exists
+        assert "/api/dashboard" in routes or "/api/dashboard" in [
+            getattr(r, "path", "") for r in app.routes
         ]
+        # Check config router paths exist (they have /config prefix)
+        config_routes = [r for r in app.routes if "/config" in getattr(r, "path", "")]
         assert len(config_routes) > 0
 
 
@@ -91,15 +90,15 @@ class TestAppIntegration:
     def test_dashboard_endpoint(self, client):
         """Test that the home page returns the dashboard HTML."""
         with patch(
-            "app.interview.queries.dashboard.DashboardBuilder.list_rows",
+            "app.interview.queries.dashboard.InterviewDashboard.list_rows",
             return_value=[],
         ):
-            response = client.get("/")
+            response = client.get("/api/dashboard")
         assert response.status_code == 200
-        assert "text/html" in response.headers.get("content-type", "")
+        assert "application/json" in response.headers.get("content-type", "")
 
-    def test_config_page_exists(self, client):
-        """Test that config page endpoint exists."""
-        response = client.get("/config")
-        # Should return 200 or redirect
-        assert response.status_code in [200, 307, 302]
+    def test_config_api_exists(self, client):
+        """Test that config API endpoint exists and returns JSON."""
+        response = client.get("/api/config")
+        assert response.status_code == 200
+        assert "application/json" in response.headers.get("content-type", "")

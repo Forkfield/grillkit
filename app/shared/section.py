@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, Self, TypeVar
+from typing import Any, ClassVar, Protocol, Self, TypeVar
 
 
 class _TaskLike(Protocol):
@@ -46,12 +46,10 @@ class Section[TTask: _TaskLike](ABC):
     """
 
     # ------------------------------------------------------------------
-    # Abstract hooks expected from concrete subclasses
+    # Concrete hooks expected from concrete subclasses
     # ------------------------------------------------------------------
-    @property
-    @abstractmethod
-    def MAX_SCORE_PER_ROUND(self) -> int:  # noqa: N802
-        """Maximum points achievable per round."""
+    MAX_SCORE_PER_ROUND: ClassVar[int]
+    """Maximum points achievable per round."""
 
     @property
     @abstractmethod
@@ -151,6 +149,13 @@ class Section[TTask: _TaskLike](ABC):
             for task in self.tasks  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
         )
         return replace(self, tasks=tasks)  # type: ignore[type-var]  # pyright: ignore[reportArgumentType]
+
+    def start_next_task_timer(self: Self) -> Self:
+        """Start the timer on the first pending task when one is configured."""
+        current = self.find_first_pending()
+        if current is None or current.started_at is not None:
+            return self
+        return self.start_timer_for_task(current.id)
 
     def with_evaluation(
         self: Self,

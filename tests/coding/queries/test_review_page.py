@@ -38,10 +38,11 @@ def test_coding_review_page_groups_task_rounds(isolated_db) -> None:
 
 
 def test_coding_review_page_renders_task_accordion(client, isolated_db) -> None:
-    """Coding review page renders per-task accordion with final submit."""
+    """Coding review JSON exposes per-task accordion data."""
     interview_id = seed_completed_coding_interview("results-coding-page-1")
-    response = client.get(f"/interview/{interview_id}/coding")
+    response = client.get(f"/api/interview/{interview_id}/coding")
     assert response.status_code == 200
-    assert "Coding Tasks" in response.text
-    assert "cod-001" in response.text
-    assert "Works for the sample case." in response.text
+    payload = response.json()
+    assert "tasks" in payload
+    assert payload["tasks"][0]["task_id"] == "cod-001"
+    assert payload["tasks"][0]["rounds"][0]["feedback"] == "Works for the sample case."

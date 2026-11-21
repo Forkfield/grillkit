@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.interview.domain.value_objects import SectionKind
@@ -58,16 +58,6 @@ class KnownQuestionsRepository(SqlAlchemyRepository[KnownQuestion]):
         for row in rows:
             grouped.setdefault(row.branch, []).append(row.bank_item_id)
         return grouped
-
-    def count(self) -> int:
-        """Return total number of known bank item rows.
-
-        Returns:
-            Row count across both branches.
-        """
-        return (
-            self._session.scalar(select(func.count()).select_from(KnownQuestion)) or 0
-        )
 
     def mark(self, branch: SectionKind, bank_item_id: str) -> None:
         """Insert a known bank item row if it does not exist.

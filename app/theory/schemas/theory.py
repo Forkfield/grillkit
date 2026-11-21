@@ -3,6 +3,7 @@
 """Theory section read models for services and API."""
 
 from datetime import datetime
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -23,7 +24,7 @@ class TheoryTaskRead(BaseModel):
         started_at: When the round timer started, or None.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     id: int
     question_id: str

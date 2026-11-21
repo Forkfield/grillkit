@@ -22,7 +22,7 @@ from app.coding.support.evaluation_commit import (
 )
 from app.coding.support.events import CodingFeedbackEvent
 from app.coding.support.run_result_mapper import Judge0ResultMapper
-from app.coding.use_cases.navigate_tasks import CodingNavigationService
+from app.coding.use_cases.navigate_tasks import CodingTaskNavigation
 from app.coding.use_cases.run_tests import CodingRunnerService
 from app.interview.domain.events import (
     AnswerSavedEvent,
@@ -81,7 +81,7 @@ class SubmitCodingSolution:
             persistence: Optional evaluation persistence collaborator.
         """
         self._uow = uow
-        navigation = CodingNavigationService(uow)
+        navigation = CodingTaskNavigation(uow)
         self._navigation = navigation
         self._persistence = persistence or CommitEvaluationResult(
             uow, navigation=navigation

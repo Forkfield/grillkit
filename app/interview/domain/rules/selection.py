@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import json
 import random
 
@@ -11,7 +12,6 @@ from app.coding.domain.task_planner import (
     validate_selection as validate_coding_selection,
 )
 from app.coding.domain.task_planner import validate_task_count
-from app.coding.support.coding_availability import is_coding_available
 from app.interview.domain.rules.bank_selection import track_label
 from app.interview.domain.serialization import (
     parse_session_spec,
@@ -156,11 +156,17 @@ def session_selection_summary_lines(session: SessionSelection) -> list[str]:
     return lines
 
 
-def validate_session_selection(session: SessionSelection) -> None:
+def validate_session_selection(
+    session: SessionSelection,
+    *,
+    coding_available: bool,
+) -> None:
     """Validate a parsed session selection from setup.
 
     Args:
         session: Session selection including mode and branch specs.
+        coding_available: Whether coding can be started; callers probe Judge0
+            asynchronously and pass the result.
 
     Raises:
         ValueError: If branches are inconsistent or banks reject the selection.
@@ -172,7 +178,7 @@ def validate_session_selection(session: SessionSelection) -> None:
             raise ValueError("Select at least one theory track and topic")
         validate_question_count(session.theory_selection, session.theory.question_count)
     if session.coding.enabled:
-        if not is_coding_available():
+        if not coding_available:
             raise ValueError(
                 "Coding is not available. Enable CODING_ENABLED and ensure "
                 "Judge0 is running, or choose a theory-only session."
@@ -183,17 +189,17 @@ def validate_session_selection(session: SessionSelection) -> None:
         validate_task_count(session.coding_selection, session.coding.question_count)
 
 
-def parse_session_json(raw_json: str) -> SessionSelection:
-    """Parse setup form ``selection_json`` field (v2 session selection).
+def parse_session_payload(raw_json: str) -> SessionSelection:
+    """Parse setup form ``selection_json`` field without validating it.
 
     Args:
         raw_json: JSON string from POST body.
 
     Returns:
-        Validated session selection.
+        Parsed session selection.
 
     Raises:
-        ValueError: If JSON is invalid or validation fails.
+        ValueError: If JSON is invalid or has the wrong shape.
     """
     try:
         data = json.loads(raw_json)
@@ -201,9 +207,7 @@ def parse_session_json(raw_json: str) -> SessionSelection:
         raise ValueError("Invalid selection JSON") from exc
     if not isinstance(data, dict):
         raise ValueError("Invalid selection JSON: expected object")
-    session = session_from_payload(data)
-    validate_session_selection(session)
-    return session
+    return session_from_payload(data)
 
 
 def _filter_track_pools(
@@ -333,11 +337,52 @@ def plan_questions(
     _validate_filtered_pools(filtered_pools, question_count)
     track_pools = filtered_pools
 
-    picked: list[PlannedQuestion] = []
-    picked_ids: set[str] = set()
-    question_track: dict[str, str] = {}
-    pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]] = []
+    state = _QuestionPickState()
+    pools_by_source = _pick_one_per_category(track_pools, state)
+    _fill_proportional_extra(pools_by_source, question_count, state)
+    ordered = _order_by_track(state, selection)
 
+    return ordered[:question_count]
+
+
+@dataclass
+class _QuestionPickState:
+    """Mutable planning state: picked questions plus their track origins.
+
+    Attributes:
+        picked: Questions in pick order.
+        picked_ids: IDs already picked (dedup and leftover filtering).
+        track_by_id: Question id to track slug mapping.
+    """
+
+    picked: list[PlannedQuestion] = field(default_factory=list)
+    picked_ids: set[str] = field(default_factory=set)
+    track_by_id: dict[str, str] = field(default_factory=dict)
+
+    def add(self, question: PlannedQuestion, track: str) -> None:
+        """Record one picked question and its track."""
+        self.picked.append(question)
+        self.picked_ids.add(question.id)
+        self.track_by_id[question.id] = track
+
+
+def _pick_one_per_category(
+    track_pools: list[TrackQuestionPools],
+    state: _QuestionPickState,
+) -> list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]]:
+    """Pick one random question per selected category and track its origin.
+
+    Args:
+        track_pools: Filtered pools aligned with ``selection.sources``.
+        state: Planning state (mutated).
+
+    Returns:
+        Pools by source, in form order.
+
+    Raises:
+        ValueError: If a track or category pool is empty.
+    """
+    pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]] = []
     for pools in track_pools:
         source = pools.source
         full_pool = pools.full_pool
@@ -351,41 +396,65 @@ def plan_questions(
                 raise ValueError(
                     f"No questions found for {source.track}/{source.level}/{category}"
                 )
-            available = [q for q in category_pool if q.id not in picked_ids]
+            available = [q for q in category_pool if q.id not in state.picked_ids]
             if not available:
                 available = list(category_pool)
-            question = random.choice(available)
-            picked.append(question)
-            picked_ids.add(question.id)
-            question_track[question.id] = source.track
+            state.add(random.choice(available), source.track)
+    return pools_by_source
 
-    extra = question_count - len(picked)
-    if extra > 0:
-        remaining_by_track: list[tuple[str, list[PlannedQuestion]]] = []
-        for source, full_pool in pools_by_source:
-            remaining_pool = [q for q in full_pool if q.id not in picked_ids]
-            if remaining_pool:
-                remaining_by_track.append((source.track, remaining_pool))
 
-        max_extra = sum(len(pool) for _, pool in remaining_by_track)
-        to_allocate = min(extra, max_extra)
-        if to_allocate > 0 and remaining_by_track:
-            sizes = [len(pool) for _, pool in remaining_by_track]
-            counts = _allocate_proportional(sizes, to_allocate)
-            for (track_slug, pool), count in zip(
-                remaining_by_track, counts, strict=True
-            ):
-                if count <= 0:
-                    continue
-                sampled = random.sample(pool, min(count, len(pool)))
-                picked.extend(sampled)
-                for question in sampled:
-                    picked_ids.add(question.id)
-                    question_track[question.id] = track_slug
+def _fill_proportional_extra(
+    pools_by_source: list[tuple[TrackSelection, tuple[PlannedQuestion, ...]]],
+    question_count: int,
+    state: _QuestionPickState,
+) -> None:
+    """Distribute remaining slots across tracks proportionally to pool size.
 
+    Args:
+        pools_by_source: Pools by source, in form order.
+        question_count: Target number of questions.
+        state: Planning state (mutated).
+    """
+    extra = question_count - len(state.picked)
+    if extra <= 0:
+        return
+
+    remaining_by_track: list[tuple[str, list[PlannedQuestion]]] = []
+    for source, full_pool in pools_by_source:
+        remaining_pool = [q for q in full_pool if q.id not in state.picked_ids]
+        if remaining_pool:
+            remaining_by_track.append((source.track, remaining_pool))
+
+    max_extra = sum(len(pool) for _, pool in remaining_by_track)
+    to_allocate = min(extra, max_extra)
+    if to_allocate <= 0 or not remaining_by_track:
+        return
+    sizes = [len(pool) for _, pool in remaining_by_track]
+    counts = _allocate_proportional(sizes, to_allocate)
+    for (track_slug, pool), count in zip(remaining_by_track, counts, strict=True):
+        if count <= 0:
+            continue
+        sampled = random.sample(pool, min(count, len(pool)))
+        for question in sampled:
+            state.add(question, track_slug)
+
+
+def _order_by_track(
+    state: _QuestionPickState,
+    selection: InterviewSelection,
+) -> list[PlannedQuestion]:
+    """Group questions by track (form order) and shuffle within each block.
+
+    Args:
+        state: Planning state with picked questions.
+        selection: Validated interview selection.
+
+    Returns:
+        Questions grouped by track block, shuffled inside each block.
+    """
     by_track: dict[str, list[PlannedQuestion]] = {}
-    for question in picked:
-        track_key = question_track[question.id]
+    for question in state.picked:
+        track_key = state.track_by_id[question.id]
         by_track.setdefault(track_key, []).append(question)
 
     ordered: list[PlannedQuestion] = []
@@ -393,5 +462,4 @@ def plan_questions(
         block = by_track.get(source.track, [])
         random.shuffle(block)
         ordered.extend(block)
-
-    return ordered[:question_count]
+    return ordered

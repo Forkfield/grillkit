@@ -6,10 +6,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Literal
 
-from app.interview.domain.session_phases import (
-    SectionEvaluationSummary,
-    SectionPageContext,
-)
+from app.interview.domain.session_phases import SectionEvaluationSummary
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.support.feedback_prefetch import SectionFeedbackPrefetch
 from app.theory.domain.evaluator import TheoryEvaluator
@@ -104,50 +101,6 @@ class TheorySectionState:
         if section is None:
             return False
         return section.is_complete()
-
-    def is_user_facing(self, interview_id: str) -> bool:
-        """Return whether the user should interact with the theory section now.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            True when unanswered theory tasks remain.
-        """
-        section = self._uow.theory_sections.get_aggregate(interview_id)
-        if section is None:
-            return False
-        return not section.is_complete()
-
-    def activate_if_pending(self, interview_id: str) -> bool:
-        """Theory sections are created active; nothing to promote.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            Always False.
-        """
-        del interview_id
-        return False
-
-    def get_page_context(self, interview_id: str) -> SectionPageContext | None:
-        """Return theory section page metadata for session composition.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            Section page context, or None when no theory section exists.
-        """
-        section = self._uow.theory_sections.get_aggregate(interview_id)
-        if section is None:
-            return None
-        return SectionPageContext(
-            section="theory",
-            active=not section.is_complete(),
-            complete=section.is_complete(),
-        )
 
     def get_evaluation_summary(
         self,

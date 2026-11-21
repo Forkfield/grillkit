@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Theory section page read models."""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.theory.schemas.theory import TheoryTaskRead
@@ -21,7 +23,7 @@ class TheoryPageContext(BaseModel):
         complete: Whether all theory tasks have been answered.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     answers: list[TheoryTaskRead]
     current_question: TheoryTaskRead | None

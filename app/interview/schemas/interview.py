@@ -3,15 +3,12 @@
 """Interview session read models for services and API."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.coding.schemas.coding import CodingTaskRead
 from app.theory.schemas.theory import TheoryTaskRead
-
-AnswerRead = TheoryTaskRead
-"""Alias for theory task read models composed into session page context."""
 
 
 class InterviewRead(BaseModel):
@@ -33,7 +30,7 @@ class InterviewRead(BaseModel):
         completed_at: When the session ended, or None while active.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     id: str
     status: str
@@ -42,7 +39,7 @@ class InterviewRead(BaseModel):
     question_ids: str
     question_count: int
     question_time_limit_seconds: int | None
-    answers: list[AnswerRead]
+    answers: list[TheoryTaskRead]
     coding_tasks: list[CodingTaskRead] = []
     score: int | None = None
     overall_feedback: dict[str, Any] | None = None
@@ -73,13 +70,13 @@ class InterviewPageContext(BaseModel):
         interview_model_accepts_audio: Whether the configured LLM accepts audio answers.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     interview: InterviewRead
     interview_title: str
     selection_lines: list[str]
-    answers: list[AnswerRead]
-    current_question: AnswerRead | None
+    answers: list[TheoryTaskRead]
+    current_question: TheoryTaskRead | None
     current_answer_id: int | None
     question_voice_enabled: bool
     overall_feedback: dict[str, Any] | None

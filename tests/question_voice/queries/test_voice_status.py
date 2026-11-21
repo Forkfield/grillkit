@@ -9,6 +9,9 @@ from app.question_voice.queries.voice_status import (
     VoiceStatus as QuestionVoiceStatusService,
 )
 from app.question_voice.schemas import PiperVoiceStatusRead
+from app.shared.infrastructure.artifact_composition import (
+    get_default_piper_voice_service,
+)
 
 
 class TestResolveTtsTarget:
@@ -23,9 +26,6 @@ class TestResolveTtsTarget:
     def test_uses_config_when_present(self):
         """Saved config determines voice and locale."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="ru",
             tts_voice_id="ru_RU-dmitri-medium",
         )
@@ -36,9 +36,6 @@ class TestResolveTtsTarget:
     def test_locale_override_takes_precedence(self):
         """Query locale overrides saved config locale and voice."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             tts_voice_id="en_US-lessac-medium",
         )
@@ -51,9 +48,6 @@ class TestResolveTtsTarget:
     def test_voice_id_override_takes_precedence(self):
         """Query voice_id overrides all other sources."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             tts_voice_id="en_US-lessac-medium",
         )
@@ -66,9 +60,6 @@ class TestResolveTtsTarget:
     def test_locale_and_voice_id_override_together(self):
         """Both query params override saved config."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             tts_voice_id="en_US-lessac-medium",
         )
@@ -101,9 +92,6 @@ class TestResolveForConfig:
     def test_returns_status_and_enabled_true(self):
         """Enabled config returns status and True."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             question_voice_enabled=True,
             tts_voice_id="en_US-lessac-medium",
@@ -117,8 +105,9 @@ class TestResolveForConfig:
             message="Ready",
             voice_display_name="Lessac (US English, medium)",
         )
-        with patch(
-            "app.question_voice.queries.voice_status.PiperVoiceService.get_status",
+        with patch.object(
+            get_default_piper_voice_service(),
+            "get_status",
             return_value=ready,
         ):
             status, enabled = QuestionVoiceStatusService.resolve_for_config(config)
@@ -128,9 +117,6 @@ class TestResolveForConfig:
     def test_returns_status_and_enabled_false(self):
         """Disabled config returns status and False."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             question_voice_enabled=False,
         )
@@ -143,8 +129,9 @@ class TestResolveForConfig:
             message="Not installed",
             voice_display_name="Lessac (US English, medium)",
         )
-        with patch(
-            "app.question_voice.queries.voice_status.PiperVoiceService.get_status",
+        with patch.object(
+            get_default_piper_voice_service(),
+            "get_status",
             return_value=missing,
         ):
             status, enabled = QuestionVoiceStatusService.resolve_for_config(config)
@@ -162,8 +149,9 @@ class TestResolveForConfig:
             message="Not installed",
             voice_display_name="Lessac (US English, medium)",
         )
-        with patch(
-            "app.question_voice.queries.voice_status.PiperVoiceService.get_status",
+        with patch.object(
+            get_default_piper_voice_service(),
+            "get_status",
             return_value=missing,
         ):
             status, enabled = QuestionVoiceStatusService.resolve_for_config(None)

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """WebSocket server message schemas for interview sessions."""
 
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 class AnswerSavedMessage(BaseModel):
     """Server message emitted after answer text is persisted."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["saved"] = "saved"
 
@@ -18,7 +18,7 @@ class AnswerSavedMessage(BaseModel):
 class EvaluatingMessage(BaseModel):
     """Server message emitted when AI evaluation starts."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["evaluating"] = "evaluating"
 
@@ -26,7 +26,7 @@ class EvaluatingMessage(BaseModel):
 class TranscriptMessage(BaseModel):
     """Server message with Whisper transcript for an audio answer."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["transcript"] = "transcript"
     question_id: str
@@ -37,7 +37,7 @@ class TranscriptMessage(BaseModel):
 class AnswerFeedbackMessage(BaseModel):
     """Server message with evaluation feedback for one answer round."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["feedback"] = "feedback"
     question_id: str
@@ -54,7 +54,7 @@ class AnswerFeedbackMessage(BaseModel):
 class InterviewCompletedMessage(BaseModel):
     """Server message when the entire interview session is complete."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["interview_completed"] = "interview_completed"
     overall_feedback: dict[str, Any]

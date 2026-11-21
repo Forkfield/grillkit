@@ -36,6 +36,7 @@ class TheorySectionRepository(SqlAlchemyRepository[TheorySection]):
             session: Active SQLAlchemy Session.
         """
         super().__init__(session)
+        self._tracked: dict[str, TheorySection] = {}
 
     def get_by_interview_id(self, interview_id: str) -> TheorySection | None:
         """Retrieve a theory section by parent interview ID.
@@ -46,12 +47,15 @@ class TheorySectionRepository(SqlAlchemyRepository[TheorySection]):
         Returns:
             TheorySection ORM row with tasks loaded, or None.
         """
-        return (
+        orm_section = (
             self._session.query(TheorySection)
             .options(selectinload(TheorySection.tasks))
             .filter_by(interview_id=interview_id)
             .first()
         )
+        if orm_section is not None:
+            self._tracked[interview_id] = orm_section
+        return orm_section
 
     def get_aggregate(self, interview_id: str) -> DomainTheorySection | None:
         """Load a domain theory section aggregate with tasks.
@@ -86,6 +90,8 @@ class TheorySectionRepository(SqlAlchemyRepository[TheorySection]):
             .filter(TheorySection.interview_id.in_(interview_ids))
             .all()
         )
+        for row in rows:
+            self._tracked[row.interview_id] = row
         return {row.interview_id: theory_section_from_orm(row) for row in rows}
 
     def create_aggregate(self, section: DomainTheorySection) -> DomainTheorySection:
@@ -113,6 +119,33 @@ class TheorySectionRepository(SqlAlchemyRepository[TheorySection]):
             raise TheorySectionNotFoundError(section.interview_id)
         return theory_section_from_orm(reloaded)
 
+    def remember(self, orm_section: TheorySection) -> None:
+        """Keep a row loaded through another repository for later saving.
+
+        Args:
+            orm_section: Theory section ORM row with tasks loaded.
+        """
+        self._tracked[orm_section.interview_id] = orm_section
+
+    def _orm_for(self, section: DomainTheorySection) -> TheorySection | None:
+        """Resolve the ORM row for an aggregate without re-querying.
+
+        The session identity map holds rows weakly, so a section mapped to a
+        domain aggregate earlier is gone by the time the caller saves it.
+        Tracking the rows this repository returned keeps them alive for the
+        unit of work, which makes ``save_aggregate`` a pure write.
+
+        Args:
+            section: Domain section about to be persisted.
+
+        Returns:
+            Tracked ORM row with tasks loaded, or None when it does not exist.
+        """
+        orm_section = self._tracked.get(section.interview_id)
+        if orm_section is not None:
+            return orm_section
+        return self.get_by_interview_id(section.interview_id)
+
     def save_aggregate(self, section: DomainTheorySection) -> None:
         """Persist mutable section and task fields from a domain aggregate.
 
@@ -122,7 +155,7 @@ class TheorySectionRepository(SqlAlchemyRepository[TheorySection]):
         Raises:
             TheorySectionNotFoundError: If the section row no longer exists.
         """
-        orm_section = self.get_by_interview_id(section.interview_id)
+        orm_section = self._orm_for(section)
         if orm_section is None:
             raise TheorySectionNotFoundError(section.interview_id)
 

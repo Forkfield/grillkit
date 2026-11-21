@@ -128,10 +128,6 @@ class CommitAnswerResult:
         Returns:
             Feedback event for the client.
         """
-        next_question_data: dict[str, Any] | None = None
-        timer_remaining: int | None = None
-        follow_up_answer_id: int | None = None
-
         section = self._uow.theory_sections.get_aggregate(interview_id)
         if section is None:
             raise TheorySectionNotFoundError(interview_id)
@@ -150,26 +146,15 @@ class CommitAnswerResult:
 
         self._uow.theory_sections.save_aggregate(updated)
 
-        if follow_up_needed and follow_up_round is not None:
-            self._uow.flush()
-            reloaded = self._uow.theory_sections.get_aggregate(interview_id)
-            if reloaded is None:
-                raise TheorySectionNotFoundError(interview_id)
-            follow_up = reloaded.find_task(question_id, follow_up_round)
-            follow_up_answer_id = follow_up.id
-            timed = reloaded.start_timer_for_task(follow_up.id)
-            self._uow.theory_sections.save_aggregate(timed)
-            activated = next(task for task in timed.tasks if task.id == follow_up.id)
-            timer_remaining = activated.remaining_seconds(timed.task_time_limit_seconds)
-        else:
-            if self._navigation is not None:
-                next_question_data, timer_remaining = (
-                    self._navigation.advance_to_next_unanswered(
-                        interview_id,
-                        question_id=question_id,
-                        round_num=round_num,
-                    )
-                )
+        next_question_data, timer_remaining, follow_up_answer_id = (
+            self._resolve_next_task(
+                interview_id,
+                question_id=question_id,
+                round_num=round_num,
+                follow_up_needed=follow_up_needed,
+                follow_up_round=follow_up_round,
+            )
+        )
 
         return AnswerFeedbackEvent(
             question_id=question_id,
@@ -181,3 +166,49 @@ class CommitAnswerResult:
             timer_remaining_seconds=timer_remaining,
             follow_up_answer_id=follow_up_answer_id,
         )
+
+    def _resolve_next_task(
+        self,
+        interview_id: str,
+        *,
+        question_id: str,
+        round_num: int,
+        follow_up_needed: bool,
+        follow_up_round: int | None,
+    ) -> tuple[dict[str, Any] | None, int | None, int | None]:
+        """Start the follow-up timer or advance to the next unanswered task.
+
+        Args:
+            interview_id: Parent interview UUID.
+            question_id: Question ID from the task row.
+            round_num: Follow-up round (0 = initial).
+            follow_up_needed: Whether a follow-up row was created.
+            follow_up_round: Follow-up round number, when created.
+
+        Returns:
+            Tuple of (next question payload, remaining seconds, follow-up row id).
+        """
+        if follow_up_needed and follow_up_round is not None:
+            self._uow.flush()
+            reloaded = self._uow.theory_sections.get_aggregate(interview_id)
+            if reloaded is None:
+                raise TheorySectionNotFoundError(interview_id)
+            follow_up = reloaded.find_task(question_id, follow_up_round)
+            timed = reloaded.start_timer_for_task(follow_up.id)
+            self._uow.theory_sections.save_aggregate(timed)
+            activated = next(task for task in timed.tasks if task.id == follow_up.id)
+            return (
+                None,
+                activated.remaining_seconds(timed.task_time_limit_seconds),
+                follow_up.id,
+            )
+        if self._navigation is not None:
+            next_question_data, timer_remaining = (
+                self._navigation.advance_to_next_unanswered(
+                    interview_id,
+                    question_id=question_id,
+                    round_num=round_num,
+                )
+            )
+            return next_question_data, timer_remaining, None
+        return None, None, None

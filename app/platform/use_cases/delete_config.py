@@ -16,10 +16,10 @@ class DeleteConfigUseCase:
 
     def __init__(
         self,
-        config_service: type[ConfigService],
+        config_service: ConfigService,
         coordinator: SpeechRuntimeCoordinator,
     ) -> None:
-        self._config_service: type[ConfigService] = config_service
+        self._config_service: ConfigService = config_service
         self._coordinator: SpeechRuntimeCoordinator = coordinator
 
     def execute(self) -> None:

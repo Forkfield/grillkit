@@ -1,48 +1,100 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Load and persist the interview LLM model catalog from ``data/llm_models.json``."""
+"""LLM model catalog service and its repository port.
+
+The service reads and updates the user interview model catalog by delegating
+all filesystem access to a repository behind :class:`LLMCatalogRepositoryProtocol`,
+so the domain never reads or writes ``data/llm_models.json`` directly.
+"""
 
 from __future__ import annotations
 
-import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Protocol
 
-from app.ai.llm_models import LLMCatalog, LLMModelEntry, generate_model_id
-from app.shared.paths import LLM_MODELS_PATH
+from app.ai.llm_models import LLMCatalog, LLMModelEntry
 
 if TYPE_CHECKING:
     from app.platform.schemas import NewLLMModel
 
 
-class LLMCatalogService:
-    """Read and update the user LLM model catalog."""
+def selected_id_of(catalog: LLMCatalog) -> str | None:
+    """Return the active model id from a loaded catalog.
 
-    @staticmethod
-    def load_catalog() -> LLMCatalog:
+    Falls back to the first catalog entry when ``selected`` is unset or points
+    to a model that no longer exists.
+
+    Args:
+        catalog: Loaded model catalog.
+
+    Returns:
+        Active model id, or ``None`` when the catalog is empty.
+    """
+    if catalog.selected_id and catalog.selected_id in catalog.models:
+        return catalog.selected_id
+    return next(iter(catalog.models), None)
+
+
+class LLMCatalogRepositoryProtocol(Protocol):
+    """Port for reading and persisting the interview model catalog.
+
+    The concrete implementation lives in the infrastructure layer and is
+    injected into :class:`LLMCatalogService`, so the domain never depends on a
+    specific filesystem repository.
+    """
+
+    def load(self) -> LLMCatalog: ...
+
+    def set_selected(self, model_id: str) -> None: ...
+
+    def add_user_model(self, payload: NewLLMModel) -> LLMModelEntry: ...
+
+    def update_model_api_key(self, model_id: str, api_key: str | None) -> None: ...
+
+
+class LLMCatalogService:
+    """Read and update the user LLM model catalog.
+
+    The service depends only on :class:`LLMCatalogRepositoryProtocol` (a domain
+    port); the concrete repository is injected by the composition root.
+    """
+
+    def __init__(self, repo: LLMCatalogRepositoryProtocol) -> None:
+        """Initialize the service with its catalog repository.
+
+        Args:
+            repo: Catalog repository (port) used for ``llm_models.json`` I/O.
+        """
+        self._repo = repo
+
+    def load_catalog(self) -> LLMCatalog:
         """Load models from ``data/llm_models.json``.
 
         Returns:
             Catalog with selected id and all saved models.
         """
-        data = _read_catalog_file()
-        models = _parse_models(data["models"])
-        selected_id = str(data["selected"]).strip() or None
-        return LLMCatalog(selected_id=selected_id, models=models)
+        return self._repo.load()
 
-    @staticmethod
-    def get_selected_model_id() -> str | None:
+    def get_selected_model_id(self) -> str | None:
         """Return the active interview model id from ``data/llm_models.json``.
 
         Returns:
             Selected model id or ``None`` when unset or unknown.
         """
-        catalog = LLMCatalogService.load_catalog()
-        if catalog.selected_id and catalog.selected_id in catalog.models:
-            return catalog.selected_id
-        return next(iter(catalog.models), None)
+        return selected_id_of(self.load_catalog())
 
-    @staticmethod
-    def set_selected_model(model_id: str) -> None:
+    def get_selected_model(self) -> LLMModelEntry | None:
+        """Return the active interview model entry, or ``None`` when unselected.
+
+        Returns:
+            The selected catalog entry when set and known, otherwise ``None``.
+        """
+        catalog = self.load_catalog()
+        selected_id = selected_id_of(catalog)
+        if selected_id is None:
+            return None
+        return catalog.models.get(selected_id)
+
+    def set_selected_model(self, model_id: str) -> None:
         """Persist the active interview model id.
 
         Args:
@@ -51,14 +103,9 @@ class LLMCatalogService:
         Raises:
             ValueError: If the model id is unknown.
         """
-        if model_id not in LLMCatalogService.load_catalog().models:
-            raise ValueError(f"Unsupported LLM model: {model_id}")
-        data = _read_catalog_file()
-        data["selected"] = model_id
-        _write_catalog_file(data)
+        self._repo.set_selected(model_id)
 
-    @staticmethod
-    def get_model(model_id: str | None) -> LLMModelEntry | None:
+    def get_model(self, model_id: str | None) -> LLMModelEntry | None:
         """Look up one catalog entry by id.
 
         Args:
@@ -69,27 +116,22 @@ class LLMCatalogService:
         """
         if not model_id:
             return None
-        return LLMCatalogService.load_catalog().models.get(model_id)
+        return self.load_catalog().models.get(model_id)
 
-    @staticmethod
-    def list_models() -> list[LLMModelEntry]:
+    def list_models(self) -> list[LLMModelEntry]:
         """Return catalog models sorted by display name.
 
         Returns:
             Ordered list of model entries for UI selection.
         """
-        catalog = LLMCatalogService.load_catalog()
+        catalog = self.load_catalog()
         return sorted(
             catalog.models.values(),
             key=lambda entry: (entry.display_name.lower(), entry.id),
         )
 
-    @staticmethod
-    def add_user_model(payload: NewLLMModel) -> LLMModelEntry:
+    def add_user_model(self, payload: NewLLMModel) -> LLMModelEntry:
         """Append a model to ``data/llm_models.json``.
-
-        The catalog id is derived from the display name and made unique against
-        existing entries, so adding a model never fails on id collisions.
 
         Args:
             payload: Validated add-model form values.
@@ -97,130 +139,23 @@ class LLMCatalogService:
         Returns:
             Persisted catalog entry.
         """
-        data = _read_catalog_file()
-        models = dict(data["models"])
-        model_id = generate_model_id(payload.display_name, models)
+        return self._repo.add_user_model(payload)
 
-        api_key = payload.api_key
-        api_key_required = payload.api_key_required or bool(api_key)
-        entry_dict = _model_dict(
-            display_name=payload.display_name,
-            model_name=payload.model,
-            base_url=payload.base_url,
-            api_key_required=api_key_required,
-            api_key=api_key,
-            accepts_audio_input=payload.accepts_audio_input,
-        )
-        models[model_id] = entry_dict
-        data["models"] = models
-        data["selected"] = model_id
-        _write_catalog_file(data)
-        return _parse_model(model_id, entry_dict)
-
-    @staticmethod
-    def update_model_api_key(model_id: str, api_key: str | None) -> None:
+    def update_model_api_key(self, model_id: str, api_key: str | None) -> None:
         """Persist an API key for a catalog model.
 
         Args:
             model_id: Catalog model id.
             api_key: API key to store, or ``None`` to remove it.
         """
-        data = _read_catalog_file()
-        models = dict(data["models"])
-        raw_entry = models.get(model_id)
-        if not isinstance(raw_entry, dict):
-            return
-        entry = dict(raw_entry)
-        if api_key:
-            entry["api_key"] = api_key
-            entry["api_key_required"] = True
-        else:
-            entry.pop("api_key", None)
-        models[model_id] = entry
-        data["models"] = models
-        _write_catalog_file(data)
+        self._repo.update_model_api_key(model_id, api_key)
 
-    @staticmethod
-    def save_model_selection(model_id: str, api_key: str | None) -> None:
-        """Persist the active model and optional API key update.
+    def save_model_selection(self, model_id: str, api_key: str | None) -> None:
+        """Persist the active model and update the stored API key.
 
         Args:
             model_id: Catalog model id selected for interviews.
-            api_key: API key to store when provided on save.
+            api_key: API key to store, or ``None`` to clear the stored key.
         """
-        LLMCatalogService.set_selected_model(model_id)
-        if api_key:
-            LLMCatalogService.update_model_api_key(model_id, api_key)
-
-
-def _model_dict(
-    *,
-    display_name: str,
-    model_name: str,
-    base_url: str,
-    api_key_required: bool,
-    api_key: str | None = None,
-    provider_type: str = "openai-compatible",
-    accepts_audio_input: bool = False,
-) -> dict[str, Any]:
-    """Build a catalog entry dictionary for persistence."""
-    entry: dict[str, Any] = {
-        "display_name": display_name,
-        "provider_type": provider_type,
-        "model": model_name,
-        "base_url": base_url,
-        "api_key_required": api_key_required,
-        "accepts_audio_input": accepts_audio_input,
-    }
-    if api_key:
-        entry["api_key"] = api_key
-    return entry
-
-
-def _read_catalog_file() -> dict[str, Any]:
-    """Return catalog JSON, seeding an empty file when missing."""
-    if not LLM_MODELS_PATH.exists():
-        LLM_MODELS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        empty: dict[str, Any] = {"selected": "", "models": {}}
-        LLM_MODELS_PATH.write_text(json.dumps(empty, indent=2))
-        return empty
-    data: dict[str, Any] = json.loads(LLM_MODELS_PATH.read_text())
-    data.setdefault("selected", "")
-    data.setdefault("models", {})
-    return data
-
-
-def _write_catalog_file(data: dict[str, Any]) -> None:
-    """Persist catalog JSON to disk."""
-    LLM_MODELS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "selected": str(data["selected"]).strip(),
-        "models": data["models"],
-    }
-    LLM_MODELS_PATH.write_text(json.dumps(payload, indent=2))
-
-
-def _parse_models(raw: dict[str, Any]) -> dict[str, LLMModelEntry]:
-    """Parse a models mapping from catalog JSON."""
-    parsed: dict[str, LLMModelEntry] = {}
-    for model_id, item in raw.items():
-        if isinstance(item, dict):
-            parsed[model_id] = _parse_model(model_id, item)
-    return parsed
-
-
-def _parse_model(model_id: str, item: dict[str, Any]) -> LLMModelEntry:
-    """Parse one catalog model entry."""
-    base_url = str(item.get("base_url", "")).strip().rstrip("/")
-    raw_api_key = item.get("api_key")
-    api_key = str(raw_api_key).strip() if raw_api_key else None
-    return LLMModelEntry(
-        id=model_id,
-        display_name=str(item.get("display_name", model_id)),
-        provider_type=str(item.get("provider_type", "openai-compatible")),
-        model=str(item.get("model", "")),
-        base_url=base_url,
-        api_key_required=bool(item.get("api_key_required", False)),
-        api_key=api_key,
-        accepts_audio_input=bool(item.get("accepts_audio_input", False)),
-    )
+        self.set_selected_model(model_id)
+        self.update_model_api_key(model_id, api_key)

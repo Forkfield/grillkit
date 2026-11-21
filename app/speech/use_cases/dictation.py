@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Dictation session for buffered PCM audio."""
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.shared.infrastructure.audio_wav import (
     CANONICAL_AUDIO_SAMPLE_RATE_HZ,
     pcm16le_to_float32,
@@ -12,7 +12,7 @@ DICTATION_SAMPLE_RATE_HZ: int = CANONICAL_AUDIO_SAMPLE_RATE_HZ
 
 
 class DictationSession:
-    """Buffered PCM audio transcribed on finalize via a :class:`SpeechTranscriber`.
+    """Buffered PCM audio transcribed on finalize via a :class:`Stt`.
 
     Expects 16-bit signed little-endian mono PCM at ``DICTATION_SAMPLE_RATE_HZ``.
     """
@@ -30,11 +30,11 @@ class DictationSession:
         if chunk:
             self._buffer.extend(chunk)
 
-    async def finalize(self, transcriber: SpeechTranscriber, locale: str) -> str:
+    async def finalize(self, transcriber: Stt, locale: str) -> str:
         """Transcribe buffered audio and return the full transcript.
 
         Args:
-            transcriber: Loaded speech transcriber implementation.
+            transcriber: Loaded STT engine implementation.
             locale: Interview locale code for recognition language.
 
         Returns:

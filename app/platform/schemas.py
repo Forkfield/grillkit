@@ -2,18 +2,22 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pydantic models and mappers for the platform feature."""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.question_voice.schemas import PiperVoiceStatusRead
-from app.shared.speech_models import (
-    SPEECH_MODEL_BY_SIZE,
-    SpeechModelSpec,
+from app.shared.locales import DEFAULT_LOCALE
+from app.shared.stt_models import (
+    DEFAULT_STT_MODEL_SIZE,
+    STT_MODEL_BY_SIZE,
+    SttModelSpec,
 )
 from app.speech.schemas.status import WhisperModelStatusRead
 
 
 class AppConfigRead(BaseModel):
-    """Saved provider settings for configuration UI templates.
+    """Saved provider settings for the configuration UI.
 
     Attributes:
         provider_type: AI provider adapter id.
@@ -28,7 +32,7 @@ class AppConfigRead(BaseModel):
         llm_preset_id: Active catalog model id, if set.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     provider_type: str
     base_url: str
@@ -55,7 +59,7 @@ class LLMPresetOptionRead(BaseModel):
         accepts_audio_input: Whether the model supports audio answer submission.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     id: str
     display_name: str
@@ -79,7 +83,7 @@ class SpeechModelSpecRead(BaseModel):
         quality_hint: Relative transcription quality.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     size: str
     display_name: str
@@ -91,7 +95,7 @@ class SpeechModelSpecRead(BaseModel):
 
 
 class ConfigPageContext(BaseModel):
-    """Full Jinja context for ``config.html``.
+    """Full JSON context for the config page.
 
     Attributes:
         config: Masked provider settings for the form, if configured.
@@ -99,7 +103,6 @@ class ConfigPageContext(BaseModel):
         speech_model_specs: Whisper size options keyed by size slug.
         speech_model_status: Whisper install/load status snapshot.
         speech_model_banner: Whether to show the speech model banner.
-        status: Alias for ``speech_model_status`` (legacy template name).
         tts_voice_status: Piper question-voice status snapshot.
         tts_voice_banner: Whether to show the question-voice banner.
         llm_presets: Interview model catalog options.
@@ -108,14 +111,13 @@ class ConfigPageContext(BaseModel):
         message: Optional success or informational message.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     config: AppConfigRead | None
     locales: dict[str, str]
     speech_model_specs: dict[str, SpeechModelSpecRead]
     speech_model_status: WhisperModelStatusRead | None = None
     speech_model_banner: bool = False
-    status: WhisperModelStatusRead | None = None
     tts_voice_status: PiperVoiceStatusRead | None = None
     tts_voice_banner: bool = False
     llm_presets: list[LLMPresetOptionRead] = Field(default_factory=list)
@@ -139,7 +141,9 @@ class NewLLMModel(BaseModel):
         accepts_audio_input: Whether the model supports multimodal audio answers.
     """
 
-    model_config = ConfigDict(str_strip_whitespace=True, frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        str_strip_whitespace=True, frozen=True
+    )
 
     display_name: str
     base_url: str
@@ -181,26 +185,88 @@ class NewLLMModel(BaseModel):
         return str(value).strip() or None
 
 
+class SaveConfigBody(BaseModel):
+    """JSON body for saving the AI provider configuration.
+
+    Attributes:
+        llm_preset_id: Selected catalog model id.
+        api_key: API key field value (may be empty or masked placeholder).
+        timeout: Request timeout in seconds.
+        locale: Interview language code.
+        speech_model_size: Whisper model size slug.
+        question_voice_enabled: Whether Piper TTS reads questions aloud.
+    """
+
+    llm_preset_id: str
+    api_key: str = ""
+    timeout: float = 60.0
+    locale: str = DEFAULT_LOCALE
+    speech_model_size: str = DEFAULT_STT_MODEL_SIZE
+    question_voice_enabled: bool = False
+
+
+class ConfigTestResponse(BaseModel):
+    """Response for POST /api/config/test.
+
+    Attributes:
+        success: Whether the provider connection probe passed.
+        message: Result message to show in the UI.
+    """
+
+    success: bool
+    message: str
+
+
+class ConfigSaveResponse(BaseModel):
+    """Response for POST and DELETE /api/config.
+
+    Attributes:
+        success: Whether the operation succeeded.
+        message: Result message to show in the UI.
+        page: Fresh config page context after the operation.
+    """
+
+    success: bool
+    message: str
+    page: ConfigPageContext
+
+
+class AddLLMModelResponse(BaseModel):
+    """Response for POST /api/config/llm-models.
+
+    Attributes:
+        error: Optional validation or connection error message.
+        message: Optional success message.
+        selected_preset_id: Catalog id to preselect on the config page.
+        page: Fresh config page context after the operation.
+    """
+
+    error: str | None = None
+    message: str | None = None
+    selected_preset_id: str | None = None
+    page: ConfigPageContext
+
+
 def speech_model_specs_for_config() -> dict[str, SpeechModelSpecRead]:
-    """Build speech model spec read models keyed by size for ``config.html``.
+    """Build speech model spec read models keyed by size for the config page.
 
     Returns:
-        Dict mapping size slug to read model (matches template iteration).
+        Dict mapping size slug to read model (matches page iteration).
     """
     return {
         size: speech_model_spec_read_from(spec)
-        for size, spec in SPEECH_MODEL_BY_SIZE.items()
+        for size, spec in STT_MODEL_BY_SIZE.items()
     }
 
 
-def speech_model_spec_read_from(spec: SpeechModelSpec) -> SpeechModelSpecRead:
+def speech_model_spec_read_from(spec: SttModelSpec) -> SpeechModelSpecRead:
     """Map a speech model spec to a read model.
 
     Args:
         spec: Whisper model metadata from speech services.
 
     Returns:
-        Immutable read model for templates.
+        Immutable read model.
     """
     return SpeechModelSpecRead(
         size=spec.size,

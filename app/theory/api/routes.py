@@ -20,8 +20,8 @@ from app.interview.api.deps import (
     AIProviderDep,
     CompleteSessionDep,
     InterviewLoaderDep,
-    SpeechTranscriberDep,
-    TheorySubmissionServiceDep,
+    SttDep,
+    SubmitTheoryAnswerDep,
 )
 from app.shared.api.negotiated_response import safe_send_json
 from app.theory.api.audio_answer import TheoryAudioAnswerAdapter
@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 async def submit_theory_audio_answer(
     interview_id: str,
     provider: AIProviderDep,
-    transcriber: SpeechTranscriberDep,
-    submission_service: TheorySubmissionServiceDep,
+    transcriber: SttDep,
+    submission_service: SubmitTheoryAnswerDep,
     question_id: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
 ) -> StreamingResponse:
@@ -82,7 +82,7 @@ async def handle_theory_websocket(
     websocket: WebSocket,
     interview_id: str,
     provider: AIProviderDep,
-    submission_service: TheorySubmissionServiceDep,
+    submission_service: SubmitTheoryAnswerDep,
     session_completion: CompleteSessionDep,
     interview_query: InterviewLoaderDep,
 ) -> None:
@@ -123,7 +123,7 @@ async def theory_ws(
     websocket: WebSocket,
     interview_id: str,
     provider: AIProviderDep,
-    submission_service: TheorySubmissionServiceDep,
+    submission_service: SubmitTheoryAnswerDep,
     session_completion: CompleteSessionDep,
     interview_query: InterviewLoaderDep,
 ) -> None:

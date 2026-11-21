@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.ai.speech_transcriber import SpeechTranscriber
+from app.ai.stt import Stt
 from app.platform.domain.config import AppConfig
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.speech.domain.stt_loader import SttModelLoader
@@ -27,9 +27,6 @@ class MockConfigServiceWithModel:
     @staticmethod
     def get_config():
         return AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="small",
             question_voice_enabled=True,
             tts_voice_id="en_US-lessac-medium",
@@ -41,7 +38,7 @@ def make_loader(
     *,
     installed: bool = True,
     loaded: bool = False,
-    transcriber: SpeechTranscriber | None = None,
+    transcriber: Stt | None = None,
 ) -> MagicMock:
     """Build a spec'd STT loader mock with predictable defaults."""
     loader = MagicMock(spec=SttModelLoader)
@@ -128,9 +125,6 @@ class TestSyncWhisper:
         loader = make_loader(installed=True)
         coordinator = make_coordinator(loader, make_engine())
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="medium",
         )
 
@@ -144,9 +138,6 @@ class TestSyncWhisper:
         loader = make_loader(installed=False)
         coordinator = make_coordinator(loader, make_engine())
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="large",
         )
 
@@ -175,9 +166,6 @@ class TestSyncPiper:
         engine = make_engine(installed=True)
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=True,
             tts_voice_id="en_US-lessac-medium",
         )
@@ -193,9 +181,6 @@ class TestSyncPiper:
         engine = make_engine()
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
 
@@ -210,9 +195,6 @@ class TestSyncPiper:
         engine = make_engine(installed=False)
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=True,
             tts_voice_id="en_US-lessac-medium",
         )
@@ -243,9 +225,6 @@ class TestReloadAfterConfigSave:
         engine = make_engine(installed=True)
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="small",
             question_voice_enabled=True,
             tts_voice_id="ru_RU-dmitri-medium",
@@ -266,9 +245,6 @@ class TestPreloadWhisperForActiveInterview:
         loader = make_loader(installed=True, loaded=False)
         coordinator = make_coordinator(loader, make_engine())
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="small",
         )
 
@@ -296,9 +272,6 @@ class TestPreloadWhisperForActiveInterview:
         loader = make_loader()
         coordinator = make_coordinator(loader, make_engine())
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="small",
         )
 
@@ -314,9 +287,6 @@ class TestPreloadWhisperForActiveInterview:
         loader = make_loader(installed=True, loaded=True)
         coordinator = make_coordinator(loader, make_engine())
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             speech_model_size="small",
         )
 

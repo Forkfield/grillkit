@@ -4,22 +4,11 @@
 
 from typing import Any
 
-from app.coding.domain.entities import CodingSection, CodingTask
+from app.coding.domain.entities import CodingSection
 from app.coding.domain.exceptions import CodingSectionNotFoundError
-from app.coding.domain.task_spec import client_task_spec_from_stored
+from app.coding.schemas.ws import next_task_payload
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.use_cases.advance_phase import AdvanceSessionPhase
-
-
-def next_task_payload(task: CodingTask) -> dict[str, Any]:
-    """Build WebSocket/API payload for the next unsubmitted coding task."""
-    return {
-        "task_id": task.task_id,
-        "order": task.order,
-        "round": task.round,
-        "prompt_text": task.prompt_text,
-        "task_spec": client_task_spec_from_stored(task.task_spec),
-    }
 
 
 class CodingTaskNavigation:
@@ -68,6 +57,3 @@ class CodingTaskNavigation:
                 interview_id,
                 "coding",
             )
-
-
-CodingNavigationService = CodingTaskNavigation

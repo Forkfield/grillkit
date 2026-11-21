@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whisper model status read models."""
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -23,7 +23,7 @@ class WhisperModelStatusRead(BaseModel):
         loaded_in_memory: True when the model is loaded for this size.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     size: str
     locale: str

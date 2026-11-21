@@ -8,31 +8,30 @@ from typing import Annotated
 from fastapi import Depends, HTTPException
 
 from app.ai.base import AIProvider
-from app.ai.speech_transcriber import SpeechTranscriber
-from app.coding.queries.loader import CodingTaskLoader as CodingStateService
-from app.coding.queries.review_page import CodingReviewPage as CodingReviewService
+from app.ai.stt import Stt
+from app.coding.queries.loader import CodingTaskLoader
+from app.coding.queries.review_page import CodingReviewPage
 from app.coding.use_cases.create_section import CreateCodingSection
-from app.coding.use_cases.submit_solution import (
-    SubmitCodingSolution as CodingSubmissionService,
-)
+from app.coding.use_cases.submit_solution import SubmitCodingSolution
 from app.interview.queries.dashboard import InterviewDashboard
+from app.interview.queries.known_questions import KnownQuestionsQuery
 from app.interview.queries.loader import InterviewLoader
 from app.interview.queries.results_page import CompletedSessionResults
-from app.interview.queries.session_page import ActiveSessionPage
 from app.interview.use_cases.complete_session import CompleteInterviewSession
 from app.interview.use_cases.create_session import CreateInterviewSession
+from app.interview.use_cases.known_questions import MarkKnownItem, UnmarkKnownItem
+from app.interview.use_cases.session_page import OpenSessionPage
+from app.interview.use_cases.setup_session import StartSessionFromSetup
 from app.platform.api.deps import SpeechRuntimeDep
 from app.shared.application.uow_deps import UoWAutoCommitDep, UoWDep
 from app.shared.infrastructure.gateways.ai_context import ai_provider_from_config
-from app.speech.domain.transcriber_resolver import (
-    resolve_speech_transcriber,
-    speech_transcriber_unavailable_message,
+from app.speech.domain.stt_resolver import (
+    resolve_stt,
+    stt_unavailable_message,
 )
-from app.theory.queries.review_page import TheoryReviewPage as TheoryReviewService
+from app.theory.queries.review_page import TheoryReviewPage
 from app.theory.use_cases.create_section import CreateTheorySection
-from app.theory.use_cases.submit_answer import (
-    SubmitTheoryAnswer as TheorySubmissionService,
-)
+from app.theory.use_cases.submit_answer import SubmitTheoryAnswer
 
 
 async def get_ai_provider() -> AsyncIterator[AIProvider]:
@@ -58,9 +57,9 @@ def get_dashboard_builder(uow: UoWDep) -> InterviewDashboard:
     return InterviewDashboard(uow)
 
 
-def get_session_page_service(uow: UoWAutoCommitDep) -> ActiveSessionPage:
-    """Build a session page service bound to an auto-commit UoW."""
-    return ActiveSessionPage(uow)
+def get_open_session_page(uow: UoWAutoCommitDep) -> OpenSessionPage:
+    """Build the open-session-page use case bound to an auto-commit UoW."""
+    return OpenSessionPage(uow)
 
 
 def get_create_theory_section(
@@ -99,6 +98,38 @@ def get_session_creation_service(
     )
 
 
+def get_known_questions_query(uow: UoWAutoCommitDep) -> KnownQuestionsQuery:
+    """Build the known-questions read query bound to an auto-commit UoW."""
+    return KnownQuestionsQuery(uow)
+
+
+def get_mark_known_item(uow: UoWAutoCommitDep) -> MarkKnownItem:
+    """Build the mark-known-item use case bound to an auto-commit UoW."""
+    return MarkKnownItem(uow)
+
+
+def get_unmark_known_item(uow: UoWAutoCommitDep) -> UnmarkKnownItem:
+    """Build the unmark-known-item use case bound to an auto-commit UoW."""
+    return UnmarkKnownItem(uow)
+
+
+def get_start_session_from_setup(
+    create_session: Annotated[
+        CreateInterviewSession,
+        Depends(get_session_creation_service),
+    ],
+) -> StartSessionFromSetup:
+    """Build the setup submission use case around session creation.
+
+    Args:
+        create_session: Session creation use case.
+
+    Returns:
+        Setup submission use case instance.
+    """
+    return StartSessionFromSetup(create_session=create_session)
+
+
 def get_session_completion_service(
     uow: UoWDep,
 ) -> CompleteInterviewSession:
@@ -106,7 +137,7 @@ def get_session_completion_service(
     return CompleteInterviewSession(uow)
 
 
-def get_theory_submission_service(uow: UoWDep) -> TheorySubmissionService:
+def get_theory_submission_service(uow: UoWDep) -> SubmitTheoryAnswer:
     """Build a theory submission service bound to the request UoW.
 
     Args:
@@ -115,10 +146,10 @@ def get_theory_submission_service(uow: UoWDep) -> TheorySubmissionService:
     Returns:
         Theory submission service instance.
     """
-    return TheorySubmissionService(uow)
+    return SubmitTheoryAnswer(uow)
 
 
-def get_coding_submission_service(uow: UoWDep) -> CodingSubmissionService:
+def get_coding_submission_service(uow: UoWDep) -> SubmitCodingSolution:
     """Build a coding submission service bound to the request UoW.
 
     Args:
@@ -127,12 +158,12 @@ def get_coding_submission_service(uow: UoWDep) -> CodingSubmissionService:
     Returns:
         Coding submission service instance.
     """
-    return CodingSubmissionService(uow)
+    return SubmitCodingSolution(uow)
 
 
-def get_coding_state_service(uow: UoWDep) -> CodingStateService:
+def get_coding_state_service(uow: UoWDep) -> CodingTaskLoader:
     """Build a coding state service bound to the request UoW."""
-    return CodingStateService(uow)
+    return CodingTaskLoader(uow)
 
 
 def get_session_results_page_service(
@@ -142,7 +173,7 @@ def get_session_results_page_service(
     return CompletedSessionResults(uow)
 
 
-def get_theory_review_service(uow: UoWDep) -> TheoryReviewService:
+def get_theory_review_service(uow: UoWDep) -> TheoryReviewPage:
     """Build a theory review service bound to the request UoW.
 
     Args:
@@ -151,10 +182,10 @@ def get_theory_review_service(uow: UoWDep) -> TheoryReviewService:
     Returns:
         Theory review service instance.
     """
-    return TheoryReviewService(uow)
+    return TheoryReviewPage(uow)
 
 
-def get_coding_review_service(uow: UoWDep) -> CodingReviewService:
+def get_coding_review_service(uow: UoWDep) -> CodingReviewPage:
     """Build a coding review service bound to the request UoW.
 
     Args:
@@ -163,33 +194,49 @@ def get_coding_review_service(uow: UoWDep) -> CodingReviewService:
     Returns:
         Coding review service instance.
     """
-    return CodingReviewService(uow)
+    return CodingReviewPage(uow)
 
 
 InterviewLoaderDep = Annotated[InterviewLoader, Depends(get_interview_query)]
 InterviewDashboardDep = Annotated[InterviewDashboard, Depends(get_dashboard_builder)]
-ActiveSessionPageDep = Annotated[
-    ActiveSessionPage,
-    Depends(get_session_page_service),
+OpenSessionPageDep = Annotated[
+    OpenSessionPage,
+    Depends(get_open_session_page),
 ]
 CreateSessionDep = Annotated[
     CreateInterviewSession,
     Depends(get_session_creation_service),
 ]
+KnownQuestionsQueryDep = Annotated[
+    KnownQuestionsQuery,
+    Depends(get_known_questions_query),
+]
+MarkKnownItemDep = Annotated[
+    MarkKnownItem,
+    Depends(get_mark_known_item),
+]
+UnmarkKnownItemDep = Annotated[
+    UnmarkKnownItem,
+    Depends(get_unmark_known_item),
+]
+StartSetupSessionDep = Annotated[
+    StartSessionFromSetup,
+    Depends(get_start_session_from_setup),
+]
 CompleteSessionDep = Annotated[
     CompleteInterviewSession,
     Depends(get_session_completion_service),
 ]
-TheorySubmissionServiceDep = Annotated[
-    TheorySubmissionService,
+SubmitTheoryAnswerDep = Annotated[
+    SubmitTheoryAnswer,
     Depends(get_theory_submission_service),
 ]
-CodingSubmissionServiceDep = Annotated[
-    CodingSubmissionService,
+SubmitCodingSolutionDep = Annotated[
+    SubmitCodingSolution,
     Depends(get_coding_submission_service),
 ]
-CodingStateServiceDep = Annotated[
-    CodingStateService,
+CodingTaskLoaderDep = Annotated[
+    CodingTaskLoader,
     Depends(get_coding_state_service),
 ]
 CreateTheorySectionDep = Annotated[
@@ -204,38 +251,38 @@ CompletedSessionResultsDep = Annotated[
     CompletedSessionResults,
     Depends(get_session_results_page_service),
 ]
-TheoryReviewServiceDep = Annotated[
-    TheoryReviewService,
+TheoryReviewPageDep = Annotated[
+    TheoryReviewPage,
     Depends(get_theory_review_service),
 ]
-CodingReviewServiceDep = Annotated[
-    CodingReviewService,
+CodingReviewPageDep = Annotated[
+    CodingReviewPage,
     Depends(get_coding_review_service),
 ]
 AIProviderDep = Annotated[AIProvider, Depends(get_ai_provider)]
 
 
-async def get_speech_transcriber(
+async def get_stt(
     coordinator: SpeechRuntimeDep,
-) -> SpeechTranscriber:
-    """Resolve a loaded speech transcriber through the speech runtime.
+) -> Stt:
+    """Resolve a loaded STT engine through the speech runtime.
 
     Args:
         coordinator: App-lifetime speech runtime coordinator.
 
     Returns:
-        Loaded speech transcriber.
+        Loaded STT engine.
 
     Raises:
         HTTPException: When a speech model is not installed or loaded.
     """
-    transcriber = await resolve_speech_transcriber(coordinator)
-    if transcriber is None:
+    stt = await resolve_stt(coordinator)
+    if stt is None:
         raise HTTPException(
             status_code=503,
-            detail=speech_transcriber_unavailable_message(coordinator),
+            detail=stt_unavailable_message(coordinator),
         )
-    return transcriber
+    return stt
 
 
-SpeechTranscriberDep = Annotated[SpeechTranscriber, Depends(get_speech_transcriber)]
+SttDep = Annotated[Stt, Depends(get_stt)]

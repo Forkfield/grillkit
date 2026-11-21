@@ -7,7 +7,9 @@ from YAML files organized by track, level, and category.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 import logging
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -18,7 +20,7 @@ from app.shared.paths import QUESTIONS_DIR
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Question:
     """Interview question data.
 
@@ -26,7 +28,7 @@ class Question:
         id: Unique question identifier.
         type: Question type (e.g., "technical", "behavioral").
         difficulty: Difficulty level (1-5 scale).
-        tags: List of topic tags.
+        tags: Topic tags.
         text: The question text.
         code: Optional code snippet (None if not applicable).
         expected_points: Rubric bullets for AI evaluation.
@@ -35,7 +37,7 @@ class Question:
     id: str
     type: str
     difficulty: int
-    tags: list[str]
+    tags: tuple[str, ...]
     text: str
     code: str | None
     expected_points: tuple[str, ...] = ()
@@ -104,11 +106,24 @@ def load_category(
     path = QUESTIONS_DIR / track / level / f"{category}.yaml"
     if not path.exists():
         return []
+    return list(_load_category_cached(path, locale))
 
+
+@lru_cache(maxsize=256)
+def _load_category_cached(path: Path, locale: str) -> tuple[Question, ...]:
+    """Parse one question category file (cached per absolute path and locale).
+
+    Args:
+        path: Absolute category YAML file path.
+        locale: Locale for question text.
+
+    Returns:
+        Parsed questions in file order.
+    """
     with open(path) as f:
         data = yaml.safe_load(f)
     if data is None:
-        return []
+        return ()
 
     questions = []
     for q in data.get("questions", []):
@@ -122,7 +137,7 @@ def load_category(
                 id=qid,
                 type=q["type"],
                 difficulty=q["difficulty"],
-                tags=q.get("tags", []),
+                tags=tuple(q.get("tags", [])),
                 text=_resolve_localized_string(
                     q["question"]["text"],
                     locale,
@@ -133,7 +148,7 @@ def load_category(
                 expected_points=tuple(str(point) for point in points_raw),
             )
         )
-    return questions
+    return tuple(questions)
 
 
 def load_categories(

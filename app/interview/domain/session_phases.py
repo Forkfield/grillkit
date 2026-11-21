@@ -34,21 +34,6 @@ class SectionEvaluationSummary:
     skipped: bool = False
 
 
-@dataclass(frozen=True, slots=True)
-class SectionPageContext:
-    """Minimal page context exposed by an interview section.
-
-    Attributes:
-        section: Section kind identifier.
-        active: Whether this section is the current user-facing phase.
-        complete: Whether the user finished all tasks in this section.
-    """
-
-    section: SectionKind
-    active: bool
-    complete: bool
-
-
 class SectionService(Protocol):
     """Contract implemented by theory and coding section services."""
 
@@ -56,15 +41,6 @@ class SectionService(Protocol):
 
     def is_complete(self, interview_id: str) -> bool:
         """Return whether the section has no remaining user tasks."""
-
-    def is_user_facing(self, interview_id: str) -> bool:
-        """Return whether the user should interact with this section now."""
-
-    def activate_if_pending(self, interview_id: str) -> bool:
-        """Promote a pending section to active when prerequisites are met."""
-
-    def get_page_context(self, interview_id: str) -> SectionPageContext | None:
-        """Return section page metadata for session composition."""
 
     def get_evaluation_summary(
         self,
@@ -124,52 +100,17 @@ def section_services(
     Returns:
         Mapping from section kind to the corresponding section service instance.
     """
-    from app.coding.queries.section_state import (
-        CodingSectionState as CodingSectionService,
-    )
-    from app.coding.queries.section_summary import (
-        CodingSectionSummary as CodingQueryService,
-    )
-    from app.theory.queries.loader import TheorySectionLoader as TheoryQueryService
-    from app.theory.queries.section_state import (
-        TheorySectionState as TheorySectionService,
-    )
+    from app.coding.queries.section_state import CodingSectionState
+    from app.coding.queries.section_summary import CodingSectionSummary
+    from app.theory.queries.loader import TheorySectionLoader
+    from app.theory.queries.section_state import TheorySectionState
 
-    theory_query = TheoryQueryService(uow)
-    coding_query = CodingQueryService(uow)
+    theory_query = TheorySectionLoader(uow)
+    coding_query = CodingSectionSummary(uow)
     return cast(
         dict[SectionKind, SectionService],
         {
-            "theory": TheorySectionService(uow, query=theory_query),
-            "coding": CodingSectionService(uow, query=coding_query),
+            "theory": TheorySectionState(uow, query=theory_query),
+            "coding": CodingSectionState(uow, query=coding_query),
         },
     )
-
-
-def prior_sections_complete_for(
-    interview_id: str,
-    section: SectionKind,
-    uow: InterviewUnitOfWork,
-) -> bool:
-    """Return whether every section before ``section`` in phase order is complete.
-
-    Args:
-        interview_id: Parent interview UUID.
-        section: Target section kind to check prerequisites for.
-        uow: Shared application unit of work for the caller scope.
-
-    Returns:
-        True when all prior sections are finished or absent from the phase order.
-    """
-    services = section_services(uow)
-    aggregate = uow.interviews.get_aggregate(interview_id)
-    if aggregate is None:
-        return False
-    order = phase_order_for_mode(aggregate.session_mode)
-    if section not in order:
-        return False
-    target_index = order.index(section)
-    for kind in order[:target_index]:
-        if not services[kind].is_complete(interview_id):
-            return False
-    return True

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.schemas.interview import InterviewRead
 from app.platform.domain.config import AppConfig
 from app.question_voice.use_cases.generate_question_audio import (
     GenerateQuestionAudio,
@@ -16,6 +16,7 @@ from app.question_voice.use_cases.generate_question_audio import (
 )
 from app.shared.infrastructure.gateways.tts_exceptions import QuestionVoiceDisabledError
 from app.speech.domain.tts_engine import TtsEngine
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 def _engine():
@@ -28,9 +29,9 @@ def _make_answer(
     answer_id: int = 1,
     question_text: str = "What is Python?",
     answer_text: str | None = None,
-) -> AnswerRead:
-    """Build an AnswerRead for tests."""
-    return AnswerRead(
+) -> TheoryTaskRead:
+    """Build an TheoryTaskRead for tests."""
+    return TheoryTaskRead(
         id=answer_id,
         question_id="q1",
         order=1,
@@ -44,7 +45,7 @@ def _make_answer(
     )
 
 
-def _make_interview(answers: list[AnswerRead]) -> InterviewRead:
+def _make_interview(answers: list[TheoryTaskRead]) -> InterviewRead:
     """Build an InterviewRead for tests."""
     return InterviewRead(
         id="test-interview-id",
@@ -70,23 +71,20 @@ class TestGetQuestionAudioPath:
         """Missing config raises QuestionVoiceDisabledError."""
         with (
             patch(
-                "app.question_voice.use_cases.generate_question_audio.ConfigService.get_config",
-                return_value=None,
+                "app.question_voice.use_cases.generate_question_audio.get_default_config_service",
+                return_value=MagicMock(get_config=MagicMock(return_value=None)),
             ),
             pytest.raises(QuestionVoiceDisabledError),
         ):
             await GenerateQuestionAudio.execute(_engine(), "interview-id")
         """Disabled voice in config raises QuestionVoiceDisabledError."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
         with (
             patch(
-                "app.question_voice.use_cases.generate_question_audio.ConfigService.get_config",
-                return_value=config,
+                "app.question_voice.use_cases.generate_question_audio.get_default_config_service",
+                return_value=MagicMock(get_config=MagicMock(return_value=config)),
             ),
             pytest.raises(QuestionVoiceDisabledError),
         ):
@@ -97,9 +95,6 @@ class TestGetQuestionAudioPath:
         """Enabled voice returns WAV path for a specific answer_id."""
         engine = _engine()
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=True,
             tts_voice_id="en_US-lessac-medium",
             locale="en",
@@ -110,11 +105,11 @@ class TestGetQuestionAudioPath:
 
         with (
             patch(
-                "app.question_voice.use_cases.generate_question_audio.ConfigService.get_config",
-                return_value=config,
+                "app.question_voice.use_cases.generate_question_audio.get_default_config_service",
+                return_value=MagicMock(get_config=MagicMock(return_value=config)),
             ),
             patch(
-                "app.question_voice.use_cases.generate_question_audio.InterviewQuery.get_active_interview_or_raise",
+                "app.question_voice.use_cases.generate_question_audio.InterviewLoader.get_active_interview_or_raise",
                 return_value=interview,
             ),
             patch(
@@ -140,9 +135,6 @@ class TestGetQuestionAudioPath:
         """Enabled voice returns path for current unanswered question."""
         engine = _engine()
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=True,
             tts_voice_id="en_US-lessac-medium",
             locale="en",
@@ -153,11 +145,11 @@ class TestGetQuestionAudioPath:
 
         with (
             patch(
-                "app.question_voice.use_cases.generate_question_audio.ConfigService.get_config",
-                return_value=config,
+                "app.question_voice.use_cases.generate_question_audio.get_default_config_service",
+                return_value=MagicMock(get_config=MagicMock(return_value=config)),
             ),
             patch(
-                "app.question_voice.use_cases.generate_question_audio.InterviewQuery.get_active_interview_or_raise",
+                "app.question_voice.use_cases.generate_question_audio.InterviewLoader.get_active_interview_or_raise",
                 return_value=interview,
             ),
             patch(

@@ -19,6 +19,7 @@ from app.shared.infrastructure.database import Base
 from app.shared.infrastructure.models import Interview
 from app.shared.paths import ALEMBIC_INI
 from tests.helpers.selection import minimal_selection_spec
+from tests.helpers.sql_trace import count_selects
 
 
 @pytest.fixture
@@ -105,8 +106,45 @@ def test_create_and_load_coding_aggregate(db_session) -> None:
     assert loaded.tasks[1].prompt_text == "Document divide()"
 
 
+def test_save_aggregate_reuses_loaded_row(engine, db_session) -> None:
+    """Saving an aggregate just loaded issues no extra SELECTs."""
+    db_session.add(
+        Interview(
+            id="coding-save-1",
+            selection_spec=minimal_selection_spec(),
+            status="active",
+        )
+    )
+    db_session.commit()
+
+    repo = CodingSectionRepository(db_session)
+    repo.create_aggregate(
+        CodingSection.start(
+            "coding-save-1",
+            selection=InterviewSelection(
+                sources=(
+                    TrackSelection(
+                        track="python",
+                        level="junior",
+                        categories=("basics", "functions"),
+                    ),
+                )
+            ),
+            locale="en",
+            planned_tasks=_planned_tasks(),
+        )
+    )
+    db_session.commit()
+
+    loaded = repo.get_aggregate("coding-save-1")
+    assert loaded is not None
+    with count_selects(engine) as trace:
+        repo.save_aggregate(loaded)
+
+    assert trace.statements == []
+
+
 def test_coding_section_is_complete_when_all_submitted() -> None:
-    """Domain aggregate reports completion only after every task is submitted."""
     selection = InterviewSelection(
         sources=(
             TrackSelection(

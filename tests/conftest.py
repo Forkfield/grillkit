@@ -45,11 +45,7 @@ def client():
 @pytest.fixture
 def minimal_app_config() -> AppConfig:
     """Minimal saved provider configuration for API tests."""
-    return AppConfig(
-        provider_type="openai-compatible",
-        base_url="http://localhost",
-        model="gpt-4",
-    )
+    return AppConfig()
 
 
 @pytest.fixture
@@ -228,20 +224,20 @@ def uow(isolated_db):
 
 @pytest.fixture
 def minimal_config_saved(client):
-    """Save a minimal provider configuration so routes do not redirect to /config.
+    """Save a minimal provider configuration so routes do not redirect to /#/config.
 
     Yields:
-        Response from the POST /config save call.
+        Response from the POST /api/config save call.
     """
     response = client.post(
-        "/config",
-        data={
+        "/api/config",
+        json={
             "llm_preset_id": "preset-fake",
             "api_key": "",
-            "timeout": "60",
+            "timeout": 60.0,
             "locale": "en",
             "speech_model_size": "small",
-            "question_voice_enabled": "",
+            "question_voice_enabled": False,
         },
     )
     yield response

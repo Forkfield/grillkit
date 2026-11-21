@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for creating interviews in all 4 session modes."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.interview.domain.serialization import session_to_spec
 from app.interview.domain.value_objects import (
@@ -19,20 +19,22 @@ class TestSetupModes:
 
     def _config(self) -> AppConfig:
         return AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
         )
 
     def _post_setup(self, client, selection_json: str, **extra):
         data = {
             "selection_json": selection_json,
-            "question_count": "5",
-            "coding_question_count": "2",
+            "question_count": 5,
+            "coding_question_count": 2,
         }
         data.update(extra)
-        return client.post("/setup", data=data, follow_redirects=False)
+        return client.post("/api/setup", json=data)
+
+    @staticmethod
+    def _interview_id(response) -> str:
+        """Extract the created interview id from a successful response."""
+        return response.json()["redirect"].rsplit("/", 1)[-1]
 
     def test_theory_only(self, client, isolated_db):
         """Mode theory_only creates interview with theory section only."""
@@ -54,13 +56,13 @@ class TestSetupModes:
             response = self._post_setup(
                 client,
                 session_to_spec(session),
-                question_count="3",
-                enable_question_timer="on",
-                question_time_minutes="3",
+                question_count=3,
+                enable_question_timer=True,
+                question_time_minutes=3,
             )
 
-        assert response.status_code == 303
-        location = response.headers["location"]
+        assert response.status_code == 200
+        location = response.json()["redirect"]
         assert "/interview/" in location
         interview_id = location.rsplit("/", 1)[-1]
 
@@ -102,20 +104,20 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = self._post_setup(
                 client,
                 session_to_spec(session),
-                coding_question_count="2",
-                enable_coding_timer="on",
-                coding_time_minutes="10",
+                coding_question_count=2,
+                enable_coding_timer=True,
+                coding_time_minutes=10,
             )
 
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = self._interview_id(response)
 
         with InterviewUnitOfWork() as uow:
             interview = uow.interviews.get_aggregate(interview_id)
@@ -161,26 +163,27 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = self._post_setup(
                 client,
                 session_to_spec(session),
-                question_count="3",
-                coding_question_count="1",
-                enable_question_timer="on",
-                question_time_minutes="3",
-                enable_coding_timer="on",
-                coding_time_minutes="10",
+                question_count=3,
+                coding_question_count=1,
+                enable_question_timer=True,
+                question_time_minutes=3,
+                enable_coding_timer=True,
+                coding_time_minutes=10,
             )
 
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = self._interview_id(response)
 
         with InterviewUnitOfWork() as uow:
             interview = uow.interviews.get_aggregate(interview_id)
+            assert interview is not None
             assert interview.session_mode == "theory_then_coding"
             theory = uow.theory_sections.get_aggregate(interview_id)
             coding = uow.coding_sections.get_aggregate(interview_id)
@@ -223,26 +226,27 @@ class TestSetupModes:
                 return_value=self._config(),
             ),
             patch(
-                "app.interview.domain.rules.selection.is_coding_available",
-                return_value=True,
+                "app.interview.use_cases.setup_session.is_coding_available",
+                new=AsyncMock(return_value=True),
             ),
         ):
             response = self._post_setup(
                 client,
                 session_to_spec(session),
-                question_count="2",
-                coding_question_count="2",
-                enable_question_timer="on",
-                question_time_minutes="2",
-                enable_coding_timer="on",
-                coding_time_minutes="8",
+                question_count=2,
+                coding_question_count=2,
+                enable_question_timer=True,
+                question_time_minutes=2,
+                enable_coding_timer=True,
+                coding_time_minutes=8,
             )
 
-        assert response.status_code == 303
-        interview_id = response.headers["location"].rsplit("/", 1)[-1]
+        assert response.status_code == 200
+        interview_id = self._interview_id(response)
 
         with InterviewUnitOfWork() as uow:
             interview = uow.interviews.get_aggregate(interview_id)
+            assert interview is not None
             assert interview.session_mode == "coding_then_theory"
             theory = uow.theory_sections.get_aggregate(interview_id)
             coding = uow.coding_sections.get_aggregate(interview_id)

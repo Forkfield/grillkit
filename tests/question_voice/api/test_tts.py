@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import PiperVoiceStatusRead
 from tests.helpers.session_creation import create_session
@@ -30,9 +30,6 @@ class TestTtsStatusApi:
     def test_status_json_when_voice_disabled(self, client):
         """Status reports unavailable when voice is off."""
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
         missing = PiperVoiceStatusRead(
@@ -198,9 +195,6 @@ class TestQuestionAudioApi:
         del temp_questions_dir
         monkeypatch.setattr("random.shuffle", lambda items: None)
         config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             question_voice_enabled=False,
         )
         from app.interview.domain.value_objects import (
@@ -258,7 +252,7 @@ class TestQuestionAudioApi:
             ),
             locale="en",
         )
-        reloaded = InterviewQuery.load(interview.id)
+        reloaded = InterviewLoader.load(interview.id)
         assert reloaded is not None
         answer = reloaded.answers[0]
         wav_path = tmp_path / "question.wav"

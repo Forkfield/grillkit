@@ -10,8 +10,6 @@ from app.coding.domain.evaluator import CodingEvaluator
 from app.coding.queries.section_summary import CodingSectionSummary
 from app.interview.domain.session_phases import (
     SectionEvaluationSummary,
-    SectionPageContext,
-    prior_sections_complete_for,
 )
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.support.feedback_prefetch import SectionFeedbackPrefetch
@@ -108,54 +106,6 @@ class CodingSectionState:
             return True
         return section.is_complete()
 
-    def is_user_facing(self, interview_id: str) -> bool:
-        """Return whether the user should interact with the coding section now.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            True when the coding section is active and still has work remaining.
-        """
-        section = self._uow.coding_sections.get_aggregate(interview_id)
-        if section is None:
-            return False
-        complete = section.status in {"skipped", "completed"} or section.is_complete()
-        return section.status == "active" and not complete
-
-    def activate_if_pending(self, interview_id: str) -> bool:
-        """Promote a pending coding section to active when prior phases finish.
-
-        Starts the per-task timer on the first unsubmitted task when enabled.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            True when the section was activated in this call.
-        """
-        return self.activate_pending(interview_id)
-
-    def get_page_context(self, interview_id: str) -> SectionPageContext | None:
-        """Return coding section page metadata for session composition.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            Section page context, or None when no coding section exists.
-        """
-        section = self._uow.coding_sections.get_aggregate(interview_id)
-        if section is None:
-            return None
-        complete = section.status in {"skipped", "completed"} or section.is_complete()
-        active = section.status == "active" and not complete
-        return SectionPageContext(
-            section="coding",
-            active=active,
-            complete=complete,
-        )
-
     def get_evaluation_summary(
         self,
         interview_id: str,
@@ -169,33 +119,6 @@ class CodingSectionState:
             Section summary, or None when no coding section exists.
         """
         return self._query.get_evaluation_summary(interview_id)
-
-    def activate_pending(self, interview_id: str) -> bool:
-        """Promote a pending coding section to active when prior phases finish.
-
-        Starts the per-task timer on the first unsubmitted task when enabled.
-
-        Args:
-            interview_id: Parent interview UUID.
-
-        Returns:
-            True when the section was activated in this call.
-        """
-        if not prior_sections_complete_for(interview_id, "coding", self._uow):
-            return False
-        section = self._uow.coding_sections.get_aggregate(interview_id)
-        if section is None or section.status != "pending":
-            return False
-        updated = section.with_activated()
-        current = updated.find_first_unsubmitted()
-        if (
-            current is not None
-            and updated.task_time_limit_seconds is not None
-            and current.started_at is None
-        ):
-            updated = updated.start_timer_for_task(current.id)
-        self._uow.coding_sections.save_aggregate(updated)
-        return True
 
     def on_phase_complete(self, interview_id: str) -> None:
         """Schedule background prefetch of coding section narrative feedback.

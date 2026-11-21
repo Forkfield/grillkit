@@ -5,13 +5,12 @@
 import asyncio
 from collections.abc import Callable
 from pathlib import Path
-from typing import ClassVar
 
 from huggingface_hub import snapshot_download
 
 from app.shared.infrastructure.artifact_download import ArtifactDownloadService
 from app.shared.infrastructure.artifact_status import ArtifactStatusBuilder
-from app.shared.infrastructure.gateways.whisper import WhisperRuntime
+from app.shared.infrastructure.gateways.whisper import WhisperSttRuntime
 from app.shared.infrastructure.gateways.whisper_storage import (
     is_installed,
     is_valid_model_dir,
@@ -25,10 +24,10 @@ from app.shared.infrastructure.model_download import (
 )
 from app.shared.locales import SUPPORTED_LOCALES, normalize_locale
 from app.shared.paths import WHISPER_MODELS_ROOT
-from app.shared.speech_models import (
-    SpeechModelSpec,
-    normalize_speech_model_size,
-    speech_model_spec_for_size,
+from app.shared.stt_models import (
+    SttModelSpec,
+    normalize_stt_model_size,
+    stt_model_spec_for_size,
 )
 from app.speech.schemas.status import WhisperModelStatusRead
 
@@ -36,14 +35,15 @@ from app.speech.schemas.status import WhisperModelStatusRead
 class WhisperModelService(ArtifactDownloadService):
     """Download and verify offline Whisper models under ``data/whisper-models/``."""
 
-    _download_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
-    _active_key: ClassVar[str | None] = None
-    _percent: ClassVar[int] = 0
-    _error_key: ClassVar[str | None] = None
-    _error_message: ClassVar[str | None] = None
+    _DOWNLOADING_MESSAGE = "Downloading speech model…"
+    _MISSING_MESSAGE = "Speech model is not installed."
+    _READY_LOADING_MESSAGE = "Speech model installed on disk; loading into memory…"
+    _READY_LOADED_TEMPLATE = "Speech model ready for dictation in {locale_label}."
+    _READY_LOAD_FAILED_TEMPLATE = (
+        "Speech model files are installed but could not be loaded: {error}"
+    )
 
-    @staticmethod
-    def get_status(size: str, locale: str) -> WhisperModelStatusRead:
+    def get_status(self, size: str, locale: str) -> WhisperModelStatusRead:
         """Build current model status for UI and API consumers.
 
         Args:
@@ -51,25 +51,27 @@ class WhisperModelService(ArtifactDownloadService):
             locale: Interview locale for transcription language label.
 
         Returns:
-            Status snapshot for templates and JSON responses.
+            Status snapshot for JSON responses.
         """
-        model_size = normalize_speech_model_size(size)
+        model_size = normalize_stt_model_size(size)
         code = normalize_locale(locale)
-        spec = speech_model_spec_for_size(model_size)
+        spec = stt_model_spec_for_size(model_size)
         locale_label = SUPPORTED_LOCALES[code]
 
         built = ArtifactStatusBuilder.build(
             key=model_size,
-            service=WhisperModelService,
+            service=self,
             is_installed=lambda: is_installed(model_size),
-            is_loaded=lambda: WhisperRuntime.is_loaded(model_size),
-            load_error=WhisperRuntime.load_error,
-            downloading_message="Downloading speech model…",
-            missing_message="Speech model is not installed.",
-            ready_loaded_message=f"Speech model ready for dictation in {locale_label}.",
-            ready_loading_message="Speech model installed on disk; loading into memory…",
+            is_loaded=lambda: WhisperSttRuntime.is_loaded(model_size),
+            load_error=WhisperSttRuntime.load_error,
+            downloading_message=self._DOWNLOADING_MESSAGE,
+            missing_message=self._MISSING_MESSAGE,
+            ready_loaded_message=self._READY_LOADED_TEMPLATE.format(
+                locale_label=locale_label
+            ),
+            ready_loading_message=self._READY_LOADING_MESSAGE,
             ready_load_failed_message=lambda err: (
-                f"Speech model files are installed but could not be loaded: {err}"
+                self._READY_LOAD_FAILED_TEMPLATE.format(error=err)
             ),
         )
         return WhisperModelStatusRead(
@@ -83,8 +85,7 @@ class WhisperModelService(ArtifactDownloadService):
             loaded_in_memory=built.loaded_in_memory,
         )
 
-    @staticmethod
-    async def start_download(size: str, locale: str) -> WhisperModelStatusRead:
+    async def start_download(self, size: str, locale: str) -> WhisperModelStatusRead:
         """Start a background download when the model is not yet installed.
 
         Args:
@@ -94,42 +95,40 @@ class WhisperModelService(ArtifactDownloadService):
         Returns:
             Immediate status after scheduling or skipping work.
         """
-        model_size = normalize_speech_model_size(size)
+        model_size = normalize_stt_model_size(size)
         locale_code = normalize_locale(locale)
         if is_installed(model_size):
-            if not WhisperRuntime.is_loaded(model_size):
-                await WhisperRuntime.load_size(model_size)
-            return WhisperModelService.get_status(model_size, locale_code)
+            if not WhisperSttRuntime.is_loaded(model_size):
+                _ = await WhisperSttRuntime.load_size(model_size)
+            return self.get_status(model_size, locale_code)
 
-        await WhisperModelService.schedule_download(
+        _ = await self.schedule_download(
             model_size,
-            WhisperModelService._run_download,
+            self._run_download,
         )
-        return WhisperModelService.get_status(model_size, locale_code)
+        return self.get_status(model_size, locale_code)
 
-    @staticmethod
-    async def _run_download(size: str) -> None:
+    async def _run_download(self, size: str) -> None:
         """Execute download and installation, updating shared progress state."""
-        await WhisperModelService._download_and_install(size)
-        await WhisperRuntime.load_size(size)
+        await self._download_and_install(size)
+        _ = await WhisperSttRuntime.load_size(size)
 
-    @staticmethod
-    async def _download_and_install(size: str) -> None:
+    async def _download_and_install(self, size: str) -> None:
         """Download the Hugging Face snapshot into ``data/whisper-models/<size>/``."""
-        spec = speech_model_spec_for_size(size)
+        spec = stt_model_spec_for_size(size)
         target_dir = model_dir(size)
         WHISPER_MODELS_ROOT.mkdir(parents=True, exist_ok=True)
         staging_dir = prepare_staging_dir(WHISPER_MODELS_ROOT, f".staging-{size}")
 
         try:
-            WhisperModelService.set_download_percent(1)
+            self.set_download_percent(1)
             await asyncio.to_thread(
-                WhisperModelService._snapshot_download,
+                self._snapshot_download,
                 spec,
                 staging_dir,
-                WhisperModelService.set_download_percent,
+                self.set_download_percent,
             )
-            WhisperModelService.set_download_percent(95)
+            self.set_download_percent(95)
             if not is_valid_model_dir(staging_dir):
                 raise ValueError(
                     f"Downloaded snapshot does not contain a valid Whisper model: "
@@ -137,13 +136,13 @@ class WhisperModelService(ArtifactDownloadService):
                 )
 
             promote_staging_dir(staging_dir, target_dir)
-            WhisperModelService.set_download_percent(100)
+            self.set_download_percent(100)
         finally:
             cleanup_staging_dir(staging_dir)
 
-    @staticmethod
     def _snapshot_download(
-        spec: SpeechModelSpec,
+        self,
+        spec: SttModelSpec,
         destination: Path,
         set_percent: Callable[[int], None],
     ) -> None:
@@ -155,7 +154,7 @@ class WhisperModelService(ArtifactDownloadService):
             percent_max=90,
             expected_bytes=expected_bytes,
         )
-        snapshot_download(
+        _ = snapshot_download(
             repo_id=spec.hf_repo_id,
             local_dir=str(destination),
             tqdm_class=progress_tqdm,

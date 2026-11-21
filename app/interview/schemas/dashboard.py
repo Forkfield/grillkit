@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Dashboard read models for interview history."""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -20,7 +22,7 @@ class DashboardRowRead(BaseModel):
         url: Link to the interview page.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     id: str
     title: str

@@ -5,12 +5,12 @@
 from pathlib import Path
 
 from app.shared.paths import WHISPER_MODELS_ROOT
-from app.shared.speech_models import normalize_speech_model_size
+from app.shared.stt_models import normalize_stt_model_size
 
 
 def model_dir(size: str) -> Path:
     """Return the installation directory for a speech model size."""
-    code = normalize_speech_model_size(size)
+    code = normalize_stt_model_size(size)
     return WHISPER_MODELS_ROOT / code
 
 

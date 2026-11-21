@@ -2,17 +2,37 @@
 # SPDX-License-Identifier: Apache-2.0
 """WebSocket server message schemas for coding sessions."""
 
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.coding.domain.entities import CodingTask
+from app.coding.domain.task_spec import client_task_spec_from_stored
 from app.interview.schemas.ws import EvaluatingMessage, server_message_to_dict
+
+
+def next_task_payload(task: CodingTask) -> dict[str, Any]:
+    """Build WebSocket/API payload for the next unsubmitted coding task.
+
+    Args:
+        task: Next unsubmitted coding task round.
+
+    Returns:
+        Dict with task fields for the client.
+    """
+    return {
+        "task_id": task.task_id,
+        "order": task.order,
+        "round": task.round,
+        "prompt_text": task.prompt_text,
+        "task_spec": client_task_spec_from_stored(task.task_spec),
+    }
 
 
 class CodingSavedMessage(BaseModel):
     """Server message emitted after coding submission text is persisted."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["saved"] = "saved"
 
@@ -20,7 +40,7 @@ class CodingSavedMessage(BaseModel):
 class CodingFeedbackMessage(BaseModel):
     """Server message with evaluation feedback for one coding task round."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     type: Literal["feedback"] = "feedback"
     task_id: str

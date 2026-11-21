@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.ai.base import GenerationResult, Message
 from app.interview.api.deps import get_ai_provider
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.shared.infrastructure.models import Answer, Interview
 from app.theory.domain.entities import TheoryTask
 from tests.fakes import FakeProvider, answer_evaluation_json
@@ -91,7 +91,7 @@ def test_websocket_answer_runs_full_processing_pipeline(
     assert feedback["round"] == 0
     assert feedback["timed_out"] is False
     assert feedback["follow_up_question"] is None
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     answer2 = next(a for a in reloaded.answers if a.question_id == "q2")
     assert feedback["next_question"] == {
@@ -133,7 +133,7 @@ def test_websocket_answer_ai_failure_returns_error(client, isolated_db):
         client.app.dependency_overrides.pop(get_ai_provider, None)
 
     assert err["type"] == "error"
-    assert "/config" in err["message"].lower()
+    assert "configuration" in err["message"].lower()
 
 
 def test_websocket_timeout_scores_zero(client, isolated_db, override_ws_ai_provider):
@@ -176,7 +176,7 @@ def test_websocket_timeout_scores_zero(client, isolated_db, override_ws_ai_provi
     assert feedback["timed_out"] is True
     assert feedback["next_question"]["question_id"] == "q2"
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     q1 = next(a for a in reloaded.answers if a.question_id == "q1")
     assert q1.answer_text == TheoryTask.TIME_EXPIRED_ANSWER_TEXT

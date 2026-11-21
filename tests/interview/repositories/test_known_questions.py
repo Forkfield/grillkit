@@ -25,7 +25,7 @@ def test_mark_is_idempotent(isolated_db) -> None:
         repo.mark("theory", "bas-001")
         repo.mark("theory", "bas-001")
         uow.commit()
-        assert repo.count() == 1
+        assert repo.list_ids("theory") == frozenset({"bas-001"})
 
 
 def test_unmark_is_idempotent(isolated_db) -> None:
@@ -50,4 +50,3 @@ def test_list_all_grouped(isolated_db) -> None:
         grouped = repo.list_all_grouped()
         assert grouped["theory"] == ["bas-001", "bas-002"]
         assert grouped["coding"] == ["algo-001"]
-        assert repo.count() == 3

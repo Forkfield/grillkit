@@ -14,15 +14,21 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.dashboard import InterviewDashboard as DashboardBuilder
-from app.interview.queries.projection import load_recent_interview_reads
+from app.interview.queries.dashboard import InterviewDashboard
+from app.interview.queries.projection import load_recent_session_snapshots
 from app.interview.repositories.mappers import interview_read_from_orm
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.schemas.dashboard import DashboardRowRead
 from app.interview.schemas.interview import InterviewRead
 from app.shared.infrastructure.database import Base
 from app.shared.infrastructure.models import Interview
+from tests.helpers.coding_seed import seed_active_coding_interview
+from tests.helpers.completed_session_seed import seed_completed_theory_interview
+from tests.helpers.interview_seed import (
+    persist_interview_with_answers,
+    seed_two_question_interview,
+)
 from tests.helpers.selection import minimal_selection_spec
+from tests.helpers.sql_trace import count_selects
 from tests.helpers.theory_seed import create_theory_section_for_interview
 
 
@@ -47,7 +53,7 @@ def db_session(engine):
 def test_format_local_datetime_utc():
     """UTC datetimes are converted to local formatted strings."""
     dt = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
-    result = DashboardBuilder.format_local_datetime(dt)
+    result = InterviewDashboard.format_local_datetime(dt)
     assert "2026" in result
     assert ":" in result
 
@@ -59,7 +65,7 @@ def test_interview_display_title():
         selection_spec=minimal_selection_spec(categories=["data-structures"]),
     )
     read_model = interview_read_from_orm(interview)
-    assert DashboardBuilder.interview_display_title(read_model) == "Python Interview"
+    assert InterviewDashboard.interview_display_title(read_model) == "Python Interview"
 
 
 def test_interview_display_title_coding_only():
@@ -89,11 +95,11 @@ def test_interview_display_title_coding_only():
     )
     interview = Interview(id="coding-1", selection_spec=spec)
     read_model = interview_read_from_orm(interview)
-    assert DashboardBuilder.interview_display_title(read_model) == "Python Interview"
+    assert InterviewDashboard.interview_display_title(read_model) == "Python Interview"
 
 
 def test_list_recent_ordering(db_session):
-    """load_recent_interview_reads returns completed before older active when newer."""
+    """load_recent_session_snapshots returns completed before older active when newer."""
     now = datetime.now(UTC)
     active = Interview(
         id="active-1",
@@ -129,8 +135,8 @@ def test_list_recent_ordering(db_session):
             self._session = db_session
 
     with TestUow() as uow:
-        recent = load_recent_interview_reads(uow, limit=20)
-    assert [i.id for i in recent] == ["done-1", "active-1"]
+        recent = load_recent_session_snapshots(uow, limit=20)
+    assert [snapshot.shell.id for snapshot in recent] == ["done-1", "active-1"]
 
 
 def test_compute_max_score_uses_nested_breakdown_for_coding_only():
@@ -157,7 +163,7 @@ def test_compute_max_score_uses_nested_breakdown_for_coding_only():
         },
     )
     assert (
-        DashboardBuilder.compute_max_score(
+        InterviewDashboard.compute_max_score(
             interview,
             interview.overall_feedback["score_breakdown"],
         )
@@ -165,59 +171,47 @@ def test_compute_max_score_uses_nested_breakdown_for_coding_only():
     )
 
 
-def test_list_dashboard_rows(monkeypatch):
-    """Dashboard rows map interview fields for the template."""
-    now = datetime.now(UTC)
-    completed = InterviewRead(
-        id="done-1",
-        status="completed",
-        locale="en",
-        selection_spec=minimal_selection_spec(categories=["algorithms"]),
-        question_ids='["q1"]',
-        question_count=3,
-        question_time_limit_seconds=None,
-        answers=[],
-        score=8,
-        overall_feedback={
-            "score_breakdown": {
-                "theory": {"score": 8, "max": 15, "skipped": False},
-            }
-        },
-        completed_at=now,
-    )
-    active = InterviewRead(
-        id="active-1",
-        status="active",
-        locale="en",
-        selection_spec=minimal_selection_spec(categories=["basics"]),
-        question_ids='["q1"]',
+def test_list_dashboard_rows(isolated_db):
+    """Dashboard rows map session fields for the history table."""
+    completed_id = seed_completed_theory_interview("dash-done-1")
+    persist_interview_with_answers(
+        Interview(
+            id="dash-active-1",
+            locale="en",
+            selection_spec=minimal_selection_spec(categories=["basics"]),
+            status="active",
+            started_at=datetime.now(UTC),
+        ),
+        [],
         question_count=5,
-        question_time_limit_seconds=None,
-        answers=[],
-        started_at=now,
     )
 
-    monkeypatch.setattr(
-        "app.interview.queries.dashboard.load_recent_interview_reads",
-        lambda uow, limit=20: [completed, active],
-    )
+    with InterviewUnitOfWork() as uow:
+        rows = InterviewDashboard(uow).list_rows(limit=20)
 
-    class _FakeCodingSections:
-        @staticmethod
-        def get_aggregates_by_interview_ids(interview_ids):
-            del interview_ids
-            return {}
+    completed = next(row for row in rows if row.id == completed_id)
+    assert completed.title == "Python Interview"
+    assert completed.session_mode_label == "Theory"
+    assert completed.score_display == "4 / 5"
+    assert completed.status_label == "Completed"
+    assert completed.url == f"/interview/{completed_id}/results"
 
-    class _FakeUow:
-        coding_sections = _FakeCodingSections()
+    active = next(row for row in rows if row.id == "dash-active-1")
+    assert active.score_display == "—"
+    assert active.status_label == "Active"
+    assert active.url == "/interview/dash-active-1"
 
-    rows = DashboardBuilder(_FakeUow()).list_rows(limit=20)  # type: ignore[arg-type]
+
+def test_list_rows_loads_each_collection_once(isolated_db):
+    """Dashboard rows read shells, theory, and coding sections exactly once."""
+    seed_two_question_interview("dash-selects-theory")
+    seed_active_coding_interview("dash-selects-coding")
+
+    with (
+        count_selects(isolated_db) as trace,
+        InterviewUnitOfWork() as uow,
+    ):
+        rows = InterviewDashboard(uow).list_rows(limit=20)
+
     assert len(rows) == 2
-    assert rows[0].title == "Python Interview"
-    assert rows[0].session_mode_label == "Theory"
-    assert rows[0].score_display == "8 / 15"
-    assert rows[0].status_label == "Completed"
-    assert rows[1].score_display == "—"
-    assert rows[1].status_label == "Active"
-    assert rows[0].url == "/interview/done-1/results"
-    assert isinstance(rows[0], DashboardRowRead)
+    assert len(trace.statements) == 5

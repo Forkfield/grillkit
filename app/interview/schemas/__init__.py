@@ -4,7 +4,6 @@
 
 from app.interview.schemas.dashboard import DashboardRowRead
 from app.interview.schemas.interview import (
-    AnswerRead,
     InterviewPageContext,
     InterviewRead,
 )
@@ -18,7 +17,6 @@ from app.interview.schemas.ws import (
 
 __all__ = [
     "AnswerFeedbackMessage",
-    "AnswerRead",
     "AnswerSavedMessage",
     "DashboardRowRead",
     "EvaluatingMessage",

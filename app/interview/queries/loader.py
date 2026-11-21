@@ -8,7 +8,8 @@ Read-only helpers for loading sessions from the database.
 from app.interview.domain.exceptions import InterviewNotFoundError
 from app.interview.queries.projection import load_interview_read
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.schemas.interview import InterviewRead
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 class InterviewLoader:
@@ -86,7 +87,7 @@ class InterviewLoader:
             return InterviewLoader(uow).get_active_or_raise(interview_id)
 
     @staticmethod
-    def get_current_unanswered(interview: InterviewRead) -> AnswerRead | None:
+    def get_current_unanswered(interview: InterviewRead) -> TheoryTaskRead | None:
         """Return the first unanswered answer in display order.
 
         Args:
@@ -99,6 +100,3 @@ class InterviewLoader:
             if answer.answer_text is None:
                 return answer
         return None
-
-
-InterviewQuery = InterviewLoader

@@ -3,19 +3,20 @@
 """Tests for POST /interview/{id}/theory/audio-answer and related interview UI gating."""
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.ai.audio_probe import minimal_wav_bytes
 from app.ai.llm_models import LLMModelEntry
-from app.interview.queries.session_page import ActiveSessionPage as SessionPageService
-from app.interview.queries.session_page import SessionPageRender
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.queries.session_page import ActiveSessionPage
+from app.interview.schemas.interview import InterviewRead
+from app.interview.use_cases.session_page import SessionPageRender
 from app.platform.domain.config import AppConfig
 from app.question_voice.schemas import QuestionVoicePageContext
-from app.speech.schemas.page import SpeechModelPageContext
+from app.speech.schemas.page import SttModelPageContext
 from app.speech.schemas.status import WhisperModelStatusRead
+from app.theory.schemas.theory import TheoryTaskRead
 from tests.fakes import answer_evaluation_json
 from tests.helpers.interview_seed import seed_two_question_interview
 from tests.helpers.selection import minimal_selection_spec
@@ -41,10 +42,10 @@ def _ready_speech_status() -> WhisperModelStatusRead:
     )
 
 
-def _speech_model_page_context() -> SpeechModelPageContext:
-    """Build speech model page context for interview page tests."""
+def _speech_model_page_context() -> SttModelPageContext:
+    """Build stt model page context for interview page tests."""
     status = _ready_speech_status()
-    return SpeechModelPageContext(
+    return SttModelPageContext(
         speech_model_status=status,
         speech_model_banner=False,
         status=status,
@@ -79,7 +80,7 @@ def _active_interview_read(interview_id: str) -> InterviewRead:
         question_count=1,
         question_time_limit_seconds=None,
         answers=[
-            AnswerRead(
+            TheoryTaskRead(
                 id=1,
                 question_id="q1",
                 order=1,
@@ -100,7 +101,7 @@ def audio_api_client(client, override_ws_ai_provider):
     override_ws_ai_provider(client, [])
     fake = FakeTranscriber("spoken via api")
     with patch(
-        "app.interview.api.deps.resolve_speech_transcriber",
+        "app.interview.api.deps.resolve_stt",
         new=AsyncMock(return_value=fake),
     ):
         yield client
@@ -167,25 +168,32 @@ class TestAudioAnswerApi:
         """HTTP 400 when the configured catalog model does not accept audio."""
         interview_id = seed_two_question_interview("audio-api-disabled")
         monkeypatch.setattr(
-            "app.platform.domain.config.ConfigService.get_config",
-            lambda: AppConfig(
-                provider_type="openai-compatible",
-                base_url="http://localhost",
-                model="text-only",
-                llm_preset_id="text-only",
+            "app.theory.use_cases.submit_answer.get_default_config_service",
+            lambda: MagicMock(
+                get_config=MagicMock(
+                    return_value=AppConfig(
+                        llm_preset_id="text-only",
+                    )
+                )
             ),
         )
         monkeypatch.setattr(
-            "app.platform.domain.llm_catalog.LLMCatalogService.get_model",
-            lambda preset_id: LLMModelEntry(
-                id=preset_id,
-                display_name="Text only",
-                provider_type="openai-compatible",
-                model="text-only",
-                base_url="http://localhost",
-                api_key_required=False,
-                accepts_audio_input=False,
-            ),
+            "app.theory.use_cases.submit_answer.get_default_catalog_service",
+            lambda: type(
+                "Catalog",
+                (),
+                {
+                    "get_model": lambda self, preset_id: LLMModelEntry(
+                        id=preset_id,
+                        display_name="Text only",
+                        provider_type="openai-compatible",
+                        model="text-only",
+                        base_url="http://localhost",
+                        api_key_required=False,
+                        accepts_audio_input=False,
+                    )
+                },
+            )(),
         )
         wav_bytes = minimal_wav_bytes()
 
@@ -211,7 +219,7 @@ class TestAudioAnswerApi:
         wav_bytes = minimal_wav_bytes()
 
         with patch(
-            "app.interview.api.deps.resolve_speech_transcriber",
+            "app.interview.api.deps.resolve_stt",
             new=AsyncMock(return_value=None),
         ):
             response = client.post(
@@ -228,51 +236,36 @@ class TestInterviewAudioAnswerPage:
     """Tests for audio answer controls on the interview page."""
 
     def test_interview_page_shows_audio_controls_when_enabled(
-        self, client, monkeypatch, isolated_db
+        self, client, isolated_db
     ):
         """Record / Send audio buttons render when LLM and Whisper are ready."""
         del isolated_db
         interview = _active_interview_read("audio-ui-1")
-        monkeypatch.setattr(
-            "app.interview.queries.session_page.LLMCatalogService.get_model",
-            lambda preset_id: LLMModelEntry(
-                id=preset_id,
-                display_name="Audio model",
-                provider_type="openai-compatible",
-                model="audio-model",
-                base_url="http://localhost",
-                api_key_required=False,
-                accepts_audio_input=True,
-            ),
-        )
-        page_context = SessionPageService.build_page_context(
+        page_context = ActiveSessionPage.build_page_context(
             interview,
             config=AppConfig(
-                provider_type="openai-compatible",
-                base_url="http://localhost",
-                model="audio-model",
                 llm_preset_id="audio-model",
             ),
             question_voice_enabled=False,
+            interview_model_accepts_audio=True,
         )
 
         with (
             patch(
-                "app.interview.queries.session_page.ActiveSessionPage.prepare_page",
+                "app.interview.use_cases.session_page.OpenSessionPage.prepare_page",
                 new=AsyncMock(
                     return_value=SessionPageRender(
                         redirect_url=None,
-                        template_context=_full_template_context(page_context),
+                        context=_full_template_context(page_context),
                     )
                 ),
             ),
         ):
-            response = client.get("/interview/audio-ui-1")
+            response = client.get("/api/interview/audio-ui-1")
 
         assert response.status_code == 200
-        assert 'id="audio-record-btn"' in response.text
-        assert 'data-audio-answer-enabled="true"' in response.text
-        assert "interview_audio_answer.js" in response.text
+        payload = response.json()
+        assert payload["interview_model_accepts_audio"] is True
 
     def test_interview_page_hides_audio_controls_without_catalog_flag(
         self, client, isolated_db
@@ -280,12 +273,9 @@ class TestInterviewAudioAnswerPage:
         """Audio controls stay hidden when the configured model is text-only."""
         del isolated_db
         interview = _active_interview_read("audio-ui-2")
-        page_context = SessionPageService.build_page_context(
+        page_context = ActiveSessionPage.build_page_context(
             interview,
             config=AppConfig(
-                provider_type="openai-compatible",
-                base_url="http://localhost",
-                model="text-model",
                 llm_preset_id="text-model",
             ),
             question_voice_enabled=False,
@@ -293,17 +283,17 @@ class TestInterviewAudioAnswerPage:
 
         with (
             patch(
-                "app.interview.queries.session_page.ActiveSessionPage.prepare_page",
+                "app.interview.use_cases.session_page.OpenSessionPage.prepare_page",
                 new=AsyncMock(
                     return_value=SessionPageRender(
                         redirect_url=None,
-                        template_context=_full_template_context(page_context),
+                        context=_full_template_context(page_context),
                     )
                 ),
             ),
         ):
-            response = client.get("/interview/audio-ui-2")
+            response = client.get("/api/interview/audio-ui-2")
 
         assert response.status_code == 200
-        assert 'id="audio-record-btn"' not in response.text
-        assert 'data-audio-answer-enabled="true"' not in response.text
+        payload = response.json()
+        assert payload["interview_model_accepts_audio"] is False

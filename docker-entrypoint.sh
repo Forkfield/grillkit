@@ -9,6 +9,8 @@ mkdir -p /app/data/db
 
 if [ "$(id -u)" = "0" ]; then
     chown -R "${PUID}:${PGID}" /app/data
+    # Migrate as the runtime user so DB files are not root-owned.
+    gosu "${PUID}:${PGID}" python -c "from app.shared.infrastructure.database import run_migrations; run_migrations()"
     exec gosu "${PUID}:${PGID}" "$@"
 fi
 

@@ -15,6 +15,7 @@ router.include_router(dashboard.router)
 router.include_router(setup.router)
 router.include_router(known_questions.router)
 router.include_router(routes.router)
-router.include_router(results.router)
+router.include_router(routes.api_router)
+router.include_router(results.api_router)
 
 __all__ = ["router"]

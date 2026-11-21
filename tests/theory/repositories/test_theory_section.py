@@ -21,6 +21,7 @@ from app.theory.domain.entities import TheorySection as DomainTheorySection
 from app.theory.domain.entities import TheoryTask
 from app.theory.domain.value_objects import PlannedTheoryQuestion
 from tests.helpers.legacy_interview import insert_pre_session_mode_interview
+from tests.helpers.sql_trace import count_selects
 
 
 def _sample_selection() -> InterviewSelection:
@@ -173,6 +174,34 @@ class TestTheorySectionRepository:
         assert loaded.question_count == 2
         assert len(loaded.tasks) == 2
         assert loaded.tasks[0].theory_section_id == loaded.id
+
+    def test_save_aggregate_reuses_loaded_row(self, isolated_db) -> None:
+        """Saving an aggregate just loaded issues no extra SELECTs."""
+        section = DomainTheorySection.start(
+            "iv-save",
+            selection=_sample_selection(),
+            locale="en",
+            planned_questions=_sample_planned(),
+        )
+        with InterviewUnitOfWork() as uow:
+            uow.session.add(
+                Interview(
+                    id="iv-save",
+                    selection_spec='{"sources":[{"track":"python","level":"junior","categories":["basics"]}]}',
+                )
+            )
+            uow.commit()
+        with InterviewUnitOfWork() as uow:
+            uow.theory_sections.create_aggregate(section)
+            uow.commit()
+
+        with InterviewUnitOfWork() as uow:
+            loaded = uow.theory_sections.get_aggregate("iv-save")
+            assert loaded is not None
+            with count_selects(isolated_db) as trace:
+                uow.theory_sections.save_aggregate(loaded)
+
+        assert trace.statements == []
 
     def test_create_aggregate_round_trips_expected_points(self, isolated_db) -> None:
         """Repository persists rubric bullets on answer rows."""

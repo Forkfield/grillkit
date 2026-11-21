@@ -2,19 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for known questions HTTP API."""
 
-import json
-
 from app.interview.repositories.known_questions import KnownQuestionsRepository
 from app.interview.repositories.uow import InterviewUnitOfWork
 
 
 class TestKnownQuestionsApi:
-    """Tests for /known-questions endpoints."""
+    """Tests for /api/known-questions endpoints."""
 
     def test_list_empty(self, client, isolated_db) -> None:
         """GET returns empty lists when nothing is marked."""
         del isolated_db
-        response = client.get("/known-questions")
+        response = client.get("/api/known-questions")
         assert response.status_code == 200
         assert response.json() == {"theory": [], "coding": []}
 
@@ -22,42 +20,42 @@ class TestKnownQuestionsApi:
         """POST and DELETE update the stored known lists."""
         del isolated_db
         mark = client.post(
-            "/known-questions",
+            "/api/known-questions",
             json={"branch": "theory", "item_id": "bas-001"},
         )
         assert mark.status_code == 200
         assert mark.json()["theory"] == ["bas-001"]
 
         repeat = client.post(
-            "/known-questions",
+            "/api/known-questions",
             json={"branch": "theory", "item_id": "bas-001"},
         )
         assert repeat.status_code == 200
         assert repeat.json()["theory"] == ["bas-001"]
 
-        unmark = client.request(
-            "DELETE",
-            "/known-questions",
-            content=json.dumps({"branch": "theory", "item_id": "bas-001"}),
-            headers={"Content-Type": "application/json"},
+        unmark = client.delete(
+            "/api/known-questions",
+            params={"branch": "theory", "item_id": "bas-001"},
         )
         assert unmark.status_code == 200
         assert unmark.json() == {"theory": [], "coding": []}
 
-        missing = client.request(
-            "DELETE",
-            "/known-questions",
-            content=json.dumps({"branch": "theory", "item_id": "bas-001"}),
-            headers={"Content-Type": "application/json"},
+        missing = client.delete(
+            "/api/known-questions",
+            params={"branch": "theory", "item_id": "bas-001"},
         )
         assert missing.status_code == 200
         assert missing.json() == {"theory": [], "coding": []}
 
     def test_manage_page_renders(self, client, isolated_db) -> None:
-        """Manage page returns HTML with marked IDs."""
+        """Manage API returns known views with bank text and total count."""
         del isolated_db
         with InterviewUnitOfWork(auto_commit=True) as uow:
             KnownQuestionsRepository(uow.session).mark("coding", "bas-001")
-        response = client.get("/known-questions/manage")
+        response = client.get("/api/known-questions/manage")
         assert response.status_code == 200
-        assert "bas-001" in response.text
+        body = response.json()
+        assert body["total_count"] == 1
+        ids = [item["id"] for item in body["coding_items"]]
+        assert "bas-001" in ids
+        assert body["theory_items"] == []

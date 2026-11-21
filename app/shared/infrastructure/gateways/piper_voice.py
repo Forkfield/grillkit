@@ -5,14 +5,13 @@
 import asyncio
 from collections.abc import Callable
 from pathlib import Path
-from typing import ClassVar
 
 from huggingface_hub import hf_hub_download
 
 from app.question_voice.schemas import PiperVoiceStatusRead
 from app.shared.infrastructure.artifact_download import ArtifactDownloadService
 from app.shared.infrastructure.artifact_status import ArtifactStatusBuilder
-from app.shared.infrastructure.gateways.piper import PiperRuntime
+from app.shared.infrastructure.gateways.piper import PiperTtsRuntime
 from app.shared.infrastructure.gateways.piper_storage import (
     is_valid_voice_dir,
     is_voice_installed,
@@ -41,14 +40,15 @@ PIPER_VOICES_REPO_ID = "rhasspy/piper-voices"
 class PiperVoiceService(ArtifactDownloadService):
     """Download and verify offline Piper voices under ``data/piper-voices/``."""
 
-    _download_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
-    _active_key: ClassVar[str | None] = None
-    _percent: ClassVar[int] = 0
-    _error_key: ClassVar[str | None] = None
-    _error_message: ClassVar[str | None] = None
+    _DOWNLOADING_MESSAGE = "Downloading question voice…"
+    _MISSING_MESSAGE = "Question voice is not installed."
+    _READY_LOADING_MESSAGE = "Question voice installed on disk; loading into memory…"
+    _READY_LOADED_TEMPLATE = "Question voice ready for {locale_label}."
+    _READY_LOAD_FAILED_TEMPLATE = (
+        "Question voice files are installed but could not be loaded: {error}"
+    )
 
-    @staticmethod
-    def get_status(voice_id: str, locale: str) -> PiperVoiceStatusRead:
+    def get_status(self, voice_id: str, locale: str) -> PiperVoiceStatusRead:
         """Build current voice status for UI and API consumers.
 
         Args:
@@ -56,7 +56,7 @@ class PiperVoiceService(ArtifactDownloadService):
             locale: Interview locale for status messaging.
 
         Returns:
-            Status snapshot for templates and JSON responses.
+            Status snapshot for JSON responses.
         """
         code = normalize_tts_voice_id(voice_id)
         locale_code = normalize_locale(locale)
@@ -65,18 +65,18 @@ class PiperVoiceService(ArtifactDownloadService):
 
         built = ArtifactStatusBuilder.build(
             key=code,
-            service=PiperVoiceService,
+            service=self,
             is_installed=lambda: is_voice_installed(code),
-            is_loaded=lambda: PiperRuntime.is_loaded(code),
-            load_error=PiperRuntime.load_error,
-            downloading_message="Downloading question voice…",
-            missing_message="Question voice is not installed.",
-            ready_loaded_message=f"Question voice ready for {locale_label}.",
-            ready_loading_message=(
-                "Question voice installed on disk; loading into memory…"
+            is_loaded=lambda: PiperTtsRuntime.is_loaded(code),
+            load_error=PiperTtsRuntime.load_error,
+            downloading_message=self._DOWNLOADING_MESSAGE,
+            missing_message=self._MISSING_MESSAGE,
+            ready_loaded_message=self._READY_LOADED_TEMPLATE.format(
+                locale_label=locale_label
             ),
+            ready_loading_message=self._READY_LOADING_MESSAGE,
             ready_load_failed_message=lambda err: (
-                f"Question voice files are installed but could not be loaded: {err}"
+                self._READY_LOAD_FAILED_TEMPLATE.format(error=err)
             ),
         )
         return PiperVoiceStatusRead(
@@ -90,8 +90,7 @@ class PiperVoiceService(ArtifactDownloadService):
             loaded_in_memory=built.loaded_in_memory,
         )
 
-    @staticmethod
-    async def start_download(voice_id: str, locale: str) -> PiperVoiceStatusRead:
+    async def start_download(self, voice_id: str, locale: str) -> PiperVoiceStatusRead:
         """Start a background download when the voice is not yet installed.
 
         Args:
@@ -104,24 +103,22 @@ class PiperVoiceService(ArtifactDownloadService):
         code = normalize_tts_voice_id(voice_id)
         locale_code = normalize_locale(locale)
         if is_voice_installed(code):
-            if not PiperRuntime.is_loaded(code):
-                await PiperRuntime.load_voice(code)
-            return PiperVoiceService.get_status(code, locale_code)
+            if not PiperTtsRuntime.is_loaded(code):
+                _ = await PiperTtsRuntime.load_voice(code)
+            return self.get_status(code, locale_code)
 
-        await PiperVoiceService.schedule_download(
+        _ = await self.schedule_download(
             code,
-            PiperVoiceService._run_download,
+            self._run_download,
         )
-        return PiperVoiceService.get_status(code, locale_code)
+        return self.get_status(code, locale_code)
 
-    @staticmethod
-    async def _run_download(voice_id: str) -> None:
+    async def _run_download(self, voice_id: str) -> None:
         """Execute download and installation, updating shared progress state."""
-        await PiperVoiceService._download_and_install(voice_id)
-        await PiperRuntime.load_voice(voice_id)
+        await self._download_and_install(voice_id)
+        _ = await PiperTtsRuntime.load_voice(voice_id)
 
-    @staticmethod
-    async def _download_and_install(voice_id: str) -> None:
+    async def _download_and_install(self, voice_id: str) -> None:
         """Download Piper voice files into ``data/piper-voices/<voice_id>/``."""
         spec = voice_spec_for_id(voice_id)
         target_dir = voice_dir(voice_id)
@@ -129,26 +126,26 @@ class PiperVoiceService(ArtifactDownloadService):
         staging_dir = prepare_staging_dir(PIPER_VOICES_ROOT, f".staging-{voice_id}")
 
         try:
-            PiperVoiceService.set_download_percent(1)
+            self.set_download_percent(1)
             await asyncio.to_thread(
-                PiperVoiceService._download_voice_files,
+                self._download_voice_files,
                 spec,
                 staging_dir,
-                PiperVoiceService.set_download_percent,
+                self.set_download_percent,
             )
-            PiperVoiceService.set_download_percent(95)
+            self.set_download_percent(95)
             if not is_valid_voice_dir(staging_dir, voice_id):
                 raise ValueError(
                     f"Downloaded files do not contain a valid Piper voice: {voice_id}"
                 )
 
             promote_staging_dir(staging_dir, target_dir)
-            PiperVoiceService.set_download_percent(100)
+            self.set_download_percent(100)
         finally:
             cleanup_staging_dir(staging_dir)
 
-    @staticmethod
     def _download_voice_files(
+        self,
         spec: PiperVoiceSpec,
         destination: Path,
         set_percent: Callable[[int], None],

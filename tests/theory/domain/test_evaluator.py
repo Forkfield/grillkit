@@ -5,7 +5,7 @@
 import pytest
 
 from app.ai.audio_probe import minimal_wav_bytes
-from app.theory.domain.evaluator import TheoryEvaluator as TheoryEvaluatorService
+from app.theory.domain.evaluator import TheoryEvaluator
 from app.theory.domain.evaluator_prompts import format_expected_rubric
 from tests.fakes import FakeProvider, answer_evaluation_json, follow_up_evaluation_json
 
@@ -24,7 +24,7 @@ def test_format_expected_rubric_bullets() -> None:
 
 def test_format_answer_evaluation_user_text_labels_candidate_content() -> None:
     """Evaluation prompt separates context from candidate answer."""
-    text = TheoryEvaluatorService._format_answer_evaluation_user_text(
+    text = TheoryEvaluator._format_answer_evaluation_user_text(
         question_text="What is a list?",
         question_code="items = []",
         answer_text="A mutable sequence.",
@@ -57,7 +57,7 @@ async def test_evaluate_with_audio_initial_round() -> None:
         evaluation,
         follow_up_needed,
         follow_up_text,
-    ) = await TheoryEvaluatorService.evaluate_submission(
+    ) = await TheoryEvaluator.evaluate_submission(
         provider=provider,
         locale="en",
         answer_round=0,
@@ -93,10 +93,10 @@ async def test_evaluate_with_audio_follow_up_round() -> None:
         evaluation,
         follow_up_needed,
         follow_up_text,
-    ) = await TheoryEvaluatorService.evaluate_submission(
+    ) = await TheoryEvaluator.evaluate_submission(
         provider=provider,
         locale="en",
-        answer_round=TheoryEvaluatorService.MAX_FOLLOW_UP_DEPTH,
+        answer_round=TheoryEvaluator.MAX_FOLLOW_UP_DEPTH,
         question_text="Can you give an example?",
         question_code=None,
         initial_question_text="What is a generator?",

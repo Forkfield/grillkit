@@ -15,7 +15,7 @@ from app.interview.repositories.mappers import (
     interview_shell_to_orm,
     interview_to_orm_fields,
 )
-from app.shared.infrastructure.models import Interview, TheorySection
+from app.shared.infrastructure.models import CodingSection, Interview, TheorySection
 from app.shared.repositories.base import SqlAlchemyRepository
 
 
@@ -37,19 +37,34 @@ class InterviewRepository(SqlAlchemyRepository[Interview]):
         super().__init__(session)
 
     def get(self, entity_id: str) -> Interview | None:
-        """Retrieve a session shell by ID with theory section loaded.
+        """Retrieve a session shell row by ID.
 
         Args:
             entity_id: The session UUID.
 
         Returns:
-            Interview with theory section and tasks loaded, or None.
+            Interview shell row, or None.
+        """
+        stmt = select(Interview).filter_by(id=entity_id)
+        return self._session.execute(stmt).scalar_one_or_none()
+
+    def get_with_sections(self, entity_id: str) -> Interview | None:
+        """Retrieve a session row with its theory and coding sections loaded.
+
+        Args:
+            entity_id: The session UUID.
+
+        Returns:
+            Interview row with both sections and their tasks eagerly loaded.
         """
         stmt = (
             select(Interview)
             .options(
                 selectinload(Interview.theory_section).selectinload(
                     TheorySection.tasks
+                ),
+                selectinload(Interview.coding_section).selectinload(
+                    CodingSection.tasks
                 ),
             )
             .filter_by(id=entity_id)

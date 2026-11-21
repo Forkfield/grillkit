@@ -37,10 +37,6 @@ class InProcessArtifactRuntime:
         """Load the artifact from disk (blocking)."""
         raise NotImplementedError
 
-    def loaded_key(self) -> str | None:
-        """Return the key of the artifact currently in memory, if any."""
-        return self._loaded_key
-
     def load_error(self) -> str | None:
         """Return the last in-process load error message, if any."""
         return self._load_error

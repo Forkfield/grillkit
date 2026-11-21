@@ -16,11 +16,13 @@ def ai_error_message_for_client(exc: Exception) -> str:
     if "not found" in text.lower() and "model" in text.lower():
         return (
             "AI model is not available on the configured endpoint. "
-            "Open /config and verify the model name and provider settings."
+            "Open the Configuration page and verify the model name and "
+            "provider settings."
         )
     if "timed out" in text.lower() or "timeout" in text.lower():
         return (
             "AI evaluation timed out. The model may still be loading — "
-            "wait and try again, or increase the timeout on /config."
+            "wait and try again, or increase the timeout on the Configuration "
+            "page."
         )
     return f"AI evaluation failed: {text}"

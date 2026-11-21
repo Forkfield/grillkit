@@ -7,10 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.interview.domain.session_phases import (
-    SectionEvaluationSummary,
-    SectionPageContext,
-)
+from app.interview.domain.session_phases import SectionEvaluationSummary
 from app.interview.domain.value_objects import InterviewSelection, TrackSelection
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.theory.domain.entities import TheorySection, TheoryTask
@@ -100,67 +97,6 @@ def test_is_complete_returns_false_when_no_section() -> None:
     service = TheorySectionState(_mock_uow(None))
 
     assert service.is_complete("iv-1") is False
-
-
-def test_is_user_facing_returns_true_when_unanswered_remain() -> None:
-    """is_user_facing returns True when the section exists and is incomplete."""
-    section = _section(tasks=[_task(1, "q1", 1, "A1"), _task(2, "q2", 2)])
-    service = TheorySectionState(_mock_uow(section))
-
-    assert service.is_user_facing("iv-1") is True
-
-
-def test_is_user_facing_returns_false_when_complete() -> None:
-    """is_user_facing returns False when the section is fully answered."""
-    section = _section(tasks=[_task(1, "q1", 1, "A1"), _task(2, "q2", 2, "A2")])
-    service = TheorySectionState(_mock_uow(section))
-
-    assert service.is_user_facing("iv-1") is False
-
-
-def test_is_user_facing_returns_false_when_no_section() -> None:
-    """is_user_facing returns False when no theory section exists."""
-    service = TheorySectionState(_mock_uow(None))
-
-    assert service.is_user_facing("iv-1") is False
-
-
-def test_activate_if_pending_always_returns_false() -> None:
-    """Theory sections are created active, so activate_if_pending is always False."""
-    service = TheorySectionState(_mock_uow(_section()))
-
-    assert service.activate_if_pending("iv-1") is False
-
-
-def test_get_page_context_returns_correct_context() -> None:
-    """get_page_context returns active=True/complete=False for incomplete sections."""
-    section = _section(tasks=[_task(1, "q1", 1), _task(2, "q2", 2)])
-    service = TheorySectionState(_mock_uow(section))
-
-    ctx = service.get_page_context("iv-1")
-
-    assert isinstance(ctx, SectionPageContext)
-    assert ctx.section == "theory"
-    assert ctx.active is True
-    assert ctx.complete is False
-
-
-def test_get_page_context_returns_complete_context() -> None:
-    """get_page_context returns active=False/complete=True for completed sections."""
-    section = _section(tasks=[_task(1, "q1", 1, "A1"), _task(2, "q2", 2, "A2")])
-    service = TheorySectionState(_mock_uow(section))
-
-    ctx = service.get_page_context("iv-1")
-
-    assert ctx.complete is True
-    assert ctx.active is False
-
-
-def test_get_page_context_returns_none_when_no_section() -> None:
-    """get_page_context returns None when no theory section exists."""
-    service = TheorySectionState(_mock_uow(None))
-
-    assert service.get_page_context("iv-1") is None
 
 
 def test_get_evaluation_summary_delegates_to_query_service() -> None:

@@ -10,10 +10,9 @@ from dataclasses import replace
 import logging
 
 from app.ai.base import AIProvider
-from app.coding.queries.section_state import CodingSectionState as CodingSectionService
-from app.coding.queries.section_summary import (
-    CodingSectionSummary as CodingQueryService,
-)
+from app.coding.queries.section_state import CodingSectionState
+from app.coding.queries.section_summary import CodingSectionSummary
+from app.interview.domain.entities import Interview as DomainInterview
 from app.interview.domain.evaluation_aggregator import (
     SessionEvaluationAggregator,
     attach_session_score_breakdown,
@@ -25,12 +24,13 @@ from app.interview.domain.events import (
 )
 from app.interview.domain.exceptions import InterviewNotFoundError
 from app.interview.domain.rules.selection import selection_sources_summary
-from app.interview.domain.session_evaluation import SessionEvaluatorService
-from app.interview.queries.dashboard import DashboardBuilder
+from app.interview.domain.session_evaluation import SessionEvaluator
+from app.interview.queries.dashboard import InterviewDashboard
 from app.interview.queries.projection import load_interview_read
 from app.interview.repositories.uow import InterviewUnitOfWork
-from app.theory.queries.loader import TheorySectionLoader as TheoryQueryService
-from app.theory.queries.section_state import TheorySectionState as TheorySectionService
+from app.shared.evaluation_models import InterviewEvaluation
+from app.theory.queries.loader import TheorySectionLoader
+from app.theory.queries.section_state import TheorySectionState
 
 logger = logging.getLogger(__name__)
 
@@ -75,24 +75,13 @@ class CompleteInterviewSession:
         try:
             locale = aggregate.locale
             session = aggregate.selection
-            theory_query = TheoryQueryService(self._uow)
-            coding_query = CodingQueryService(self._uow)
-            theory_section = TheorySectionService(self._uow, query=theory_query)
-            coding_section = CodingSectionService(self._uow, query=coding_query)
+            theory_query = TheorySectionLoader(self._uow)
+            coding_query = CodingSectionSummary(self._uow)
+            theory_section = TheorySectionState(self._uow, query=theory_query)
+            coding_section = CodingSectionState(self._uow, query=coding_query)
 
-            sources_parts: list[str] = []
-            if session.theory.enabled:
-                theory_sources = theory_query.sources_text_for_section(interview_id)
-                if theory_sources:
-                    sources_parts.append(theory_sources)
-            if session.coding.enabled:
-                coding_sources = coding_query.sources_text_for_section(interview_id)
-                if coding_sources:
-                    sources_parts.append(coding_sources)
-            sources_text = (
-                "; ".join(sources_parts)
-                if sources_parts
-                else selection_sources_summary(aggregate.selection.theory_selection)
+            sources_text = self._sources_text(
+                interview_id, aggregate, theory_query, coding_query
             )
 
             await theory_section.ensure_section_feedback(interview_id)
@@ -118,7 +107,7 @@ class CompleteInterviewSession:
 
             events: list[InterviewEvent] = [EvaluatingEvent()]
 
-            session_eval = await SessionEvaluatorService.evaluate_session(
+            session_eval = await SessionEvaluator.evaluate_session(
                 merged,
                 provider=provider,
                 locale=locale,
@@ -126,32 +115,82 @@ class CompleteInterviewSession:
             )
             interview_eval = attach_session_score_breakdown(session_eval, merged)
 
-            aggregate = self._uow.interviews.get_aggregate(interview_id)
-            if aggregate is None:
-                raise InterviewNotFoundError(interview_id)
-            completed = aggregate.with_session_completed(interview_eval.model_dump())
-            self._uow.interviews.save_aggregate(completed)
-            interview_read = load_interview_read(self._uow, interview_id)
-            if interview_read is None:
-                raise InterviewNotFoundError(interview_id)
-            score = SessionEvaluationAggregator.total_score_from_breakdown(
-                interview_eval.score_breakdown
-            )
-
-            max_score = DashboardBuilder.compute_max_score(
-                interview_read,
-                interview_eval.score_breakdown or None,
-                uow=self._uow,
-            )
-            events.append(
-                InterviewCompletedEvent(
-                    overall_feedback=interview_eval.model_dump(),
-                    score=score,
-                    max_score=max_score,
-                )
-            )
+            events.append(self._finalize_session(interview_id, interview_eval))
             self._uow.commit()
             return events
         except Exception:
             self._uow.rollback()
             raise
+
+    def _sources_text(
+        self,
+        interview_id: str,
+        aggregate: DomainInterview,
+        theory_query: TheorySectionLoader,
+        coding_query: CodingSectionSummary,
+    ) -> str:
+        """Collect source descriptions of the enabled sections.
+
+        Args:
+            interview_id: The session UUID.
+            aggregate: Interview aggregate with the selection.
+            theory_query: Theory section query service.
+            coding_query: Coding section query service.
+
+        Returns:
+            Joined section sources, or a selection summary when none exist.
+        """
+        session = aggregate.selection
+        sources_parts: list[str] = []
+        if session.theory.enabled:
+            theory_sources = theory_query.sources_text_for_section(interview_id)
+            if theory_sources:
+                sources_parts.append(theory_sources)
+        if session.coding.enabled:
+            coding_sources = coding_query.sources_text_for_section(interview_id)
+            if coding_sources:
+                sources_parts.append(coding_sources)
+        return (
+            "; ".join(sources_parts)
+            if sources_parts
+            else selection_sources_summary(aggregate.selection.theory_selection)
+        )
+
+    def _finalize_session(
+        self,
+        interview_id: str,
+        interview_eval: InterviewEvaluation,
+    ) -> InterviewCompletedEvent:
+        """Persist the completed session and build its completion event.
+
+        Args:
+            interview_id: The session UUID.
+            interview_eval: Final evaluation with score breakdown attached.
+
+        Returns:
+            Event carrying feedback, score, and max score.
+
+        Raises:
+            InterviewNotFoundError: If the interview disappeared mid-flow.
+        """
+        aggregate = self._uow.interviews.get_aggregate(interview_id)
+        if aggregate is None:
+            raise InterviewNotFoundError(interview_id)
+        completed = aggregate.with_session_completed(interview_eval.model_dump())
+        self._uow.interviews.save_aggregate(completed)
+        interview_read = load_interview_read(self._uow, interview_id)
+        if interview_read is None:
+            raise InterviewNotFoundError(interview_id)
+        score = SessionEvaluationAggregator.total_score_from_breakdown(
+            interview_eval.score_breakdown
+        )
+        max_score = InterviewDashboard.compute_max_score(
+            interview_read,
+            interview_eval.score_breakdown or None,
+            uow=self._uow,
+        )
+        return InterviewCompletedEvent(
+            overall_feedback=interview_eval.model_dump(),
+            score=score,
+            max_score=max_score,
+        )

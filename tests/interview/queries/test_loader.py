@@ -1,6 +1,6 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for InterviewQuery read-only service."""
+"""Tests for InterviewLoader read-only service."""
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -16,14 +16,15 @@ from app.interview.domain.value_objects import (
     SessionSelection,
     TrackSelection,
 )
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
-from app.interview.schemas.interview import AnswerRead, InterviewRead
+from app.interview.queries.loader import InterviewLoader
+from app.interview.schemas.interview import InterviewRead
+from app.theory.schemas.theory import TheoryTaskRead
 
 
 def _make_interview_read(
     *,
     status: str = "active",
-    answers: list[AnswerRead] | None = None,
+    answers: list[TheoryTaskRead] | None = None,
 ) -> InterviewRead:
     return InterviewRead(
         id="iv-1",
@@ -36,7 +37,7 @@ def _make_interview_read(
         answers=answers
         if answers is not None
         else [
-            AnswerRead(
+            TheoryTaskRead(
                 id=1,
                 question_id="q1",
                 order=1,
@@ -47,7 +48,7 @@ def _make_interview_read(
                 score=None,
                 started_at=None,
             ),
-            AnswerRead(
+            TheoryTaskRead(
                 id=2,
                 question_id="q2",
                 order=2,
@@ -80,7 +81,7 @@ def _make_active_shell() -> Interview:
 
 
 class TestGetInterview:
-    """Tests for InterviewQuery.get_interview."""
+    """Tests for InterviewLoader.get_interview."""
 
     def test_get_interview_loads_with_tasks(self) -> None:
         uow = MagicMock()
@@ -89,7 +90,7 @@ class TestGetInterview:
             "app.interview.queries.loader.load_interview_read",
             return_value=read,
         ) as mock_load:
-            query = InterviewQuery(uow)
+            query = InterviewLoader(uow)
             result = query.get_interview("iv-1")
         mock_load.assert_called_once_with(uow, "iv-1")
         assert result is read
@@ -100,14 +101,14 @@ class TestGetInterview:
             "app.interview.queries.loader.load_interview_read",
             return_value=None,
         ) as mock_load:
-            query = InterviewQuery(uow)
+            query = InterviewLoader(uow)
             result = query.get_interview("missing")
         mock_load.assert_called_once_with(uow, "missing")
         assert result is None
 
 
 class TestLoad:
-    """Tests for InterviewQuery.load static method."""
+    """Tests for InterviewLoader.load static method."""
 
     def test_load_returns_interview(self) -> None:
         read = _make_interview_read()
@@ -115,7 +116,7 @@ class TestLoad:
             "app.interview.queries.loader.load_interview_read",
             return_value=read,
         ) as mock_load:
-            result = InterviewQuery.load("iv-1")
+            result = InterviewLoader.load("iv-1")
         assert result is read
         assert mock_load.call_args[0][1] == "iv-1"
 
@@ -124,11 +125,11 @@ class TestLoad:
             "app.interview.queries.loader.load_interview_read",
             return_value=None,
         ):
-            assert InterviewQuery.load("missing") is None
+            assert InterviewLoader.load("missing") is None
 
 
 class TestGetActiveOrRaise:
-    """Tests for InterviewQuery.get_active_or_raise."""
+    """Tests for InterviewLoader.get_active_or_raise."""
 
     def test_returns_active_interview(self) -> None:
         uow = MagicMock()
@@ -139,7 +140,7 @@ class TestGetActiveOrRaise:
             "app.interview.queries.loader.load_interview_read",
             return_value=read,
         ):
-            query = InterviewQuery(uow)
+            query = InterviewLoader(uow)
             result = query.get_active_or_raise("iv-1")
         assert result is read
         uow.interviews.get_aggregate.assert_called_once_with("iv-1")
@@ -147,7 +148,7 @@ class TestGetActiveOrRaise:
     def test_raises_when_interview_not_found(self) -> None:
         uow = MagicMock()
         uow.interviews.get_aggregate.return_value = None
-        query = InterviewQuery(uow)
+        query = InterviewLoader(uow)
         with pytest.raises(InterviewNotFoundError):
             query.get_active_or_raise("missing")
 
@@ -157,7 +158,7 @@ class TestGetActiveOrRaise:
             {"overall_feedback": "done"}
         )
         uow.interviews.get_aggregate.return_value = shell
-        query = InterviewQuery(uow)
+        query = InterviewLoader(uow)
         with pytest.raises(InterviewNotActiveError):
             query.get_active_or_raise("iv-1")
 
@@ -169,24 +170,24 @@ class TestGetActiveOrRaise:
             "app.interview.queries.loader.load_interview_read",
             return_value=None,
         ):
-            query = InterviewQuery(uow)
+            query = InterviewLoader(uow)
             with pytest.raises(InterviewNotFoundError):
                 query.get_active_or_raise("iv-1")
 
 
 class TestGetCurrentUnanswered:
-    """Tests for InterviewQuery.get_current_unanswered."""
+    """Tests for InterviewLoader.get_current_unanswered."""
 
     def test_returns_first_unanswered_answer(self) -> None:
         read = _make_interview_read()
-        result = InterviewQuery.get_current_unanswered(read)
+        result = InterviewLoader.get_current_unanswered(read)
         assert result is not None
         assert result.question_id == "q1"
 
     def test_returns_none_when_all_answered(self) -> None:
         read = _make_interview_read(
             answers=[
-                AnswerRead(
+                TheoryTaskRead(
                     id=1,
                     question_id="q1",
                     order=1,
@@ -199,8 +200,8 @@ class TestGetCurrentUnanswered:
                 ),
             ]
         )
-        assert InterviewQuery.get_current_unanswered(read) is None
+        assert InterviewLoader.get_current_unanswered(read) is None
 
     def test_returns_none_for_empty_answers(self) -> None:
         read = _make_interview_read(answers=[])
-        assert InterviewQuery.get_current_unanswered(read) is None
+        assert InterviewLoader.get_current_unanswered(read) is None

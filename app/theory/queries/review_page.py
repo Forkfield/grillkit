@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from app.interview.queries.review_context import (
-    CompletedInterviewSnapshot,
+    CompletedInterviewContext,
     load_completed_interview,
     resolved_section_feedback,
     review_score_fields,
@@ -26,15 +26,15 @@ class TheoryReviewPage:
         Args:
             uow: Shared application unit of work for this review scope.
         """
-        self._uow = uow
-        self._query = TheorySectionLoader(uow)
+        self._uow: InterviewUnitOfWork = uow
+        self._query: TheorySectionLoader = TheorySectionLoader(uow)
 
     def build_context(
         self,
         interview_id: str,
-        snapshot: CompletedInterviewSnapshot,
+        snapshot: CompletedInterviewContext,
     ) -> TheoryReviewContext | None:
-        """Assemble theory review template context for a completed session.
+        """Assemble theory review context for a completed session.
 
         Args:
             interview_id: Parent session UUID.
@@ -67,13 +67,17 @@ class TheoryReviewPage:
             max_score=section.max_score(),
         )
 
+        shared = shared_review_fields(interview_id, snapshot)
         return TheoryReviewContext(
-            **{
-                **shared_review_fields(interview_id, snapshot),
-                **scores,
-                "section_feedback": section_feedback,
-                "answers": answers,
-            }
+            interview_id=shared["interview_id"],
+            interview_title=shared["interview_title"],
+            selection_lines=shared["selection_lines"],
+            locale_label=shared["locale_label"],
+            results_url=shared["results_url"],
+            section_score=scores["section_score"],
+            section_max_score=scores["section_max_score"],
+            section_feedback=section_feedback,
+            answers=answers,
         )
 
     def build_context_for(self, interview_id: str) -> TheoryReviewContext | None:

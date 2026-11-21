@@ -3,15 +3,14 @@
 """FastAPI app factory.
 
 This module provides the FastAPI application factory function
-for creating the GrillKit application instance with all routes,
-templates, and middleware configured.
+for creating the GrillKit application instance with all routes
+and middleware configured.
 """
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.coding.api import router as coding_router
@@ -19,9 +18,8 @@ from app.interview.api import router as interview_router
 from app.platform.api import router as platform_router
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.question_voice.api import router as question_voice_router
-from app.shared.infrastructure.gateways.piper import PiperRuntime
-from app.shared.infrastructure.gateways.whisper import WhisperRuntime
-from app.shared.paths import STATIC_DIR
+from app.shared.infrastructure.gateways.piper import PiperTtsRuntime
+from app.shared.infrastructure.gateways.whisper import WhisperSttRuntime
 from app.speech.api import router as speech_router
 from app.theory.api import router as theory_router
 
@@ -33,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Creates the speech runtime coordinator, loads the Whisper model (and Piper
     when configured) on startup, and unloads them on shutdown.
     """
-    coordinator = SpeechRuntimeCoordinator(WhisperRuntime, PiperRuntime)
+    coordinator = SpeechRuntimeCoordinator(WhisperSttRuntime, PiperTtsRuntime)
     app.state.speech_runtime = coordinator
     await coordinator.startup()
     yield
@@ -53,13 +51,17 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(interview_router)
     app.include_router(platform_router)
     app.include_router(theory_router)
     app.include_router(coding_router)
     app.include_router(speech_router)
     app.include_router(question_voice_router)
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        """Return a lightweight liveness probe for orchestrators and healthchecks."""
+        return {"status": "ok"}
 
     return app
 

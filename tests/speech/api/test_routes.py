@@ -7,15 +7,18 @@ from unittest.mock import patch
 import pytest
 
 from app.platform.domain.config import AppConfig
-from app.shared.infrastructure.gateways.whisper import WhisperRuntime
+from app.shared.infrastructure.artifact_composition import (
+    get_default_whisper_model_service,
+)
+from app.shared.infrastructure.gateways.whisper import WhisperSttRuntime
 from app.shared.infrastructure.gateways.whisper_model import WhisperModelService
 
 
 @pytest.fixture(autouse=True)
 def reset_download_state():
     """Reset in-memory download state between tests."""
-    WhisperRuntime.unload()
-    WhisperModelService.reset_download_state()
+    WhisperSttRuntime.unload()
+    get_default_whisper_model_service().reset_download_state()
     yield
 
 
@@ -30,7 +33,7 @@ class TestSpeechModelApi:
                 return_value=None,
             ),
             patch(
-                "app.shared.infrastructure.gateways.whisper_storage.is_installed",
+                "app.shared.infrastructure.gateways.whisper_model.is_installed",
                 return_value=False,
             ),
         ):
@@ -51,7 +54,7 @@ class TestSpeechModelApi:
                 return_value=None,
             ),
             patch(
-                "app.shared.infrastructure.gateways.whisper_storage.is_installed",
+                "app.shared.infrastructure.gateways.whisper_model.is_installed",
                 return_value=False,
             ),
         ):
@@ -65,9 +68,6 @@ class TestSpeechModelApi:
     def test_status_query_overrides_saved_config(self, client):
         """Status endpoint honors size query param over saved config on Configuration."""
         mock_config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             speech_model_size="small",
         )
@@ -77,7 +77,7 @@ class TestSpeechModelApi:
                 return_value=mock_config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.whisper_storage.is_installed",
+                "app.shared.infrastructure.gateways.whisper_model.is_installed",
                 return_value=False,
             ),
         ):
@@ -93,9 +93,6 @@ class TestSpeechModelApi:
     def test_status_json_missing_model(self, client):
         """Status reports missing when no model is on disk."""
         mock_config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="en",
             speech_model_size="small",
         )
@@ -105,7 +102,7 @@ class TestSpeechModelApi:
                 return_value=mock_config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.whisper_storage.is_installed",
+                "app.shared.infrastructure.gateways.whisper_model.is_installed",
                 return_value=False,
             ),
         ):
@@ -126,7 +123,7 @@ class TestSpeechModelApi:
                 return_value=None,
             ),
             patch(
-                "app.shared.infrastructure.gateways.whisper_storage.is_installed",
+                "app.shared.infrastructure.gateways.whisper_model.is_installed",
                 return_value=False,
             ),
             patch.object(
@@ -135,19 +132,16 @@ class TestSpeechModelApi:
                 side_effect=lambda _size: None,
             ),
         ):
-            response = client.post(
-                "/speech/model/download",
-                headers={"Accept": "text/html"},
-            )
+            response = client.post("/speech/model/download")
         assert response.status_code == 200
-        assert "speech-model-status" in response.text
+        assert "application/json" in response.headers.get("content-type", "")
+        payload = response.json()
+        assert "state" in payload
+        assert "size" in payload
 
     def test_download_schedules_work(self, client):
-        """Download endpoint returns downloading state for HTML clients."""
+        """Download endpoint returns the downloading state as JSON."""
         mock_config = AppConfig(
-            provider_type="openai-compatible",
-            base_url="http://localhost",
-            model="gpt-4",
             locale="ru",
             speech_model_size="small",
         )
@@ -157,7 +151,7 @@ class TestSpeechModelApi:
                 return_value=mock_config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.whisper_storage.is_installed",
+                "app.shared.infrastructure.gateways.whisper_model.is_installed",
                 return_value=False,
             ),
             patch.object(
@@ -166,12 +160,11 @@ class TestSpeechModelApi:
                 side_effect=lambda _size: None,
             ),
         ):
-            response = client.post(
-                "/speech/model/download",
-                headers={"Accept": "text/html"},
-            )
+            response = client.post("/speech/model/download")
         assert response.status_code == 200
-        assert "speech-model-status" in response.text
+        assert "application/json" in response.headers.get("content-type", "")
+        payload = response.json()
+        assert payload["size"] == "small"
 
     def test_options_lists_sizes(self, client):
         """Options endpoint returns all configured speech model sizes."""

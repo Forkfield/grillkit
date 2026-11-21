@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Negative scenarios: 404s, bad UUID, bad WS msg, invalid WAV, active→results 404."""
 
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.shared.infrastructure.models import Answer, Interview
 from tests.fakes import answer_evaluation_json
@@ -14,21 +14,21 @@ class TestNegativeScenarios:
     """Tests for error handling and edge cases."""
 
     def test_invalid_interview_uuid(self, client, isolated_db):
-        """GET /interview/{invalid-uuid} redirects to home."""
-        response = client.get("/interview/not-a-uuid", follow_redirects=False)
-        assert response.status_code == 303
-        assert response.headers["location"] == "/"
+        """GET /api/interview/{invalid-uuid} returns 404 with a redirect payload."""
+        response = client.get("/api/interview/not-a-uuid")
+        assert response.status_code == 404
+        assert response.json()["not_found"] is True
+        assert response.json()["redirect"] == "/"
 
     def test_missing_interview(self, client, isolated_db):
-        """GET /interview/{nonexistent} redirects to home."""
-        response = client.get(
-            "/interview/00000000-0000-0000-0000-000000000000", follow_redirects=False
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == "/"
+        """GET /api/interview/{nonexistent} returns 404 with a redirect payload."""
+        response = client.get("/api/interview/00000000-0000-0000-0000-000000000000")
+        assert response.status_code == 404
+        assert response.json()["not_found"] is True
+        assert response.json()["redirect"] == "/"
 
     def test_results_for_active_session_404(self, client, isolated_db):
-        """Results page redirects active sessions back to interview."""
+        """Results JSON redirects active sessions back to the interview."""
         interview_id = persist_interview_with_answers(
             Interview(
                 id="neg-active-1",
@@ -39,11 +39,9 @@ class TestNegativeScenarios:
             [Answer(question_id="q1", order=1, round=0, question_text="Q?")],
             question_count=1,
         )
-        response = client.get(
-            f"/interview/{interview_id}/results", follow_redirects=False
-        )
-        assert response.status_code == 303
-        assert response.headers["location"] == f"/interview/{interview_id}"
+        response = client.get(f"/api/interview/{interview_id}/results")
+        assert response.status_code == 200
+        assert response.json()["redirect"] == f"/interview/{interview_id}"
 
     def test_answered_question_is_idempotent(
         self, client, isolated_db, override_ws_ai_provider
@@ -91,6 +89,6 @@ class TestNegativeScenarios:
 
         # Session still valid
         with InterviewUnitOfWork() as uow:
-            interview = InterviewQuery(uow).get_interview(interview_id)
+            interview = InterviewLoader(uow).get_interview(interview_id)
             assert interview is not None
             assert interview.status == "active"

@@ -15,7 +15,7 @@ from app.interview.domain.events import (
     TranscriptEvent,
 )
 from app.interview.domain.exceptions import InterviewNotActiveError
-from app.interview.queries.loader import InterviewLoader as InterviewQuery
+from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.shared.infrastructure.models import Answer, Interview
 from app.theory.domain.entities import TheoryTask
@@ -76,7 +76,7 @@ async def test_process_answer_persists_score_and_next_question(
     feedback = events[2]
     assert isinstance(feedback, AnswerFeedbackEvent)
     assert feedback.follow_up_needed is False
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     q2 = next(a for a in reloaded.answers if a.question_id == "q2" and a.round == 0)
     assert feedback.next_question == {
@@ -122,7 +122,7 @@ async def test_process_answer_creates_follow_up_round(isolated_db, fake_ai_provi
     assert feedback.follow_up_text == "Explain big-O of append."
     assert feedback.next_question is None
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     rounds = [a for a in reloaded.answers if a.question_id == "q1"]
     assert len(rounds) == 2
@@ -190,7 +190,7 @@ async def test_process_follow_up_answer_without_another_follow_up(
     assert feedback.next_question is not None
     assert feedback.next_question["question_id"] == "q2"
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     follow_up = next(
         a for a in reloaded.answers if a.question_id == "q1" and a.round == 1
@@ -269,7 +269,7 @@ async def test_last_follow_up_advances_immediately_and_evaluates_in_background(
     assert feedback.next_question is not None
     assert feedback.next_question["question_id"] == "q2"
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     last_follow_up = next(
         a for a in reloaded.answers if a.question_id == "q1" and a.round == 2
@@ -279,7 +279,7 @@ async def test_last_follow_up_advances_immediately_and_evaluates_in_background(
 
     await asyncio.sleep(0.05)
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     last_follow_up = next(
         a for a in reloaded.answers if a.question_id == "q1" and a.round == 2
@@ -400,7 +400,7 @@ async def test_process_timeout_scores_zero_and_advances(isolated_db):
     assert feedback.next_question is not None
     assert feedback.next_question["question_id"] == "q2"
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     q1 = next(a for a in reloaded.answers if a.question_id == "q1" and a.round == 0)
     assert q1.answer_text == TheoryTask.TIME_EXPIRED_ANSWER_TEXT
@@ -430,7 +430,7 @@ async def test_timeout_ignored_while_answer_pending_evaluation(
     )
 
     assert events == []
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     q1 = next(a for a in reloaded.answers if a.question_id == "q1" and a.round == 0)
     assert q1.answer_text == "Answer in progress."
@@ -481,7 +481,7 @@ async def test_timeout_during_ai_evaluation_preserves_score(
 
     assert any(type(e).__name__ == "AnswerFeedbackEvent" for e in events)
     q1 = next(
-        a for a in InterviewQuery.load(interview_id).answers if a.question_id == "q1"
+        a for a in InterviewLoader.load(interview_id).answers if a.question_id == "q1"
     )
     assert q1.answer_text == "Valid on-time answer."
     assert q1.score == 5
@@ -505,7 +505,7 @@ async def test_late_answer_submission_treated_as_timeout(isolated_db, fake_ai_pr
     assert isinstance(events[0], AnswerFeedbackEvent)
     assert events[0].timed_out is True
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     q1 = next(a for a in reloaded.answers if a.question_id == "q1" and a.round == 0)
     assert q1.score == 0
@@ -548,7 +548,7 @@ async def test_process_audio_answer_runs_transcription_and_evaluation(
     assert transcript.text == "spoken answer text"
     assert transcriber.last_audio is not None
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     answer = next(a for a in reloaded.answers if a.question_id == "q1" and a.round == 0)
     assert answer.answer_text == "spoken answer text"
@@ -671,7 +671,7 @@ async def test_process_audio_answer_last_follow_up_fast_path(
     assert isinstance(events[2], TranscriptEvent)
     assert not any(isinstance(event, EvaluatingEvent) for event in events)
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     last_follow_up = next(
         a for a in reloaded.answers if a.question_id == "q1" and a.round == 2
@@ -681,7 +681,7 @@ async def test_process_audio_answer_last_follow_up_fast_path(
 
     await asyncio.sleep(0.05)
 
-    reloaded = InterviewQuery.load(interview_id)
+    reloaded = InterviewLoader.load(interview_id)
     assert reloaded is not None
     last_follow_up = next(
         a for a in reloaded.answers if a.question_id == "q1" and a.round == 2

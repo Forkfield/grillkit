@@ -79,36 +79,61 @@ class CodingRunnerService:
             Aggregated run outcome with per-test details.
         """
         judge0 = client or Judge0Gateway.from_env()
-        language = str(task_spec.get("language", "python"))
-        language_id = judge0_language_id(language)
+        language_id = judge0_language_id(str(task_spec.get("language", "python")))
         evaluation_mode = str(task_spec.get("evaluation_mode", "tests"))
-        cpu_time_limit = task_spec.get("time_limit_seconds")
-        memory_limit_kb = task_spec.get("memory_limit_kb")
         entrypoint = task_spec.get("entrypoint")
         if not isinstance(entrypoint, str):
             entrypoint = None
 
-        if evaluation_mode == "ai":
-            return await CodingRunnerService._run_compile_only(
-                source_code=source_code,
-                language_id=language_id,
-                entrypoint=entrypoint,
-                cpu_time_limit=cpu_time_limit,
-                memory_limit_kb=memory_limit_kb,
-                client=judge0,
-            )
-
         public_tests = task_spec.get("public_tests") or []
-        if not isinstance(public_tests, list) or not public_tests:
+        if (
+            evaluation_mode == "ai"
+            or not isinstance(public_tests, list)
+            or not public_tests
+        ):
             return await CodingRunnerService._run_compile_only(
                 source_code=source_code,
                 language_id=language_id,
                 entrypoint=entrypoint,
-                cpu_time_limit=cpu_time_limit,
-                memory_limit_kb=memory_limit_kb,
+                cpu_time_limit=task_spec.get("time_limit_seconds"),
+                memory_limit_kb=task_spec.get("memory_limit_kb"),
                 client=judge0,
             )
 
+        return await CodingRunnerService._run_public_test_cases(
+            source_code=source_code,
+            task_spec=task_spec,
+            public_tests=public_tests,
+            language_id=language_id,
+            entrypoint=entrypoint,
+            client=judge0,
+        )
+
+    @staticmethod
+    async def _run_public_test_cases(
+        *,
+        source_code: str,
+        task_spec: dict[str, Any],
+        public_tests: list[Any],
+        language_id: int,
+        entrypoint: str | None,
+        client: Judge0Gateway,
+    ) -> CodingRunResult:
+        """Run each public test case in order, stopping at the first failure.
+
+        Args:
+            source_code: Current editor contents from the candidate.
+            task_spec: Persisted task metadata with limits.
+            public_tests: Non-empty list of test case dicts.
+            language_id: Judge0 language identifier.
+            entrypoint: Optional callable used by the harness wrapper.
+            client: Judge0 client instance.
+
+        Returns:
+            Aggregated run outcome with per-test details.
+        """
+        cpu_time_limit = task_spec.get("time_limit_seconds")
+        memory_limit_kb = task_spec.get("memory_limit_kb")
         results: list[CaseRunResult] = []
         total_duration_ms = 0
         last_stdout: str | None = None
@@ -126,7 +151,7 @@ class CodingRunnerService:
                 entrypoint=entrypoint,
                 stdin=stdin,
             )
-            submission = await judge0.submit(
+            submission = await client.submit(
                 source_code=script,
                 language_id=language_id,
                 stdin=stdin,
