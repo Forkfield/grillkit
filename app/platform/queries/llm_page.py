@@ -24,4 +24,3 @@ def list_preset_options() -> list[LLMPresetOptionRead]:
         )
         for entry in get_default_catalog_service().list_models()
     ]
-

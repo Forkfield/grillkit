@@ -40,7 +40,9 @@ class TestLLMCatalog:
         assert catalog.selected_id is None
         assert catalog.models == {}
 
-    def test_add_user_model_persists_accepts_audio_input(self, catalog_service, catalog_path):
+    def test_add_user_model_persists_accepts_audio_input(
+        self, catalog_service, catalog_path
+    ):
         """Audio capability flag round-trips through llm_models.json."""
         entry = catalog_service.add_user_model(
             NewLLMModel(

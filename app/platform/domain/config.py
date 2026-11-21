@@ -264,7 +264,9 @@ class ConfigService:
                     if api_key_decision.kind is ApiKeyKind.SET
                     else None
                 )
-                self._catalog_service.save_model_selection(config.llm_preset_id, api_key)
+                self._catalog_service.save_model_selection(
+                    config.llm_preset_id, api_key
+                )
         self._repo.save(config)
 
     def delete_config(self) -> None:

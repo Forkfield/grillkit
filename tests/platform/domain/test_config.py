@@ -217,9 +217,7 @@ class TestConfigService:
     def _build_catalog_service(self, data_dir):
         """Build a catalog service bound to the given temp directory."""
         return LLMCatalogService(
-            LLMCatalogRepository(
-                path=data_dir / "llm_models.json", data_dir=data_dir
-            )
+            LLMCatalogRepository(path=data_dir / "llm_models.json", data_dir=data_dir)
         )
 
     @pytest.fixture
@@ -227,9 +225,7 @@ class TestConfigService:
         """Build a ConfigService bound to temp config and catalog repositories."""
         test_path = mock_config_path
         repo = ConfigRepository(path=test_path, data_dir=test_path.parent)
-        return ConfigService(
-            repo, self._build_catalog_service(test_path.parent)
-        )
+        return ConfigService(repo, self._build_catalog_service(test_path.parent))
 
     def test_save_and_get_config(self, config_service, mock_config_path):
         """Test saving app settings and selected model."""
@@ -255,9 +251,7 @@ class TestConfigService:
         user_path = mock_config_path.parent / "llm_models.json"
         config = AppConfig(llm_preset_id="cloud")
 
-        config_service.save_config(
-            config, ApiKeyDecision(ApiKeyKind.CLEAR)
-        )
+        config_service.save_config(config, ApiKeyDecision(ApiKeyKind.CLEAR))
 
         stored = json.loads(user_path.read_text())
         assert "api_key" not in stored["models"]["cloud"]
@@ -281,9 +275,7 @@ class TestConfigService:
         user_path = mock_config_path.parent / "llm_models.json"
         config = AppConfig(llm_preset_id="cloud")
 
-        config_service.save_config(
-            config, ApiKeyDecision(ApiKeyKind.SET, "new-secret")
-        )
+        config_service.save_config(config, ApiKeyDecision(ApiKeyKind.SET, "new-secret"))
 
         stored = json.loads(user_path.read_text())
         assert stored["models"]["cloud"]["api_key"] == "new-secret"
@@ -292,9 +284,7 @@ class TestConfigService:
         """Test retrieving config when file does not exist."""
         assert config_service.get_config() is None
 
-    def test_load_active_returns_config_and_model_with_one_catalog_read(
-        self, tmp_path
-    ):
+    def test_load_active_returns_config_and_model_with_one_catalog_read(self, tmp_path):
         """load_active returns the selected entry without re-reading the catalog."""
         data_dir = tmp_path
         catalog_repo = LLMCatalogRepository(
@@ -308,9 +298,7 @@ class TestConfigService:
                 model="gpt-4",
             )
         )
-        config_repo = ConfigRepository(
-            path=data_dir / "config.json", data_dir=data_dir
-        )
+        config_repo = ConfigRepository(path=data_dir / "config.json", data_dir=data_dir)
         config_repo.save(AppConfig(llm_preset_id="cloud"))
         load = MagicMock(wraps=catalog_repo.load)
         catalog_repo.load = load
@@ -507,7 +495,9 @@ class TestConfigService:
         )
         success, message = await config_service.test_model(probe)
         assert success is False
-        assert message == "Model does not accept audio input or rejected the audio probe."
+        assert (
+            message == "Model does not accept audio input or rejected the audio probe."
+        )
 
     @pytest.mark.asyncio
     async def test_test_model_audio_skipped_when_text_fails(

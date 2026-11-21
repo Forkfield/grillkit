@@ -53,15 +53,9 @@ async def build_page_context(
     speech_model_status = whisper.get_status(size, locale)
 
     tts_voice_status, tts_enabled = voice_status_service.resolve_for_config(config)
-    tts_show_banner = (
-        tts_enabled
-        and (
-            tts_voice_status.state in ("missing", "error", "downloading")
-            or (
-                tts_voice_status.state == "ready"
-                and not tts_voice_status.loaded_in_memory
-            )
-        )
+    tts_show_banner = tts_enabled and (
+        tts_voice_status.state in ("missing", "error", "downloading")
+        or (tts_voice_status.state == "ready" and not tts_voice_status.loaded_in_memory)
     )
 
     preset_id: str | None

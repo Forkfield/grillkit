@@ -216,9 +216,7 @@ class SaveConfigUseCase:
             accepts_audio_input=entry.accepts_audio_input,
         )
         success, message = True, ""
-        if force_test or self._provider_changed(
-            existing, catalog, effective, decision
-        ):
+        if force_test or self._provider_changed(existing, catalog, effective, decision):
             success, message = await self._config_service.test_model(effective)
         return config, decision, success, message
 

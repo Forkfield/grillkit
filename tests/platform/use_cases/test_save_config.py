@@ -44,9 +44,7 @@ def _make_use_case(
     """
     entry = _entry()
     catalog_service = MagicMock()
-    catalog_service.load_catalog.return_value = SimpleNamespace(
-        models={"cloud": entry}
-    )
+    catalog_service.load_catalog.return_value = SimpleNamespace(models={"cloud": entry})
 
     config_service = MagicMock()
     config_service.get_config.return_value = existing
@@ -137,13 +135,16 @@ class TestExecute:
     async def test_invalid_preset_does_not_save_and_returns_error(self):
         """An invalid model id returns an error without persisting."""
         use_case, config_service, _ = _make_use_case()
-        with patch(
-            "app.platform.use_cases.save_config.normalize_model_id",
-            side_effect=ValueError("Unsupported LLM model"),
-        ), patch(
-            "app.platform.use_cases.save_config.build_page_context",
-            new=AsyncMock(return_value=_fake_page()),
-        ) as mock_page:
+        with (
+            patch(
+                "app.platform.use_cases.save_config.normalize_model_id",
+                side_effect=ValueError("Unsupported LLM model"),
+            ),
+            patch(
+                "app.platform.use_cases.save_config.build_page_context",
+                new=AsyncMock(return_value=_fake_page()),
+            ) as mock_page,
+        ):
             result = await use_case.execute(_body(llm_preset_id="invalid"))
 
         assert result.success is False
@@ -181,13 +182,16 @@ class TestExecute:
         rather than an unhandled error.
         """
         use_case, config_service, _ = _make_use_case()
-        with patch(
-            patch_target,
-            side_effect=ValueError(expected),
-        ), patch(
-            "app.platform.use_cases.save_config.build_page_context",
-            new=AsyncMock(return_value=_fake_page()),
-        ) as mock_page:
+        with (
+            patch(
+                patch_target,
+                side_effect=ValueError(expected),
+            ),
+            patch(
+                "app.platform.use_cases.save_config.build_page_context",
+                new=AsyncMock(return_value=_fake_page()),
+            ) as mock_page,
+        ):
             result = await use_case.execute(_body(**overrides))
 
         assert result.success is False

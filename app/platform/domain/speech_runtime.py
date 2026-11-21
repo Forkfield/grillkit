@@ -159,4 +159,3 @@ class SpeechRuntimeCoordinator:
     def is_loaded(self, size: str) -> bool:
         """Return whether the STT model for ``size`` is loaded in memory."""
         return self._stt.is_loaded(size)
-

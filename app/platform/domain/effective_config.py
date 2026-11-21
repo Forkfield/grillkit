@@ -40,7 +40,9 @@ class EffectiveModelConfig:
     accepts_audio_input: bool = False
 
     @classmethod
-    def from_entry(cls, entry: LLMModelEntry, *, timeout: float) -> EffectiveModelConfig:
+    def from_entry(
+        cls, entry: LLMModelEntry, *, timeout: float
+    ) -> EffectiveModelConfig:
         """Build an effective config from a catalog entry and a timeout.
 
         Args:

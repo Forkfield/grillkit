@@ -141,7 +141,9 @@ class NewLLMModel(BaseModel):
         accepts_audio_input: Whether the model supports multimodal audio answers.
     """
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(str_strip_whitespace=True, frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        str_strip_whitespace=True, frozen=True
+    )
 
     display_name: str
     base_url: str

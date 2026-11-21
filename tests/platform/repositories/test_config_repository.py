@@ -71,9 +71,7 @@ def test_save_persists_only_shared_fields(tmp_path):
 def test_load_normalizes_locale_and_voice(tmp_path):
     """load() normalizes locale and picks default voice when voice is unset."""
     path = tmp_path / "config.json"
-    path.write_text(
-        json.dumps({"timeout": 60.0, "locale": "RU", "tts_voice_id": ""})
-    )
+    path.write_text(json.dumps({"timeout": 60.0, "locale": "RU", "tts_voice_id": ""}))
     repo = ConfigRepository(path=path, data_dir=tmp_path)
 
     loaded = repo.load()
