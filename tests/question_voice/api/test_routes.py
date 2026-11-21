@@ -54,7 +54,7 @@ class TestTtsStatusRoute:
             )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["state"] == "unavailable"
+        assert payload["state"] == "missing"
         assert payload["enabled"] is False
 
     def test_status_returns_json_when_voice_ready(self, client, voice_config):

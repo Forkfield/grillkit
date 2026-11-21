@@ -28,7 +28,7 @@ class TestTtsStatusApi:
     """Tests for GET /speech/tts/status."""
 
     def test_status_json_when_voice_disabled(self, client):
-        """Status reports unavailable when voice is off."""
+        """Status reports the raw state; enabled carries the off state."""
         config = AppConfig(
             question_voice_enabled=False,
         )
@@ -57,7 +57,7 @@ class TestTtsStatusApi:
             )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["state"] == "unavailable"
+        assert payload["state"] == "missing"
         assert payload["enabled"] is False
 
     def test_status_json_when_voice_ready(self, client, voice_config):

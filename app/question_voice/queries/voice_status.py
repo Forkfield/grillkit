@@ -96,7 +96,5 @@ class VoiceStatus:
             JSON-serializable status dictionary.
         """
         payload = status.model_dump()
-        if not enabled and status.state == "missing":
-            payload["state"] = "unavailable"
         payload["enabled"] = enabled
         return payload
