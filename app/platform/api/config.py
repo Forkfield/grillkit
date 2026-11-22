@@ -22,6 +22,7 @@ from app.platform.schemas import (
     DiscoverModelsResponse,
     LLMModelForm,
     LLMProviderForm,
+    ModelAudioInputForm,
     NewLLMModel,
     SaveConfigBody,
 )
@@ -209,6 +210,40 @@ async def update_provider_model(
 ) -> CatalogActionResult:
     """Update a model that belongs to a provider."""
     result = await manage_catalog.update_model(provider_id, model_id, body)
+    return await _catalog_action_response(
+        result, config_service, whisper_model_service, voice_status_service
+    )
+
+
+@router.post("/providers/{provider_id}/import-models")
+async def import_provider_models(
+    provider_id: str,
+    config_service: ConfigServiceDep,
+    whisper_model_service: WhisperModelServiceDep,
+    voice_status_service: VoiceStatusServiceDep,
+    manage_catalog: ManageCatalogUseCaseDep,
+) -> CatalogActionResult:
+    """Discover the provider's models and add them all to the catalog."""
+    result = await manage_catalog.import_models(provider_id)
+    return await _catalog_action_response(
+        result, config_service, whisper_model_service, voice_status_service
+    )
+
+
+@router.patch("/providers/{provider_id}/models/{model_id}")
+async def set_model_audio_input(
+    provider_id: str,
+    model_id: str,
+    body: ModelAudioInputForm,
+    config_service: ConfigServiceDep,
+    whisper_model_service: WhisperModelServiceDep,
+    voice_status_service: VoiceStatusServiceDep,
+    manage_catalog: ManageCatalogUseCaseDep,
+) -> CatalogActionResult:
+    """Toggle one model's audio-input capability flag without probing."""
+    result = manage_catalog.set_model_audio_input(
+        provider_id, model_id, body.accepts_audio_input
+    )
     return await _catalog_action_response(
         result, config_service, whisper_model_service, voice_status_service
     )

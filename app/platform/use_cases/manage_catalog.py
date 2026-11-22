@@ -4,7 +4,8 @@
 
 Provider and model mutations share one flow: probe the endpoint (so a bad URL,
 key, or model name is reported before anything is persisted), then write the
-catalog. Deleting never probes.
+catalog. Deleting never probes. Model discovery imports every reported model
+without probing (flags only), and a failed attempt marks the provider card.
 """
 
 from dataclasses import dataclass, field
@@ -79,6 +80,22 @@ class ManageCatalogUseCase:
             )
         except ValueError as exc:
             return CatalogActionResult(error=str(exc))
+        imported, discovery_error = await self._import_discovered_models(provider)
+        if discovery_error:
+            return CatalogActionResult(
+                message=(
+                    f"Added provider '{provider.display_name}'. "
+                    f"Could not load models: {discovery_error}"
+                )
+            )
+        if imported:
+            return CatalogActionResult(
+                message=(
+                    f"Added provider '{provider.display_name}' — "
+                    f"imported {imported} "
+                    f"model{'' if imported == 1 else 's'}."
+                )
+            )
         return CatalogActionResult(message=f"Added provider '{provider.display_name}'.")
 
     async def update_provider(
@@ -165,6 +182,9 @@ class ManageCatalogUseCase:
             )
         except ValueError as exc:
             return CatalogActionResult(error=str(exc))
+        # A successful manual add proves the endpoint works; drop any stale
+        # discovery-failure mark from the provider card.
+        self._catalog_service.set_provider_discovery_error(provider_id, None)
         return CatalogActionResult(message=f"Added model '{entry.display_name}'.")
 
     async def update_model(
@@ -242,6 +262,102 @@ class ManageCatalogUseCase:
                 error=self._probe_error(error, provider.api_key)
             )
         return DiscoverModelsResult(models=models)
+
+    async def import_models(self, provider_id: str) -> CatalogActionResult:
+        """Discover models from the provider endpoint and add them all.
+
+        Already-known models are skipped; imported ones default to
+        ``accepts_audio_input=False`` and keep the provider model name as the
+        display name. A failed attempt marks the provider card so the user
+        sees why the list stayed empty.
+
+        Args:
+            provider_id: Provider to import models for.
+
+        Returns:
+            Success or error result for the config page.
+        """
+        provider = self._catalog_service.get_provider(provider_id)
+        if provider is None:
+            return CatalogActionResult(error=f"Unknown LLM provider: {provider_id}")
+        imported, error = await self._import_discovered_models(provider)
+        if error:
+            return CatalogActionResult(error=error)
+        if imported:
+            return CatalogActionResult(
+                message=(
+                    f"Imported {imported} "
+                    f"model{'' if imported == 1 else 's'} from "
+                    f"'{provider.display_name}'."
+                )
+            )
+        return CatalogActionResult(
+            message=(
+                f"All models of '{provider.display_name}' are already in the catalog."
+            )
+        )
+
+    def set_model_audio_input(
+        self, provider_id: str, model_id: str, accepts_audio_input: bool
+    ) -> CatalogActionResult:
+        """Toggle the audio-input flag of one model without probing.
+
+        The flag only records UI capability, so it is persisted directly
+        instead of running a live connection probe.
+
+        Args:
+            provider_id: Provider that owns the model.
+            model_id: Catalog model id.
+            accepts_audio_input: New flag value.
+
+        Returns:
+            Success or error result for the config page.
+        """
+        entry = self._catalog_service.get_model(model_id)
+        if entry is None or entry.provider_id != provider_id:
+            return CatalogActionResult(error=f"Unknown LLM model: {model_id}")
+        try:
+            self._catalog_service.update_model(
+                provider_id,
+                model_id,
+                display_name=entry.display_name,
+                model=entry.model,
+                accepts_audio_input=accepts_audio_input,
+            )
+        except ValueError as exc:
+            return CatalogActionResult(error=str(exc))
+        return CatalogActionResult(
+            message=(
+                f"'{entry.display_name}' now "
+                f"{'accepts' if accepts_audio_input else 'no longer accepts'} audio input."
+            )
+        )
+
+    async def _import_discovered_models(
+        self, provider: LLMProvider
+    ) -> tuple[int, str | None]:
+        """Discover models for ``provider`` and import them into the catalog.
+
+        Returns:
+            Tuple of the number of added models and an error message when
+            discovery failed (the provider is then marked with it).
+        """
+        models, error = await self._config_service.discover_models(
+            base_url=provider.base_url,
+            api_key=provider.api_key,
+            provider_type=provider.provider_type,
+            timeout=self._timeout(),
+        )
+        if error:
+            message = self._probe_error(error, provider.api_key)
+            self._catalog_service.set_provider_discovery_error(provider.id, message)
+            return 0, message
+        try:
+            imported = self._catalog_service.import_provider_models(provider.id, models)
+        except ValueError as exc:
+            return 0, str(exc)
+        self._catalog_service.set_provider_discovery_error(provider.id, None)
+        return imported, None
 
     async def _probe_model(
         self, provider: LLMProvider, form: LLMModelForm

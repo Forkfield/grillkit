@@ -91,6 +91,10 @@ class LLMCatalogRepositoryProtocol(Protocol):
         accepts_audio_input: bool,
     ) -> LLMModelEntry: ...
 
+    def import_provider_models(self, provider_id: str, models: list[str]) -> int: ...
+
+    def set_provider_discovery_error(self, provider_id: str, error: str | None) -> None: ...
+
     def delete_model(self, model_id: str) -> str | None: ...
 
 
@@ -329,6 +333,27 @@ class LLMCatalogService:
             model=model,
             accepts_audio_input=accepts_audio_input,
         )
+
+    def import_provider_models(self, provider_id: str, models: list[str]) -> int:
+        """Bulk-add discovered model names under a provider.
+
+        Args:
+            provider_id: Provider that owns the imported models.
+            models: Model names reported by the provider endpoint.
+
+        Returns:
+            Number of models actually added.
+        """
+        return self._repo.import_provider_models(provider_id, models)
+
+    def set_provider_discovery_error(self, provider_id: str, error: str | None) -> None:
+        """Persist or clear the last model-discovery error on a provider.
+
+        Args:
+            provider_id: Provider to mark.
+            error: Error message, or ``None`` to clear the mark.
+        """
+        self._repo.set_provider_discovery_error(provider_id, error)
 
     def delete_model(self, model_id: str) -> str | None:
         """Remove a model from the catalog.

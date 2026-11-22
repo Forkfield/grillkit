@@ -58,6 +58,7 @@ def list_provider_options() -> list[LLMProviderRead]:
                 base_url=provider.base_url,
                 provider_type=provider.provider_type,
                 has_api_key=bool(provider.api_key),
+                discovery_error=provider.discovery_error,
                 models=provider_models,
             )
         )

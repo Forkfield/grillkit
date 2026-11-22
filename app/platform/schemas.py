@@ -77,6 +77,7 @@ class LLMProviderRead(BaseModel):
         base_url: OpenAI-compatible base URL.
         provider_type: Provider adapter id.
         has_api_key: Whether a key is stored (the key itself is never sent).
+        discovery_error: Message from the last failed model discovery, if any.
         models: Models configured under this provider.
     """
 
@@ -87,6 +88,7 @@ class LLMProviderRead(BaseModel):
     base_url: str
     provider_type: str
     has_api_key: bool = False
+    discovery_error: str | None = None
     models: list["LLMModelRead"] = Field(default_factory=list)
 
 
@@ -276,6 +278,18 @@ class LLMProviderForm(BaseModel):
         if isinstance(value, str):
             return value.strip() or None
         return str(value).strip() or None
+
+
+class ModelAudioInputForm(BaseModel):
+    """User input for toggling one model's audio-input capability flag.
+
+    Attributes:
+        accepts_audio_input: Whether the model supports multimodal audio answers.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    accepts_audio_input: bool = False
 
 
 class LLMModelForm(BaseModel):
