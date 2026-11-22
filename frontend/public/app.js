@@ -318,16 +318,10 @@
     return select ? select.value : "en";
   }
 
-  function selectedSpeechSize(container) {
-    var checked = container.querySelector(
-      'input[name="speech_model_size"]:checked'
-    );
-    return checked ? checked.value : "small";
-  }
-
-  function buildConfigFormHTML(data) {
+  function buildConfigFormHTML(data, activeTab) {
     var config = data.config || {};
     var selectedPreset = data.selected_llm_preset_id;
+    var showProvidersTab = activeTab === "providers";
 
     var presetOptions;
     if (data.llm_presets && data.llm_presets.length) {
@@ -373,14 +367,19 @@
           (config && config.speech_model_size === size) ||
           (!config && size === "small");
         return (
-          "<label class=\"speech-model-size-option\">" +
+          '<div class="speech-model-size-option">' +
+          '<label class="speech-model-size-option-main">' +
           '<input type="radio" name="speech_model_size" value="' + escapeHtml(size) + '"' +
           (checked ? " checked" : "") + ">" +
           '<span class="speech-model-size-option-title">' + escapeHtml(spec.display_name) + "</span>" +
           '<span class="speech-model-size-option-meta">~' + escapeHtml(spec.approx_download_mb) +
           " MB download &middot; " + escapeHtml(spec.ram_hint) + " RAM &middot; " +
           escapeHtml(spec.speed_hint) + " &middot; " + escapeHtml(spec.quality_hint) + "</span>" +
-          "</label>"
+          "</label>" +
+          '<div class="speech-size-artifact inline-artifact" data-size="' + escapeHtml(size) + '">' +
+          '<span class="inline-artifact-state">Checking&hellip;</span>' +
+          "</div>" +
+          "</div>"
         );
       })
       .join("");
@@ -393,9 +392,7 @@
           '<button type="button" id="config-remove-btn" class="btn btn-danger">Remove Configuration</button>'
         : "";
 
-    return (
-      (data.error ? alertError(data.error) : "") +
-      (data.message ? alertSuccess(data.message) : "") +
+    var configCard =
       '<div class="card">' +
       '<div class="card-header">' +
       '<h1 class="card-title">AI Provider Configuration</h1>' +
@@ -421,11 +418,14 @@
       "<label class=\"form-label\">" +
       '<input type="checkbox" name="question_voice_enabled" id="question_voice_enabled" value="true"' + questionVoiceChecked + ">" +
       " Read questions aloud</label>" +
-      '<p class="form-hint">When enabled, the interview page reads each question aloud using an offline Piper voice (download on the Configuration page below).</p>' +
+      '<p class="form-hint">When enabled, the interview page reads each question aloud using an offline Piper voice.</p>' +
+      '<div class="inline-artifact" id="question-voice-status">' +
+      '<span class="inline-artifact-state">Checking&hellip;</span>' +
+      "</div>" +
       "</div>" +
       '<div class="form-group">' +
       '<span class="form-label form-label-required">Speech model size</span>' +
-      '<p class="form-hint">Offline Whisper model for voice input. Larger models are more accurate but slower and use more disk and RAM.</p>' +
+      '<p class="form-hint">Offline Whisper model for voice input. Larger models are more accurate but slower and use more disk and RAM. One model downloads at a time.</p>' +
       '<div class="speech-model-size-options" id="speech-model-size-group">' + sizeOptions + "</div>" +
       "</div>" +
       '<div class="form-group">' +
@@ -442,7 +442,9 @@
       "</div>" +
       removeButton +
       "</form>" +
-      "</div>" +
+      "</div>";
+
+    var providersCard =
       '<div class="card" id="add-llm-model-panel">' +
       '<div class="card-header">' +
       '<h2 class="card-title">Add model to catalog</h2>' +
@@ -474,180 +476,153 @@
       "</div>" +
       '<button type="submit" class="btn btn-secondary">Add model</button>' +
       "</form>" +
+      "</div>";
+
+    return (
+      (data.error ? alertError(data.error) : "") +
+      (data.message ? alertSuccess(data.message) : "") +
+      '<div class="settings-layout">' +
+      '<nav class="settings-nav" aria-label="Configuration sections">' +
+      '<button type="button" class="settings-nav-item' +
+      (showProvidersTab ? "" : " is-active") +
+      '" data-config-tab="config">Configuration</button>' +
+      '<button type="button" class="settings-nav-item' +
+      (showProvidersTab ? " is-active" : "") +
+      '" data-config-tab="providers">Providers &amp; models</button>' +
+      "</nav>" +
+      '<div class="settings-content">' +
+      '<div class="settings-pane" data-config-pane="config"' +
+      (showProvidersTab ? " hidden" : "") +
+      ">" +
+      configCard +
       "</div>" +
-      '<div class="card" id="speech-model-panel">' +
-      '<div class="card-header">' +
-      '<h2 class="card-title">Speech recognition model</h2>' +
-      '<p class="card-subtitle" id="speech-model-subtitle"></p>' +
+      '<div class="settings-pane" data-config-pane="providers"' +
+      (showProvidersTab ? "" : " hidden") +
+      ">" +
+      providersCard +
       "</div>" +
-      '<div id="speech-model-status"></div>' +
       "</div>" +
-      '<div class="card" id="question-voice-panel">' +
-      '<div class="card-header">' +
-      '<h2 class="card-title">Question voice (TTS)</h2>' +
-      '<p class="card-subtitle" id="question-voice-subtitle"></p>' +
-      "</div>" +
-      '<div id="speech-tts-status"></div>' +
       "</div>"
     );
   }
 
-  function artifactStatusHTML(status) {
+  function inlineArtifactStatus(status, downloadUrl, retryLabel) {
     /* status: {state, percent, message, ...} */
-    var hint =
-      "<p class=\"form-hint\">" + escapeHtml(status.message) + "</p>";
-    if (status.state === "missing") {
-      return (
-        hint +
-        '<div class="alert alert-warning">Not installed yet.</div>'
-      );
-    }
-    if (status.state === "ready") {
-      return hint + '<div class="alert alert-success">' + escapeHtml(status.message) + "</div>";
-    }
+    var label;
+    var button = "";
     if (status.state === "downloading") {
-      return (
-        hint +
-        '<div class="alert alert-info">Downloading&hellip; ' + escapeHtml(status.percent) + "%</div>" +
-        '<div class="progress-bar" role="progressbar" aria-valuenow="' + escapeHtml(status.percent) +
-        '" aria-valuemin="0" aria-valuemax="100">' +
-        '<div class="progress-bar-fill" style="width: ' + escapeHtml(status.percent) + '%;"></div>' +
-        "</div>"
-      );
+      label = "Downloading\u2026 " + status.percent + "%";
+    } else if (status.state === "ready") {
+      label = status.message || "Ready";
+    } else if (status.state === "error") {
+      label = status.message || "Download failed";
+      button =
+        '<button type="button" class="btn btn-sm btn-secondary speech-download-btn" ' +
+        'data-url="' + escapeHtml(downloadUrl) + '">' + (retryLabel || "Retry") + "</button>";
+    } else {
+      label = status.message || "Not installed";
+      button =
+        '<button type="button" class="btn btn-sm btn-secondary speech-download-btn" ' +
+        'data-url="' + escapeHtml(downloadUrl) + '">Download</button>';
     }
-    if (status.state === "error") {
-      return hint + '<div class="alert alert-error">' + escapeHtml(status.message) + "</div>";
-    }
-    return hint;
-  }
-
-  function renderSpeechModelArtifact(target) {
-    var size = selectedSpeechSize(target);
-    var locale = selectedFormLocale(target);
-    var subtitle = target.querySelector("#speech-model-subtitle");
-    var sizeOption = target.querySelector(
-      '.speech-model-size-option input[value="' + size + '"]'
+    return (
+      '<span class="inline-artifact-state inline-artifact-state--' + escapeHtml(status.state) + '">' +
+      escapeHtml(label) + "</span>" +
+      (button ? " " + button : "")
     );
-    var sizeLabel = sizeOption
-      ? sizeOption.closest(".speech-model-size-option").querySelector(".speech-model-size-option-title").textContent.trim()
-      : size;
-    var localeLabel = target.querySelector("#locale");
-    var label =
-      localeLabel && localeLabel.selectedOptions && localeLabel.selectedOptions[0]
-        ? localeLabel.selectedOptions[0].text
-        : locale;
-    if (subtitle) {
-      subtitle.textContent = "Offline Whisper (" + sizeLabel + ") — dictation in " + label;
+  }
+
+  function renderSpeechSizeArtifacts(container) {
+    var locale = selectedFormLocale(container);
+    var hosts = Array.prototype.slice.call(
+      container.querySelectorAll(".speech-size-artifact[data-size]")
+    );
+    if (!hosts.length) {
+      return Promise.resolve();
     }
-    fetchJSON(
-      "/speech/model/status?size=" + encodeURIComponent(size) + "&locale=" + encodeURIComponent(locale)
-    )
-      .then(function (status) {
-        var host = target.querySelector("#speech-model-status");
-        if (host) {
-          host.dataset.state = status.state;
-          host.dataset.percent = status.percent;
-          host.innerHTML =
-            artifactStatusHTML(status) +
-            (status.state === "missing" || status.state === "error"
-              ? '<button type="button" class="btn btn-secondary speech-download-btn" ' +
-                'data-url="/speech/model/download?size=' + encodeURIComponent(size) +
-                "&locale=" + encodeURIComponent(locale) + "\">Download speech model</button>"
-              : "");
+    return Promise.all(
+      hosts.map(function (host) {
+        var size = host.dataset.size;
+        return fetchJSON(
+          "/speech/model/status?size=" + encodeURIComponent(size) +
+            "&locale=" + encodeURIComponent(locale)
+        )
+          .then(function (status) {
+            return { host: host, size: size, status: status };
+          })
+          .catch(function () {
+            return null;
+          });
+      })
+    ).then(function (results) {
+      var active = null;
+      results.forEach(function (row) {
+        if (row && row.status.state === "downloading") {
+          active = row.size;
         }
-        scheduleSpeechPoll(target);
+      });
+      results.forEach(function (row) {
+        if (!row || !row.host.isConnected) {
+          return;
+        }
+        row.host.dataset.state = row.status.state;
+        row.host.innerHTML = inlineArtifactStatus(
+          row.status,
+          "/speech/model/download?size=" + encodeURIComponent(row.size) +
+            "&locale=" + encodeURIComponent(locale)
+        );
+        /* One Whisper download can run at a time: keep other buttons locked. */
+        var btn = row.host.querySelector(".speech-download-btn");
+        if (btn && active && row.size !== active) {
+          btn.disabled = true;
+          btn.title = "Another speech model is downloading";
+        }
+      });
+      scheduleConfigPoll(container, "speech", active !== null);
+    });
+  }
+
+  function renderQuestionVoiceArtifact(container) {
+    var locale = selectedFormLocale(container);
+    var host = container.querySelector("#question-voice-status");
+    if (!host) {
+      return Promise.resolve();
+    }
+    return fetchJSON("/speech/tts/status?locale=" + encodeURIComponent(locale))
+      .then(function (status) {
+        host.dataset.state = status.state;
+        host.innerHTML = inlineArtifactStatus(
+          status,
+          "/speech/tts/voice/download?locale=" + encodeURIComponent(locale)
+        );
+        scheduleConfigPoll(container, "voice", status.state === "downloading");
       })
       .catch(function () {
         /* transient */
       });
   }
 
-  function renderQuestionVoiceArtifact(target) {
-    var locale = selectedFormLocale(target);
-    var localeLabel = target.querySelector("#locale");
-    var label =
-      localeLabel && localeLabel.selectedOptions && localeLabel.selectedOptions[0]
-        ? localeLabel.selectedOptions[0].text
-        : locale;
-    var subtitle = target.querySelector("#question-voice-subtitle");
-    if (subtitle) {
-      subtitle.textContent = "Offline Piper voice for reading interview questions aloud in " + label;
-    }
-    fetchJSON("/speech/tts/status?locale=" + encodeURIComponent(locale))
-      .then(function (status) {
-        var host = target.querySelector("#speech-tts-status");
-        if (host) {
-          host.dataset.state = status.state;
-          host.dataset.percent = status.percent;
-          var downloadButton =
-            status.state === "missing" || status.state === "error"
-              ? '<button type="button" class="btn btn-secondary speech-download-btn" ' +
-                'data-url="/speech/tts/voice/download?locale=' + encodeURIComponent(locale) + "\">Download question voice</button>"
-              : "";
-          host.innerHTML = artifactStatusHTML(status) + downloadButton;
-        }
-        scheduleQuestionVoicePoll(target);
-      })
-      .catch(function () {
-        /* transient */
-      });
-  }
+  var configPollTimers = { speech: null, voice: null };
 
-  var speechPollTimer = null;
-  var questionVoicePollTimer = null;
-
-  function scheduleSpeechPoll(target) {
-    if (speechPollTimer) {
-      clearInterval(speechPollTimer);
-      speechPollTimer = null;
+  function scheduleConfigPoll(container, kind, downloading) {
+    if (configPollTimers[kind]) {
+      clearInterval(configPollTimers[kind]);
+      configPollTimers[kind] = null;
     }
-    var host = target.querySelector("#speech-model-status");
-    if (!host || host.dataset.state !== "downloading") {
+    if (!downloading) {
       return;
     }
-    speechPollTimer = setInterval(function () {
-      var size = selectedSpeechSize(target);
-      var locale = selectedFormLocale(target);
-      fetchJSON(
-        "/speech/model/status?size=" + encodeURIComponent(size) + "&locale=" + encodeURIComponent(locale)
-      )
-        .then(function (status) {
-          var current = target.querySelector("#speech-model-status");
-          if (!current) {
-            return;
-          }
-          current.dataset.state = status.state;
-          renderSpeechModelArtifact(target);
-        })
-        .catch(function () {
-          /* transient */
-        });
-    }, 1500);
-  }
-
-  function scheduleQuestionVoicePoll(target) {
-    if (questionVoicePollTimer) {
-      clearInterval(questionVoicePollTimer);
-      questionVoicePollTimer = null;
-    }
-    var host = target.querySelector("#speech-tts-status");
-    if (!host || host.dataset.state !== "downloading") {
-      return;
-    }
-    questionVoicePollTimer = setInterval(function () {
-      var locale = selectedFormLocale(target);
-      fetchJSON("/speech/tts/status?locale=" + encodeURIComponent(locale))
-        .then(function (status) {
-          var current = target.querySelector("#speech-tts-status");
-          if (!current) {
-            return;
-          }
-          current.dataset.state = status.state;
-          renderQuestionVoiceArtifact(target);
-        })
-        .catch(function () {
-          /* transient */
-        });
+    configPollTimers[kind] = setInterval(function () {
+      if (!container.isConnected) {
+        clearInterval(configPollTimers[kind]);
+        configPollTimers[kind] = null;
+        return;
+      }
+      if (kind === "speech") {
+        renderSpeechSizeArtifacts(container);
+      } else {
+        renderQuestionVoiceArtifact(container);
+      }
     }, 1500);
   }
 
@@ -698,11 +673,34 @@
     };
   }
 
-  function renderConfigPage(container, data) {
-    container.innerHTML = buildConfigFormHTML(data);
+  function setConfigTab(container, tab) {
+    container.querySelectorAll("[data-config-pane]").forEach(function (pane) {
+      pane.hidden = pane.dataset.configPane !== tab;
+    });
+    container.querySelectorAll("[data-config-tab]").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.dataset.configTab === tab);
+    });
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(
+        null,
+        "",
+        tab === "providers" ? "#/config/providers" : "#/config"
+      );
+    }
+  }
+
+  function renderConfigPage(container, data, activeTab) {
+    activeTab = activeTab === "providers" ? "providers" : "config";
+    container.innerHTML = buildConfigFormHTML(data, activeTab);
     applyPresetMode(container);
-    renderSpeechModelArtifact(container);
+    renderSpeechSizeArtifacts(container);
     renderQuestionVoiceArtifact(container);
+
+    container.querySelectorAll("[data-config-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setConfigTab(container, btn.dataset.configTab);
+      });
+    });
 
     var presetSelect = container.querySelector("#llm_preset_id");
     if (presetSelect) {
@@ -710,13 +708,8 @@
         applyPresetMode(container);
       });
     }
-    container.querySelectorAll('input[name="speech_model_size"]').forEach(function (radio) {
-      radio.addEventListener("change", function () {
-        renderSpeechModelArtifact(container);
-      });
-    });
     container.querySelector("#locale").addEventListener("change", function () {
-      renderSpeechModelArtifact(container);
+      renderSpeechSizeArtifacts(container);
       renderQuestionVoiceArtifact(container);
     });
 
@@ -726,7 +719,7 @@
       btn.disabled = true;
       postJSON("/api/config", collectConfigForm(container))
         .then(function (result) {
-          renderConfigPage(container, result.page);
+          renderConfigPage(container, result.page, activeTab);
         })
         .catch(function (err) {
           btn.disabled = false;
@@ -774,7 +767,7 @@
         removeBtn.disabled = true;
         fetchJSON("/api/config", { method: "DELETE" })
           .then(function (result) {
-            renderConfigPage(container, result.page);
+            renderConfigPage(container, result.page, activeTab);
           })
           .catch(function (err) {
             removeBtn.disabled = false;
@@ -794,7 +787,7 @@
         .then(function (result) {
           /* The returned page is used to re-render the config form. */
           if (result.page) {
-            renderConfigPage(container, result.page);
+            renderConfigPage(container, result.page, activeTab);
           }
         })
         .catch(function (err) {
@@ -806,7 +799,10 @@
         });
     });
 
-    container.addEventListener("click", function (event) {
+    if (container._configDownloadHandler) {
+      container.removeEventListener("click", container._configDownloadHandler);
+    }
+    container._configDownloadHandler = function (event) {
       var target = event.target;
       if (!target || typeof target.closest !== "function") {
         return;
@@ -816,25 +812,27 @@
         return;
       }
       btn.disabled = true;
-      fetchJSON(btn.dataset.url, { method: "POST" })
+      var downloadUrl = btn.dataset.url || "";
+      fetchJSON(downloadUrl, { method: "POST" })
         .then(function () {
-          var panel = btn.closest(".card");
-          if (panel && panel.querySelector("#speech-model-status")) {
-            renderSpeechModelArtifact(panel);
-          } else if (panel) {
-            renderQuestionVoiceArtifact(panel);
+          if (downloadUrl.indexOf("/speech/tts/") === 0) {
+            renderQuestionVoiceArtifact(container);
+          } else {
+            renderSpeechSizeArtifacts(container);
           }
         })
         .catch(function () {
           btn.disabled = false;
         });
-    });
+    };
+    container.addEventListener("click", container._configDownloadHandler);
   }
 
-  pages.config = function (container) {
+  pages.config = function (container, params) {
+    var activeTab = params && params.id === "providers" ? "providers" : "config";
     fetchJSON("/api/config")
       .then(function (data) {
-        renderConfigPage(container, data);
+        renderConfigPage(container, data, activeTab);
       })
       .catch(function (err) {
         container.innerHTML = errorCard(errMessage(err, "Could not load configuration."));
