@@ -400,14 +400,14 @@
       escapeHtml(entry.display_name || "") + '" placeholder="Work GPT-4o"></label>' +
       '<label class="form-field"><span class="form-label">Model name</span>' +
       '<input type="text" name="model" class="form-control" required value="' +
-      escapeHtml(entry.model || "") + '" list="discovered-models-' +
-      escapeHtml(providerId) + '" placeholder="gpt-4o"></label>' +
+      escapeHtml(entry.model || "") + '" placeholder="gpt-4o"></label>' +
       "</div>" +
       '<div class="inline-form-actions">' +
       '<button type="button" class="btn btn-sm btn-secondary" data-discover data-provider-id="' +
       escapeHtml(providerId) + '">Load models from provider</button>' +
       '<span class="discovered-models-status" data-discover-status></span>' +
       "</div>" +
+      '<div class="discovered-models-list" data-discovered-list hidden></div>' +
       '<label class="form-check"><input type="checkbox" name="accepts_audio_input"' +
       (entry.accepts_audio_input ? " checked" : "") +
       "> Accepts audio input</label>" +
@@ -494,7 +494,6 @@
       '<button type="button" class="btn btn-sm btn-secondary" data-form-cancel>Cancel</button>' +
       "</div></form>" +
       '<div class="provider-models">' + rows + "</div>" +
-      '<datalist id="discovered-models-' + escapeHtml(provider.id) + '"></datalist>' +
       '<div class="provider-card-footer">' +
       '<button type="button" class="btn btn-sm btn-secondary" data-model-add="' +
       escapeHtml(provider.id) + '">Add model</button></div>' +
@@ -655,10 +654,20 @@
       '<nav class="settings-nav" aria-label="Configuration sections">' +
       '<button type="button" class="settings-nav-item' +
       (showProvidersTab ? "" : " is-active") +
-      '" data-config-tab="config">Configuration</button>' +
+      '" data-config-tab="config">' +
+      '<span class="settings-nav-icon" aria-hidden="true">&#9881;&#65039;</span>' +
+      '<span class="settings-nav-text">' +
+      '<span class="settings-nav-label">Configuration</span>' +
+      '<span class="settings-nav-desc">Interview model, language, voice</span>' +
+      "</span></button>" +
       '<button type="button" class="settings-nav-item' +
       (showProvidersTab ? " is-active" : "") +
-      '" data-config-tab="providers">Providers &amp; models</button>' +
+      '" data-config-tab="providers">' +
+      '<span class="settings-nav-icon" aria-hidden="true">&#128268;</span>' +
+      '<span class="settings-nav-text">' +
+      '<span class="settings-nav-label">Providers &amp; models</span>' +
+      '<span class="settings-nav-desc">Endpoints, API keys, model list</span>' +
+      "</span></button>" +
       "</nav>" +
       '<div class="settings-content">' +
       '<div class="settings-pane" data-config-pane="config"' +
@@ -1123,6 +1132,25 @@
       return;
     }
 
+    var discoveredOption = target.closest("[data-discovered-model]");
+    if (discoveredOption) {
+      var discoveredForm = discoveredOption.closest("form");
+      if (discoveredForm) {
+        var modelInput = discoveredForm.querySelector('input[name="model"]');
+        var nameInput = discoveredForm.querySelector('input[name="display_name"]');
+        if (modelInput) {
+          modelInput.value = discoveredOption.dataset.discoveredModel;
+        }
+        if (nameInput && !nameInput.value.trim()) {
+          nameInput.value = discoveredOption.dataset.discoveredModel;
+        }
+        discoveredForm.querySelectorAll("[data-discovered-model]").forEach(function (item) {
+          item.classList.toggle("is-selected", item === discoveredOption);
+        });
+      }
+      return;
+    }
+
     var discoverBtn = target.closest("[data-discover]");
     if (discoverBtn) {
       discoverProviderModels(container, discoverBtn);
@@ -1134,7 +1162,37 @@
       var form = cancelBtn.closest("form");
       form.hidden = true;
       form.reset();
+      clearDiscoveredModels(form);
     }
+  }
+
+  function clearDiscoveredModels(form) {
+    var listEl = form.querySelector("[data-discovered-list]");
+    if (listEl) {
+      listEl.hidden = true;
+      listEl.innerHTML = "";
+    }
+    var status = form.querySelector("[data-discover-status]");
+    if (status) {
+      status.textContent = "";
+      delete status.dataset.state;
+    }
+  }
+
+  function renderDiscoveredModels(form, models) {
+    var listEl = form.querySelector("[data-discovered-list]");
+    if (!listEl) {
+      return;
+    }
+    listEl.innerHTML = models
+      .map(function (name) {
+        return (
+          '<button type="button" class="discovered-model-option" data-discovered-model="' +
+          escapeHtml(name) + '">' + escapeHtml(name) + "</button>"
+        );
+      })
+      .join("");
+    listEl.hidden = models.length === 0;
   }
 
   function discoverProviderModels(container, discoverBtn) {
@@ -1142,7 +1200,7 @@
     var form = discoverBtn.closest("form");
     var status = form.querySelector("[data-discover-status]");
     var providerId = discoverBtn.dataset.providerId;
-    var card = discoverBtn.closest(".provider-card");
+    clearDiscoveredModels(form);
     fetchJSON("/api/config/providers/" + encodeURIComponent(providerId) + "/discover-models", {
       method: "POST",
     })
@@ -1156,16 +1214,10 @@
           status.dataset.state = "error";
           return;
         }
-        var datalist = card ? card.querySelector("datalist") : null;
-        if (datalist) {
-          datalist.innerHTML = result.models
-            .map(function (name) {
-              return '<option value="' + escapeHtml(name) + '"></option>';
-            })
-            .join("");
-        }
+        renderDiscoveredModels(form, result.models || []);
         status.textContent =
-          "Found " + result.models.length + " models — pick one from the dropdown or keep typing.";
+          "Found " + (result.models || []).length +
+          " models — click one to fill the form, or keep typing.";
         status.dataset.state = "ok";
       })
       .catch(function (err) {
