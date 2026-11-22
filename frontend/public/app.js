@@ -318,40 +318,213 @@
     return select ? select.value : "en";
   }
 
-  function selectedSpeechSize(container) {
-    var checked = container.querySelector(
-      'input[name="speech_model_size"]:checked'
-    );
-    return checked ? checked.value : "small";
+  function buildPresetGroups(data) {
+    var providers = data.llm_providers || [];
+    var groups = providers
+      .map(function (provider) {
+        return {
+          label: provider.display_name,
+          models: (provider.models || []).map(function (entry) {
+            return {
+              id: entry.id,
+              display_name: entry.display_name,
+              model: entry.model,
+              accepts_audio_input: entry.accepts_audio_input,
+            };
+          }),
+        };
+      })
+      .filter(function (group) {
+        return group.models.length > 0;
+      });
+    if (!groups.length && data.llm_presets && data.llm_presets.length) {
+      groups = [
+        {
+          label: "Catalog",
+          models: data.llm_presets.map(function (entry) {
+            return {
+              id: entry.id,
+              display_name: entry.display_name,
+              model: entry.model || entry.description || "",
+              accepts_audio_input: entry.accepts_audio_input,
+            };
+          }),
+        },
+      ];
+    }
+    return groups;
   }
 
-  function buildConfigFormHTML(data) {
+  function buildPresetOptionsHTML(groups, selectedId, query) {
+    var needle = (query || "").trim().toLowerCase();
+    var html = "";
+    groups.forEach(function (group) {
+      var options = group.models.filter(function (entry) {
+        if (!needle) {
+          return true;
+        }
+        var haystack = (
+          entry.display_name + " " + entry.model + " " + group.label
+        ).toLowerCase();
+        return haystack.indexOf(needle) !== -1;
+      });
+      if (!options.length) {
+        return;
+      }
+      html += '<optgroup label="' + escapeHtml(group.label) + '">';
+      options.forEach(function (entry) {
+        html +=
+          '<option value="' + escapeHtml(entry.id) + '"' +
+          (entry.id === selectedId ? " selected" : "") +
+          ' data-description="' + escapeHtml(entry.model || "") + '"' +
+          ' data-accepts-audio-input="' +
+          (entry.accepts_audio_input ? "true" : "false") + '">' +
+          escapeHtml(entry.display_name) +
+          (entry.accepts_audio_input ? " (audio)" : "") +
+          "</option>";
+      });
+      html += "</optgroup>";
+    });
+    if (!html) {
+      return '<option value="">No models match this filter</option>';
+    }
+    return html;
+  }
+
+  function modelFormFieldsHTML(providerId, entry) {
+    entry = entry || {};
+    return (
+      '<div class="form-row">' +
+      '<label class="form-field"><span class="form-label">Display name</span>' +
+      '<input type="text" name="display_name" class="form-control" required value="' +
+      escapeHtml(entry.display_name || "") + '" placeholder="Work GPT-4o"></label>' +
+      '<label class="form-field"><span class="form-label">Model name</span>' +
+      '<input type="text" name="model" class="form-control" required value="' +
+      escapeHtml(entry.model || "") + '" list="discovered-models-' +
+      escapeHtml(providerId) + '" placeholder="gpt-4o"></label>' +
+      "</div>" +
+      '<div class="inline-form-actions">' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-discover data-provider-id="' +
+      escapeHtml(providerId) + '">Load models from provider</button>' +
+      '<span class="discovered-models-status" data-discover-status></span>' +
+      "</div>" +
+      '<label class="form-check"><input type="checkbox" name="accepts_audio_input"' +
+      (entry.accepts_audio_input ? " checked" : "") +
+      "> Accepts audio input</label>" +
+      '<p class="form-hint">Discovery queries the provider\'s model list; you can always type a model name manually.</p>' +
+      '<div class="inline-form-actions">' +
+      '<button type="submit" class="btn btn-sm btn-primary">Save model</button>' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-form-cancel>Cancel</button>' +
+      "</div>"
+    );
+  }
+
+  function buildModelRowHTML(provider, entry) {
+    return (
+      '<div class="provider-model-row" data-model-id="' + escapeHtml(entry.id) + '">' +
+      '<div class="provider-model-info">' +
+      '<span class="provider-model-name">' + escapeHtml(entry.display_name) + "</span>" +
+      '<span class="provider-model-meta">' + escapeHtml(entry.model) +
+      (entry.accepts_audio_input ? " &middot; audio" : "") + "</span>" +
+      "</div>" +
+      '<div class="provider-model-actions">' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-model-edit="' +
+      escapeHtml(entry.id) + '">Edit</button>' +
+      '<button type="button" class="btn btn-sm btn-danger" data-model-delete="' +
+      escapeHtml(entry.id) + '" data-provider-id="' + escapeHtml(provider.id) +
+      '">Delete</button>' +
+      "</div>" +
+      '<form class="form provider-model-form" data-model-form="' + escapeHtml(entry.id) +
+      '" data-provider-id="' + escapeHtml(provider.id) + '" hidden>' +
+      modelFormFieldsHTML(provider.id, entry) +
+      "</form>" +
+      "</div>"
+    );
+  }
+
+  function buildProviderCardHTML(provider) {
+    var models = provider.models || [];
+    var rows = models.length
+      ? models
+          .map(function (entry) {
+            return buildModelRowHTML(provider, entry);
+          })
+          .join("")
+      : '<p class="provider-empty">No models yet — add one below.</p>';
+    return (
+      '<div class="provider-card" data-provider-card="' + escapeHtml(provider.id) + '">' +
+      '<div class="provider-card-header">' +
+      '<div class="provider-card-info">' +
+      '<h3 class="provider-card-title">' + escapeHtml(provider.display_name) + "</h3>" +
+      '<p class="provider-card-url">' + escapeHtml(provider.base_url) + "</p>" +
+      '<div class="provider-card-badges">' +
+      (provider.has_api_key
+        ? '<span class="badge badge-success">API key stored</span>'
+        : '<span class="badge badge-muted">No API key</span>') +
+      '<span class="badge badge-muted">' + models.length +
+      (models.length === 1 ? " model" : " models") + "</span>" +
+      "</div></div>" +
+      '<div class="provider-card-actions">' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-provider-edit="' +
+      escapeHtml(provider.id) + '">Edit</button>' +
+      '<button type="button" class="btn btn-sm btn-danger" data-provider-delete="' +
+      escapeHtml(provider.id) + '">Delete</button>' +
+      "</div></div>" +
+      '<form class="form provider-edit-form" data-provider-edit-form="' +
+      escapeHtml(provider.id) + '" hidden>' +
+      '<div class="form-row">' +
+      '<label class="form-field"><span class="form-label">Display name</span>' +
+      '<input type="text" name="display_name" class="form-control" required value="' +
+      escapeHtml(provider.display_name) + '"></label>' +
+      '<label class="form-field"><span class="form-label">Base URL</span>' +
+      '<input type="url" name="base_url" class="form-control" required value="' +
+      escapeHtml(provider.base_url) + '"></label>' +
+      "</div>" +
+      '<label class="form-field"><span class="form-label">API key</span>' +
+      '<input type="password" name="api_key" class="form-control" autocomplete="off" placeholder="' +
+      (provider.has_api_key
+        ? "Leave blank to keep the stored key"
+        : "sk-… (leave blank for local servers)") +
+      '"></label>' +
+      (provider.has_api_key
+        ? '<label class="form-check"><input type="checkbox" name="clear_api_key"> Remove stored API key</label>'
+        : "") +
+      '<div class="inline-form-actions">' +
+      '<button type="submit" class="btn btn-sm btn-primary">Save provider</button>' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-form-cancel>Cancel</button>' +
+      "</div></form>" +
+      '<div class="provider-models">' + rows + "</div>" +
+      '<datalist id="discovered-models-' + escapeHtml(provider.id) + '"></datalist>' +
+      '<div class="provider-card-footer">' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-model-add="' +
+      escapeHtml(provider.id) + '">Add model</button></div>' +
+      '<form class="form provider-model-form" data-model-form="" data-provider-id="' +
+      escapeHtml(provider.id) + '" hidden>' +
+      modelFormFieldsHTML(provider.id, null) +
+      "</form></div>"
+    );
+  }
+
+  function buildConfigFormHTML(data, activeTab) {
     var config = data.config || {};
     var selectedPreset = data.selected_llm_preset_id;
+    var showProvidersTab = activeTab === "providers";
+    var presetGroups = buildPresetGroups(data);
 
     var presetOptions;
-    if (data.llm_presets && data.llm_presets.length) {
+    if (presetGroups.length) {
       presetOptions =
+        '<input type="search" id="llm-model-filter" class="form-control model-filter" ' +
+        'placeholder="Filter models by name, model, or provider" autocomplete="off">' +
         '<select name="llm_preset_id" id="llm_preset_id" class="form-control" required>' +
-        data.llm_presets
-          .map(function (preset) {
-            return (
-              '<option value="' + escapeHtml(preset.id) + '"' +
-              (preset.id === selectedPreset ? " selected" : "") +
-              ' data-description="' + escapeHtml(preset.description || "") + '"' +
-              ' data-api-key-required="' + (preset.api_key_required ? "true" : "false") + '"' +
-              ' data-accepts-audio-input="' + (preset.accepts_audio_input ? "true" : "false") + '">' +
-              escapeHtml(preset.display_name) +
-              (preset.accepts_audio_input ? " (audio)" : "") +
-              "</option>"
-            );
-          })
-          .join("") +
+        buildPresetOptionsHTML(presetGroups, selectedPreset, "") +
         '</select><p class="form-hint" id="llm-preset-description"></p>';
     } else {
       presetOptions =
         '<div class="alert alert-info">' +
-        "No models in the catalog yet. Add one below, then select it and save." +
+        "No models in the catalog yet. Add a provider and a model on the " +
+        '<a href="#/config/providers">Providers &amp; models</a> tab, ' +
+        "then select it here." +
         "</div>" +
         '<input type="hidden" name="llm_preset_id" value="">';
     }
@@ -374,14 +547,19 @@
           (config && config.speech_model_size === size) ||
           (!config && size === "small");
         return (
-          "<label class=\"speech-model-size-option\">" +
+          '<div class="speech-model-size-option">' +
+          '<label class="speech-model-size-option-main">' +
           '<input type="radio" name="speech_model_size" value="' + escapeHtml(size) + '"' +
           (checked ? " checked" : "") + ">" +
           '<span class="speech-model-size-option-title">' + escapeHtml(spec.display_name) + "</span>" +
           '<span class="speech-model-size-option-meta">~' + escapeHtml(spec.approx_download_mb) +
           " MB download &middot; " + escapeHtml(spec.ram_hint) + " RAM &middot; " +
           escapeHtml(spec.speed_hint) + " &middot; " + escapeHtml(spec.quality_hint) + "</span>" +
-          "</label>"
+          "</label>" +
+          '<div class="speech-size-artifact inline-artifact" data-size="' + escapeHtml(size) + '">' +
+          '<span class="inline-artifact-state">Checking&hellip;</span>' +
+          "</div>" +
+          "</div>"
         );
       })
       .join("");
@@ -394,9 +572,7 @@
           '<button type="button" id="config-remove-btn" class="btn btn-danger">Remove Configuration</button>'
         : "";
 
-    return (
-      (data.error ? alertError(data.error) : "") +
-      (data.message ? alertSuccess(data.message) : "") +
+    var configCard =
       '<div class="card">' +
       '<div class="card-header">' +
       '<h1 class="card-title">AI Provider Configuration</h1>' +
@@ -406,12 +582,8 @@
       '<div class="form-group" id="llm-preset-group">' +
       '<label for="llm_preset_id" class="form-label form-label-required">Interview model</label>' +
       presetOptions +
-      "</div>" +
-      '<div class="form-group" id="api-key-group">' +
-      '<label for="api_key" class="form-label">API Key <span class="text-muted">(optional for local providers)</span></label>' +
-      '<input type="password" name="api_key" id="api_key" class="form-control" value="" autocomplete="off" ' +
-      'placeholder="' + (config.api_key ? "Leave blank to keep existing key" : "sk-...") + '">' +
-      '<p class="form-hint">Stored in <code>data/llm_models.json</code> with the selected model.</p>' +
+      '<p class="form-hint">Providers and their API keys are managed on the ' +
+      '<a href="#/config/providers">Providers &amp; models</a> tab.</p>' +
       "</div>" +
       '<div class="form-group">' +
       '<label for="locale" class="form-label form-label-required">Interview language</label>' +
@@ -422,11 +594,14 @@
       "<label class=\"form-label\">" +
       '<input type="checkbox" name="question_voice_enabled" id="question_voice_enabled" value="true"' + questionVoiceChecked + ">" +
       " Read questions aloud</label>" +
-      '<p class="form-hint">When enabled, the interview page reads each question aloud using an offline Piper voice (download on the Configuration page below).</p>' +
+      '<p class="form-hint">When enabled, the interview page reads each question aloud using an offline Piper voice.</p>' +
+      '<div class="inline-artifact" id="question-voice-status">' +
+      '<span class="inline-artifact-state">Checking&hellip;</span>' +
+      "</div>" +
       "</div>" +
       '<div class="form-group">' +
       '<span class="form-label form-label-required">Speech model size</span>' +
-      '<p class="form-hint">Offline Whisper model for voice input. Larger models are more accurate but slower and use more disk and RAM.</p>' +
+      '<p class="form-hint">Offline Whisper model for voice input. Larger models are more accurate but slower and use more disk and RAM. One model downloads at a time.</p>' +
       '<div class="speech-model-size-options" id="speech-model-size-group">' + sizeOptions + "</div>" +
       "</div>" +
       '<div class="form-group">' +
@@ -437,229 +612,193 @@
       '<div class="divider"></div>' +
       '<div class="button-group">' +
       '<button type="submit" id="config-save-btn" class="btn btn-primary"' +
-      (data.llm_presets && data.llm_presets.length ? "" : " disabled") + ">Save Configuration</button>" +
+      (presetGroups.length ? "" : " disabled") + ">Save Configuration</button>" +
       '<button type="button" id="config-test-btn" class="btn btn-secondary"' +
-      (data.llm_presets && data.llm_presets.length ? "" : " disabled") + ">Test Connection</button>" +
+      (presetGroups.length ? "" : " disabled") + ">Test Connection</button>" +
       "</div>" +
       removeButton +
       "</form>" +
-      "</div>" +
-      '<div class="card" id="add-llm-model-panel">' +
+      "</div>";
+
+    var providerCards = (data.llm_providers || []).map(buildProviderCardHTML).join("");
+    var providersCard =
+      '<div class="card" id="providers-panel">' +
       '<div class="card-header">' +
-      '<h2 class="card-title">Add model to catalog</h2>' +
-      '<p class="card-subtitle">Save an OpenAI-compatible provider for reuse in the interview model list</p>' +
+      '<h1 class="card-title">Providers &amp; models</h1>' +
+      '<p class="card-subtitle">Each provider stores one endpoint and its API key. Add every model the endpoint offers; the interview model picker groups them by provider.</p>' +
       "</div>" +
-      '<form id="add-model-form" class="form">' +
-      '<div class="form-group">' +
-      '<label for="catalog_display_name" class="form-label form-label-required">Display name</label>' +
-      '<input type="text" name="display_name" id="catalog_display_name" class="form-control" required placeholder="Work GPT-4">' +
-      '<p class="form-hint">A stable id is generated from this name and stored in <code>data/llm_models.json</code>.</p>' +
+      '<div class="provider-list">' +
+      (providerCards || '<div class="alert alert-info">No providers yet. Add the first one below.</div>') +
       "</div>" +
-      '<div class="form-group">' +
-      '<label for="catalog_base_url" class="form-label form-label-required">Base URL</label>' +
-      '<input type="url" name="base_url" id="catalog_base_url" class="form-control" required placeholder="https://api.openai.com/v1">' +
+      '<div class="divider"></div>' +
+      '<h2 class="section-title">Add provider</h2>' +
+      '<form id="add-provider-form" class="form">' +
+      '<div class="form-row">' +
+      '<label class="form-field"><span class="form-label form-label-required">Display name</span>' +
+      '<input type="text" name="display_name" class="form-control" required placeholder="Work OpenAI"></label>' +
+      '<label class="form-field"><span class="form-label form-label-required">Base URL</span>' +
+      '<input type="url" name="base_url" class="form-control" required placeholder="https://api.openai.com/v1"></label>' +
       "</div>" +
-      '<div class="form-group">' +
-      '<label for="catalog_model" class="form-label form-label-required">Model name</label>' +
-      '<input type="text" name="model" id="catalog_model" class="form-control" required placeholder="gpt-4">' +
+      '<label class="form-field"><span class="form-label">API key</span>' +
+      '<input type="password" name="api_key" class="form-control" autocomplete="off" placeholder="sk-… (leave blank for local servers)"></label>' +
+      '<p class="form-hint">The key is stored once for the provider and shared by all of its models.</p>' +
+      '<div class="inline-form-actions">' +
+      '<button type="submit" class="btn btn-secondary">Add provider</button>' +
       "</div>" +
-      '<div class="form-group">' +
-      '<label for="catalog_api_key" class="form-label">API key</label>' +
-      '<input type="password" name="api_key" id="catalog_api_key" class="form-control" autocomplete="off" placeholder="sk-...">' +
-      '<p class="form-hint">Optional. Stored in <code>data/llm_models.json</code> with the model.</p>' +
-      "</div>" +
-      '<div class="form-group">' +
-      "<label class=\"form-label\">" +
-      '<input type="checkbox" name="api_key_required" id="catalog_api_key_required" value="true"> API key required</label>' +
-      "</div>" +
-      '<div class="form-group">' +
-      "<label class=\"form-label\">" +
-      '<input type="checkbox" name="accepts_audio_input" id="catalog_accepts_audio_input" value="true"> Accepts audio input</label>' +
-      '<p class="form-hint">When enabled, the model is tested with a short audio probe on add and when saving configuration. Whisper must be installed for the selected speech model size.</p>' +
-      "</div>" +
-      '<button type="submit" class="btn btn-secondary">Add model</button>' +
       "</form>" +
+      "</div>";
+
+    return (
+      (data.error ? alertError(data.error) : "") +
+      (data.message ? alertSuccess(data.message) : "") +
+      '<div class="settings-layout">' +
+      '<nav class="settings-nav" aria-label="Configuration sections">' +
+      '<button type="button" class="settings-nav-item' +
+      (showProvidersTab ? "" : " is-active") +
+      '" data-config-tab="config">Configuration</button>' +
+      '<button type="button" class="settings-nav-item' +
+      (showProvidersTab ? " is-active" : "") +
+      '" data-config-tab="providers">Providers &amp; models</button>' +
+      "</nav>" +
+      '<div class="settings-content">' +
+      '<div class="settings-pane" data-config-pane="config"' +
+      (showProvidersTab ? " hidden" : "") +
+      ">" +
+      configCard +
       "</div>" +
-      '<div class="card" id="speech-model-panel">' +
-      '<div class="card-header">' +
-      '<h2 class="card-title">Speech recognition model</h2>' +
-      '<p class="card-subtitle" id="speech-model-subtitle"></p>' +
+      '<div class="settings-pane" data-config-pane="providers"' +
+      (showProvidersTab ? "" : " hidden") +
+      ">" +
+      providersCard +
       "</div>" +
-      '<div id="speech-model-status"></div>' +
       "</div>" +
-      '<div class="card" id="question-voice-panel">' +
-      '<div class="card-header">' +
-      '<h2 class="card-title">Question voice (TTS)</h2>' +
-      '<p class="card-subtitle" id="question-voice-subtitle"></p>' +
-      "</div>" +
-      '<div id="speech-tts-status"></div>' +
       "</div>"
     );
   }
 
-  function artifactStatusHTML(status) {
+  function inlineArtifactStatus(status, downloadUrl, retryLabel) {
     /* status: {state, percent, message, ...} */
-    var hint =
-      "<p class=\"form-hint\">" + escapeHtml(status.message) + "</p>";
-    if (status.state === "missing") {
-      return (
-        hint +
-        '<div class="alert alert-warning">Not installed yet.</div>'
-      );
-    }
-    if (status.state === "ready") {
-      return hint + '<div class="alert alert-success">' + escapeHtml(status.message) + "</div>";
-    }
+    var label;
+    var button = "";
     if (status.state === "downloading") {
-      return (
-        hint +
-        '<div class="alert alert-info">Downloading&hellip; ' + escapeHtml(status.percent) + "%</div>" +
-        '<div class="progress-bar" role="progressbar" aria-valuenow="' + escapeHtml(status.percent) +
-        '" aria-valuemin="0" aria-valuemax="100">' +
-        '<div class="progress-bar-fill" style="width: ' + escapeHtml(status.percent) + '%;"></div>' +
-        "</div>"
-      );
+      label = "Downloading\u2026 " + status.percent + "%";
+    } else if (status.state === "ready") {
+      label = status.message || "Ready";
+    } else if (status.state === "error") {
+      label = status.message || "Download failed";
+      button =
+        '<button type="button" class="btn btn-sm btn-secondary speech-download-btn" ' +
+        'data-url="' + escapeHtml(downloadUrl) + '">' + (retryLabel || "Retry") + "</button>";
+    } else {
+      label = status.message || "Not installed";
+      button =
+        '<button type="button" class="btn btn-sm btn-secondary speech-download-btn" ' +
+        'data-url="' + escapeHtml(downloadUrl) + '">Download</button>';
     }
-    if (status.state === "error") {
-      return hint + '<div class="alert alert-error">' + escapeHtml(status.message) + "</div>";
-    }
-    return hint;
-  }
-
-  function renderSpeechModelArtifact(target) {
-    var size = selectedSpeechSize(target);
-    var locale = selectedFormLocale(target);
-    var subtitle = target.querySelector("#speech-model-subtitle");
-    var sizeOption = target.querySelector(
-      '.speech-model-size-option input[value="' + size + '"]'
+    return (
+      '<span class="inline-artifact-state inline-artifact-state--' + escapeHtml(status.state) + '">' +
+      escapeHtml(label) + "</span>" +
+      (button ? " " + button : "")
     );
-    var sizeLabel = sizeOption
-      ? sizeOption.closest(".speech-model-size-option").querySelector(".speech-model-size-option-title").textContent.trim()
-      : size;
-    var localeLabel = target.querySelector("#locale");
-    var label =
-      localeLabel && localeLabel.selectedOptions && localeLabel.selectedOptions[0]
-        ? localeLabel.selectedOptions[0].text
-        : locale;
-    if (subtitle) {
-      subtitle.textContent = "Offline Whisper (" + sizeLabel + ") — dictation in " + label;
+  }
+
+  function renderSpeechSizeArtifacts(container) {
+    var locale = selectedFormLocale(container);
+    var hosts = Array.prototype.slice.call(
+      container.querySelectorAll(".speech-size-artifact[data-size]")
+    );
+    if (!hosts.length) {
+      return Promise.resolve();
     }
-    fetchJSON(
-      "/speech/model/status?size=" + encodeURIComponent(size) + "&locale=" + encodeURIComponent(locale)
-    )
-      .then(function (status) {
-        var host = target.querySelector("#speech-model-status");
-        if (host) {
-          host.dataset.state = status.state;
-          host.dataset.percent = status.percent;
-          host.innerHTML =
-            artifactStatusHTML(status) +
-            (status.state === "missing" || status.state === "error"
-              ? '<button type="button" class="btn btn-secondary speech-download-btn" ' +
-                'data-url="/speech/model/download?size=' + encodeURIComponent(size) +
-                "&locale=" + encodeURIComponent(locale) + "\">Download speech model</button>"
-              : "");
+    return Promise.all(
+      hosts.map(function (host) {
+        var size = host.dataset.size;
+        return fetchJSON(
+          "/speech/model/status?size=" + encodeURIComponent(size) +
+            "&locale=" + encodeURIComponent(locale)
+        )
+          .then(function (status) {
+            return { host: host, size: size, status: status };
+          })
+          .catch(function () {
+            return null;
+          });
+      })
+    ).then(function (results) {
+      var active = null;
+      results.forEach(function (row) {
+        if (row && row.status.state === "downloading") {
+          active = row.size;
         }
-        scheduleSpeechPoll(target);
+      });
+      results.forEach(function (row) {
+        if (!row || !row.host.isConnected) {
+          return;
+        }
+        row.host.dataset.state = row.status.state;
+        row.host.innerHTML = inlineArtifactStatus(
+          row.status,
+          "/speech/model/download?size=" + encodeURIComponent(row.size) +
+            "&locale=" + encodeURIComponent(locale)
+        );
+        /* One Whisper download can run at a time: keep other buttons locked. */
+        var btn = row.host.querySelector(".speech-download-btn");
+        if (btn && active && row.size !== active) {
+          btn.disabled = true;
+          btn.title = "Another speech model is downloading";
+        }
+      });
+      scheduleConfigPoll(container, "speech", active !== null);
+    });
+  }
+
+  function renderQuestionVoiceArtifact(container) {
+    var locale = selectedFormLocale(container);
+    var host = container.querySelector("#question-voice-status");
+    if (!host) {
+      return Promise.resolve();
+    }
+    return fetchJSON("/speech/tts/status?locale=" + encodeURIComponent(locale))
+      .then(function (status) {
+        host.dataset.state = status.state;
+        host.innerHTML = inlineArtifactStatus(
+          status,
+          "/speech/tts/voice/download?locale=" + encodeURIComponent(locale)
+        );
+        scheduleConfigPoll(container, "voice", status.state === "downloading");
       })
       .catch(function () {
         /* transient */
       });
   }
 
-  function renderQuestionVoiceArtifact(target) {
-    var locale = selectedFormLocale(target);
-    var localeLabel = target.querySelector("#locale");
-    var label =
-      localeLabel && localeLabel.selectedOptions && localeLabel.selectedOptions[0]
-        ? localeLabel.selectedOptions[0].text
-        : locale;
-    var subtitle = target.querySelector("#question-voice-subtitle");
-    if (subtitle) {
-      subtitle.textContent = "Offline Piper voice for reading interview questions aloud in " + label;
-    }
-    fetchJSON("/speech/tts/status?locale=" + encodeURIComponent(locale))
-      .then(function (status) {
-        var host = target.querySelector("#speech-tts-status");
-        if (host) {
-          host.dataset.state = status.state;
-          host.dataset.percent = status.percent;
-          var downloadButton =
-            status.state === "missing" || status.state === "error"
-              ? '<button type="button" class="btn btn-secondary speech-download-btn" ' +
-                'data-url="/speech/tts/voice/download?locale=' + encodeURIComponent(locale) + "\">Download question voice</button>"
-              : "";
-          host.innerHTML = artifactStatusHTML(status) + downloadButton;
-        }
-        scheduleQuestionVoicePoll(target);
-      })
-      .catch(function () {
-        /* transient */
-      });
-  }
+  var configPollTimers = { speech: null, voice: null };
 
-  var speechPollTimer = null;
-  var questionVoicePollTimer = null;
-
-  function scheduleSpeechPoll(target) {
-    if (speechPollTimer) {
-      clearInterval(speechPollTimer);
-      speechPollTimer = null;
+  function scheduleConfigPoll(container, kind, downloading) {
+    if (configPollTimers[kind]) {
+      clearInterval(configPollTimers[kind]);
+      configPollTimers[kind] = null;
     }
-    var host = target.querySelector("#speech-model-status");
-    if (!host || host.dataset.state !== "downloading") {
+    if (!downloading) {
       return;
     }
-    speechPollTimer = setInterval(function () {
-      var size = selectedSpeechSize(target);
-      var locale = selectedFormLocale(target);
-      fetchJSON(
-        "/speech/model/status?size=" + encodeURIComponent(size) + "&locale=" + encodeURIComponent(locale)
-      )
-        .then(function (status) {
-          var current = target.querySelector("#speech-model-status");
-          if (!current) {
-            return;
-          }
-          current.dataset.state = status.state;
-          renderSpeechModelArtifact(target);
-        })
-        .catch(function () {
-          /* transient */
-        });
-    }, 1500);
-  }
-
-  function scheduleQuestionVoicePoll(target) {
-    if (questionVoicePollTimer) {
-      clearInterval(questionVoicePollTimer);
-      questionVoicePollTimer = null;
-    }
-    var host = target.querySelector("#speech-tts-status");
-    if (!host || host.dataset.state !== "downloading") {
-      return;
-    }
-    questionVoicePollTimer = setInterval(function () {
-      var locale = selectedFormLocale(target);
-      fetchJSON("/speech/tts/status?locale=" + encodeURIComponent(locale))
-        .then(function (status) {
-          var current = target.querySelector("#speech-tts-status");
-          if (!current) {
-            return;
-          }
-          current.dataset.state = status.state;
-          renderQuestionVoiceArtifact(target);
-        })
-        .catch(function () {
-          /* transient */
-        });
+    configPollTimers[kind] = setInterval(function () {
+      if (!container.isConnected) {
+        clearInterval(configPollTimers[kind]);
+        configPollTimers[kind] = null;
+        return;
+      }
+      if (kind === "speech") {
+        renderSpeechSizeArtifacts(container);
+      } else {
+        renderQuestionVoiceArtifact(container);
+      }
     }, 1500);
   }
 
   function applyPresetMode(container) {
     var presetSelect = container.querySelector("#llm_preset_id");
     var description = container.querySelector("#llm-preset-description");
-    var apiKeyGroup = container.querySelector("#api-key-group");
     if (!presetSelect) {
       return;
     }
@@ -667,7 +806,6 @@
     if (!option) {
       return;
     }
-    var apiKeyRequired = option.dataset.apiKeyRequired === "true";
     var acceptsAudio = option.dataset.acceptsAudioInput === "true";
     var audioHint =
       "This model accepts audio answers. Whisper must be installed for the selected speech model size.";
@@ -676,9 +814,6 @@
       description.textContent = acceptsAudio
         ? (base ? base + " — " : "") + audioHint
         : base;
-    }
-    if (apiKeyGroup) {
-      apiKeyGroup.hidden = !apiKeyRequired;
     }
   }
 
@@ -690,7 +825,7 @@
     var preset = container.querySelector("#llm_preset_id");
     return {
       llm_preset_id: preset ? preset.value : "",
-      api_key: container.querySelector("#api_key") ? container.querySelector("#api_key").value : "",
+      api_key: "",
       timeout: timeout ? parseFloat(timeout.value) || 60 : 60,
       locale: locale ? locale.value : "en",
       speech_model_size: size ? size.value : "small",
@@ -698,22 +833,86 @@
     };
   }
 
-  function collectAddModelForm(container) {
+  function collectProviderForm(form) {
+    var clearBox = form.querySelector('[name="clear_api_key"]');
     return {
-      display_name: container.querySelector("#catalog_display_name").value,
-      base_url: container.querySelector("#catalog_base_url").value,
-      model: container.querySelector("#catalog_model").value,
-      api_key: container.querySelector("#catalog_api_key").value,
-      api_key_required: container.querySelector("#catalog_api_key_required").checked,
-      accepts_audio_input: container.querySelector("#catalog_accepts_audio_input").checked,
+      display_name: form.querySelector('[name="display_name"]').value,
+      base_url: form.querySelector('[name="base_url"]').value,
+      api_key: form.querySelector('[name="api_key"]')
+        ? form.querySelector('[name="api_key"]').value
+        : "",
+      clear_api_key: !!(clearBox && clearBox.checked),
     };
   }
 
-  function renderConfigPage(container, data) {
-    container.innerHTML = buildConfigFormHTML(data);
+  function collectProviderModelForm(form) {
+    return {
+      display_name: form.querySelector('[name="display_name"]').value,
+      model: form.querySelector('[name="model"]').value,
+      accepts_audio_input: !!form.querySelector('[name="accepts_audio_input"]').checked,
+    };
+  }
+
+  function updateConfigSaveState(container) {
+    var select = container.querySelector("#llm_preset_id");
+    var ready = !!(select && select.value);
+    ["#config-save-btn", "#config-test-btn"].forEach(function (selector) {
+      var btn = container.querySelector(selector);
+      if (btn) {
+        btn.disabled = !ready;
+      }
+    });
+  }
+
+  function renderPresetOptions(container, query) {
+    var select = container.querySelector("#llm_preset_id");
+    if (!select) {
+      return;
+    }
+    var current = select.value;
+    select.innerHTML = buildPresetOptionsHTML(
+      container._llmGroups || [],
+      current,
+      query
+    );
+    var emptyHint = container.querySelector("#llm-preset-empty");
+    if (emptyHint) {
+      emptyHint.hidden = !!select.value;
+    }
     applyPresetMode(container);
-    renderSpeechModelArtifact(container);
+    updateConfigSaveState(container);
+  }
+
+  function setConfigTab(container, tab) {
+    container.querySelectorAll("[data-config-pane]").forEach(function (pane) {
+      pane.hidden = pane.dataset.configPane !== tab;
+    });
+    container.querySelectorAll("[data-config-tab]").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.dataset.configTab === tab);
+    });
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(
+        null,
+        "",
+        tab === "providers" ? "#/config/providers" : "#/config"
+      );
+    }
+  }
+
+  function renderConfigPage(container, data, activeTab) {
+    activeTab = activeTab === "providers" ? "providers" : "config";
+    container._llmGroups = buildPresetGroups(data);
+    container.innerHTML = buildConfigFormHTML(data, activeTab);
+    applyPresetMode(container);
+    updateConfigSaveState(container);
+    renderSpeechSizeArtifacts(container);
     renderQuestionVoiceArtifact(container);
+
+    container.querySelectorAll("[data-config-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setConfigTab(container, btn.dataset.configTab);
+      });
+    });
 
     var presetSelect = container.querySelector("#llm_preset_id");
     if (presetSelect) {
@@ -721,13 +920,14 @@
         applyPresetMode(container);
       });
     }
-    container.querySelectorAll('input[name="speech_model_size"]').forEach(function (radio) {
-      radio.addEventListener("change", function () {
-        renderSpeechModelArtifact(container);
+    var modelFilter = container.querySelector("#llm-model-filter");
+    if (modelFilter) {
+      modelFilter.addEventListener("input", function () {
+        renderPresetOptions(container, modelFilter.value);
       });
-    });
+    }
     container.querySelector("#locale").addEventListener("change", function () {
-      renderSpeechModelArtifact(container);
+      renderSpeechSizeArtifacts(container);
       renderQuestionVoiceArtifact(container);
     });
 
@@ -737,7 +937,7 @@
       btn.disabled = true;
       postJSON("/api/config", collectConfigForm(container))
         .then(function (result) {
-          renderConfigPage(container, result.page);
+          renderConfigPage(container, result.page, activeTab);
         })
         .catch(function (err) {
           btn.disabled = false;
@@ -785,7 +985,7 @@
         removeBtn.disabled = true;
         fetchJSON("/api/config", { method: "DELETE" })
           .then(function (result) {
-            renderConfigPage(container, result.page);
+            renderConfigPage(container, result.page, activeTab);
           })
           .catch(function (err) {
             removeBtn.disabled = false;
@@ -797,55 +997,255 @@
       });
     }
 
-    container.querySelector("#add-model-form").addEventListener("submit", function (event) {
-      event.preventDefault();
-      var btn = container.querySelector("#add-model-form button[type=\"submit\"]");
-      btn.disabled = true;
-      postJSON("/api/config/llm-models", collectAddModelForm(container))
-        .then(function (result) {
-          /* The returned page is used to re-render the config form. */
-          if (result.page) {
-            renderConfigPage(container, result.page);
-          }
-        })
-        .catch(function (err) {
-          btn.disabled = false;
-          container.insertAdjacentHTML(
-            "beforeend",
-            errorCard(errMessage(err, "Could not add model."))
-          );
-        });
-    });
+    if (container._configClickHandler) {
+      container.removeEventListener("click", container._configClickHandler);
+    }
+    container._configClickHandler = function (event) {
+      handleConfigClick(container, event, activeTab);
+    };
+    container.addEventListener("click", container._configClickHandler);
 
-    container.addEventListener("click", function (event) {
-      var target = event.target;
-      if (!target || typeof target.closest !== "function") {
-        return;
-      }
-      var btn = target.closest(".speech-download-btn");
-      if (!btn) {
-        return;
-      }
-      btn.disabled = true;
-      fetchJSON(btn.dataset.url, { method: "POST" })
+    if (container._configSubmitHandler) {
+      container.removeEventListener("submit", container._configSubmitHandler);
+    }
+    container._configSubmitHandler = function (event) {
+      handleConfigSubmit(container, event, activeTab);
+    };
+    container.addEventListener("submit", container._configSubmitHandler);
+  }
+
+  function handleConfigAction(container, result, activeTab, fallback) {
+    if (result && result.page) {
+      renderConfigPage(container, result.page, activeTab);
+      return;
+    }
+    container.insertAdjacentHTML("beforeend", errorCard(fallback));
+  }
+
+  function handleConfigClick(container, event, activeTab) {
+    var target = event.target;
+    if (!target || typeof target.closest !== "function") {
+      return;
+    }
+
+    var download = target.closest(".speech-download-btn");
+    if (download) {
+      download.disabled = true;
+      var downloadUrl = download.dataset.url || "";
+      fetchJSON(downloadUrl, { method: "POST" })
         .then(function () {
-          var panel = btn.closest(".card");
-          if (panel && panel.querySelector("#speech-model-status")) {
-            renderSpeechModelArtifact(panel);
-          } else if (panel) {
-            renderQuestionVoiceArtifact(panel);
+          if (downloadUrl.indexOf("/speech/tts/") === 0) {
+            renderQuestionVoiceArtifact(container);
+          } else {
+            renderSpeechSizeArtifacts(container);
           }
         })
         .catch(function () {
-          btn.disabled = false;
+          download.disabled = false;
         });
-    });
+      return;
+    }
+
+    var editProvider = target.closest("[data-provider-edit]");
+    if (editProvider) {
+      var editForm = editProvider
+        .closest(".provider-card")
+        .querySelector("[data-provider-edit-form]");
+      editForm.hidden = !editForm.hidden;
+      return;
+    }
+
+    var deleteProviderBtn = target.closest("[data-provider-delete]");
+    if (deleteProviderBtn) {
+      if (!window.confirm("Delete this provider and all of its models?")) {
+        return;
+      }
+      deleteProviderBtn.disabled = true;
+      fetchJSON(
+        "/api/config/providers/" + encodeURIComponent(deleteProviderBtn.dataset.providerDelete),
+        { method: "DELETE" }
+      )
+        .then(function (result) {
+          handleConfigAction(
+            container, result, activeTab, "Could not delete provider."
+          );
+        })
+        .catch(function (err) {
+          deleteProviderBtn.disabled = false;
+          container.insertAdjacentHTML(
+            "beforeend",
+            errorCard(errMessage(err, "Could not delete provider."))
+          );
+        });
+      return;
+    }
+
+    var addModelBtn = target.closest("[data-model-add]");
+    if (addModelBtn) {
+      var addForm = addModelBtn
+        .closest(".provider-card")
+        .querySelector('[data-model-form=""]');
+      addForm.hidden = !addForm.hidden;
+      return;
+    }
+
+    var editModelBtn = target.closest("[data-model-edit]");
+    if (editModelBtn) {
+      var row = editModelBtn.closest(".provider-model-row");
+      var modelForm = row.querySelector("[data-model-form]");
+      modelForm.hidden = !modelForm.hidden;
+      return;
+    }
+
+    var deleteModelBtn = target.closest("[data-model-delete]");
+    if (deleteModelBtn) {
+      if (!window.confirm("Delete this model?")) {
+        return;
+      }
+      deleteModelBtn.disabled = true;
+      fetchJSON(
+        "/api/config/providers/" + encodeURIComponent(deleteModelBtn.dataset.providerId) +
+          "/models/" + encodeURIComponent(deleteModelBtn.dataset.modelDelete),
+        { method: "DELETE" }
+      )
+        .then(function (result) {
+          handleConfigAction(
+            container, result, activeTab, "Could not delete model."
+          );
+        })
+        .catch(function (err) {
+          deleteModelBtn.disabled = false;
+          container.insertAdjacentHTML(
+            "beforeend",
+            errorCard(errMessage(err, "Could not delete model."))
+          );
+        });
+      return;
+    }
+
+    var discoverBtn = target.closest("[data-discover]");
+    if (discoverBtn) {
+      discoverProviderModels(container, discoverBtn);
+      return;
+    }
+
+    var cancelBtn = target.closest("[data-form-cancel]");
+    if (cancelBtn) {
+      var form = cancelBtn.closest("form");
+      form.hidden = true;
+      form.reset();
+    }
   }
 
-  pages.config = function (container) {
+  function discoverProviderModels(container, discoverBtn) {
+    discoverBtn.disabled = true;
+    var form = discoverBtn.closest("form");
+    var status = form.querySelector("[data-discover-status]");
+    var providerId = discoverBtn.dataset.providerId;
+    var card = discoverBtn.closest(".provider-card");
+    fetchJSON("/api/config/providers/" + encodeURIComponent(providerId) + "/discover-models", {
+      method: "POST",
+    })
+      .then(function (result) {
+        discoverBtn.disabled = false;
+        if (!status) {
+          return;
+        }
+        if (result.error) {
+          status.textContent = result.error;
+          status.dataset.state = "error";
+          return;
+        }
+        var datalist = card ? card.querySelector("datalist") : null;
+        if (datalist) {
+          datalist.innerHTML = result.models
+            .map(function (name) {
+              return '<option value="' + escapeHtml(name) + '"></option>';
+            })
+            .join("");
+        }
+        status.textContent =
+          "Found " + result.models.length + " models — pick one from the dropdown or keep typing.";
+        status.dataset.state = "ok";
+      })
+      .catch(function (err) {
+        discoverBtn.disabled = false;
+        if (status) {
+          status.textContent = errMessage(err, "Could not load models.");
+          status.dataset.state = "error";
+        }
+      });
+  }
+
+  function handleConfigSubmit(container, event, activeTab) {
+    var form = event.target;
+    if (!form || !form.matches || typeof form.matches !== "function") {
+      return;
+    }
+    var action = null;
+    var url = null;
+    var payload = null;
+    var fallback = "Could not save.";
+
+    if (form.id === "add-provider-form") {
+      event.preventDefault();
+      action = "post";
+      url = "/api/config/providers";
+      payload = collectProviderForm(form);
+      fallback = "Could not add provider.";
+    } else if (form.matches("[data-provider-edit-form]")) {
+      event.preventDefault();
+      action = "put";
+      url = "/api/config/providers/" + encodeURIComponent(form.dataset.providerEditForm);
+      payload = collectProviderForm(form);
+      fallback = "Could not save provider.";
+    } else if (form.matches("[data-model-form]")) {
+      event.preventDefault();
+      payload = collectProviderModelForm(form);
+      if (form.dataset.modelForm) {
+        action = "put";
+        url =
+          "/api/config/providers/" + encodeURIComponent(form.dataset.providerId) +
+          "/models/" + encodeURIComponent(form.dataset.modelForm);
+        fallback = "Could not save model.";
+      } else {
+        action = "post";
+        url = "/api/config/providers/" + encodeURIComponent(form.dataset.providerId) + "/models";
+        fallback = "Could not add model.";
+      }
+    } else {
+      return;
+    }
+
+    var submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+    }
+    var request =
+      action === "put"
+        ? fetchJSON(url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : postJSON(url, payload);
+    request
+      .then(function (result) {
+        handleConfigAction(container, result, activeTab, fallback);
+      })
+      .catch(function (err) {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+        }
+        container.insertAdjacentHTML("beforeend", errorCard(errMessage(err, fallback)));
+      });
+  }
+
+  pages.config = function (container, params) {
+    var activeTab = params && params.id === "providers" ? "providers" : "config";
     fetchJSON("/api/config")
       .then(function (data) {
-        renderConfigPage(container, data);
+        renderConfigPage(container, data, activeTab);
       })
       .catch(function (err) {
         container.innerHTML = errorCard(errMessage(err, "Could not load configuration."));

@@ -7,6 +7,11 @@ maps the file directly to an :class:`LLMCatalog` domain object and back, and
 guarantees atomic writes so a partial write never leaves a corrupt JSON file
 behind. The canonical path is resolved lazily on each call, so tests can
 override it via monkeypatch.
+
+Providers own the connection details (base URL and API key) and models
+reference them by id. Legacy flat catalogs — one entry per model, each with its
+own ``base_url``/``api_key`` — are migrated in memory on read and rewritten in
+the provider shape on the next mutation.
 """
 
 from __future__ import annotations
@@ -18,7 +23,14 @@ from pathlib import Path
 import tempfile
 from typing import TYPE_CHECKING, Any
 
-from app.ai.llm_models import LLMCatalog, LLMModelEntry, generate_model_id
+from app.ai.llm_models import (
+    LLMCatalog,
+    LLMModelEntry,
+    LLMProvider,
+    generate_model_id,
+    generate_provider_id,
+    provider_display_name_from_url,
+)
 from app.platform.domain.llm_catalog import LLMCatalogRepositoryProtocol
 from app.shared.paths import DATA_DIR, LLM_MODELS_PATH
 
@@ -60,12 +72,9 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
         """Load the catalog from disk, seeding an empty file when missing.
 
         Returns:
-            Catalog with selected id and all saved models.
+            Catalog with the selected id, providers, and resolved models.
         """
-        data = self._read()
-        models = _parse_models(data["models"])
-        selected_id = str(data["selected"]).strip() or None
-        return LLMCatalog(selected_id=selected_id, models=models)
+        return _parse_catalog(self._read())
 
     def set_selected(self, model_id: str) -> None:
         """Persist the active interview model id.
@@ -85,67 +94,307 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
     def add_user_model(self, payload: NewLLMModel) -> LLMModelEntry:
         """Append a model to the catalog and select it.
 
-        The catalog id is derived from the display name and made unique against
-        existing entries, so adding a model never fails on id collisions.
+        The provider is reused when the base URL already exists, otherwise a
+        provider is created from the submitted base URL. The model id is
+        derived from the display name and made unique against existing entries.
 
         Args:
             payload: Validated add-model form values.
 
         Returns:
-            Persisted catalog entry.
+            Persisted catalog entry with provider fields resolved.
         """
         data = self._read()
         models = dict(data["models"])
-        model_id = generate_model_id(payload.display_name, models)
-
-        api_key = payload.api_key
-        api_key_required = payload.api_key_required or bool(api_key)
-        entry_dict = _model_dict(
-            display_name=payload.display_name,
-            model_name=payload.model,
+        providers = dict(data["providers"])
+        provider_id = _find_or_create_provider(
+            providers,
             base_url=payload.base_url,
-            api_key_required=api_key_required,
-            api_key=api_key,
-            accepts_audio_input=payload.accepts_audio_input,
+            api_key=payload.api_key,
         )
-        models[model_id] = entry_dict
+        model_id = generate_model_id(payload.display_name, models)
+        models[model_id] = {
+            "provider_id": provider_id,
+            "display_name": payload.display_name,
+            "model": payload.model,
+            "accepts_audio_input": payload.accepts_audio_input,
+        }
         data["models"] = models
+        data["providers"] = providers
         data["selected"] = model_id
         self._write(data)
-        return _parse_model(model_id, entry_dict)
+        return _parse_catalog(data).models[model_id]
 
     def update_model_api_key(self, model_id: str, api_key: str | None) -> None:
-        """Persist an API key for a catalog model.
+        """Persist an API key on the provider that owns a model.
+
+        The key belongs to the provider, so every model of that provider sees
+        the update.
 
         Args:
             model_id: Catalog model id.
             api_key: API key to store, or ``None`` to remove it.
         """
         data = self._read()
-        models = dict(data["models"])
-        raw_entry = models.get(model_id)
-        if not isinstance(raw_entry, dict):
+        raw_model = data["models"].get(model_id)
+        if not isinstance(raw_model, dict):
             return
-        entry = dict(raw_entry)
-        if api_key:
-            entry["api_key"] = api_key
-            entry["api_key_required"] = True
+        provider_id = str(raw_model.get("provider_id", ""))
+        providers = dict(data["providers"])
+        raw_provider = providers.get(provider_id)
+        if not isinstance(raw_provider, dict):
+            return
+        provider = dict(raw_provider)
+        key = _optional_str(api_key)
+        if key:
+            provider["api_key"] = key
         else:
-            entry.pop("api_key", None)
-        models[model_id] = entry
-        data["models"] = models
+            provider.pop("api_key", None)
+        providers[provider_id] = provider
+        data["providers"] = providers
         self._write(data)
 
+    def create_provider(
+        self,
+        *,
+        display_name: str,
+        base_url: str,
+        provider_type: str,
+        api_key: str | None,
+    ) -> LLMProvider:
+        """Append a provider to the catalog.
+
+        Args:
+            display_name: Human-readable provider label.
+            base_url: OpenAI-compatible base URL.
+            provider_type: Provider adapter id.
+            api_key: Optional API key stored on the provider.
+
+        Returns:
+            Persisted provider.
+
+        Raises:
+            ValueError: If a provider with the same base URL already exists.
+        """
+        data = self._read()
+        providers = dict(data["providers"])
+        normalized = _normalize_base_url(base_url)
+        for raw in providers.values():
+            if isinstance(raw, dict) and (
+                _normalize_base_url(raw.get("base_url", "")) == normalized
+            ):
+                raise ValueError("A provider with this base URL already exists.")
+        provider_id = generate_provider_id(base_url, providers)
+        provider: dict[str, Any] = {
+            "display_name": display_name,
+            "base_url": normalized,
+            "provider_type": provider_type,
+        }
+        key = _optional_str(api_key)
+        if key:
+            provider["api_key"] = key
+        providers[provider_id] = provider
+        data["providers"] = providers
+        self._write(data)
+        return _parse_provider(provider_id, provider)
+
+    def update_provider(
+        self,
+        provider_id: str,
+        *,
+        display_name: str,
+        base_url: str,
+        provider_type: str,
+        api_key: str | None,
+        clear_api_key: bool,
+    ) -> LLMProvider:
+        """Update a provider's connection details.
+
+        An empty ``api_key`` keeps the stored key; ``clear_api_key`` removes it.
+
+        Args:
+            provider_id: Provider to update.
+            display_name: New human-readable label.
+            base_url: New base URL.
+            provider_type: New provider adapter id.
+            api_key: Replacement key, or ``None``/empty to keep the stored one.
+            clear_api_key: Whether to remove the stored key.
+
+        Returns:
+            Updated provider.
+
+        Raises:
+            ValueError: If the provider id is unknown.
+        """
+        data = self._read()
+        providers = dict(data["providers"])
+        raw = providers.get(provider_id)
+        if not isinstance(raw, dict):
+            raise ValueError(f"Unknown LLM provider: {provider_id}")
+        updated = dict(raw)
+        updated["display_name"] = display_name
+        updated["base_url"] = _normalize_base_url(base_url)
+        updated["provider_type"] = provider_type
+        if clear_api_key:
+            updated.pop("api_key", None)
+        else:
+            key = _optional_str(api_key)
+            if key:
+                updated["api_key"] = key
+        providers[provider_id] = updated
+        data["providers"] = providers
+        self._write(data)
+        return _parse_provider(provider_id, updated)
+
+    def delete_provider(self, provider_id: str) -> str | None:
+        """Remove a provider together with all of its models.
+
+        Args:
+            provider_id: Provider to remove.
+
+        Returns:
+            The new selected model id (``None`` when the selection was removed).
+
+        Raises:
+            ValueError: If the provider id is unknown.
+        """
+        data = self._read()
+        providers = dict(data["providers"])
+        if provider_id not in providers:
+            raise ValueError(f"Unknown LLM provider: {provider_id}")
+        models = dict(data["models"])
+        removed = [
+            model_id
+            for model_id, raw in models.items()
+            if isinstance(raw, dict) and raw.get("provider_id") == provider_id
+        ]
+        del providers[provider_id]
+        for model_id in removed:
+            del models[model_id]
+        selected = str(data.get("selected", ""))
+        if selected in removed:
+            selected = ""
+        data["providers"] = providers
+        data["models"] = models
+        data["selected"] = selected
+        self._write(data)
+        return selected or None
+
+    def add_model(
+        self,
+        provider_id: str,
+        *,
+        display_name: str,
+        model: str,
+        accepts_audio_input: bool,
+    ) -> LLMModelEntry:
+        """Append a model under an existing provider and select it.
+
+        Args:
+            provider_id: Provider that owns the model.
+            display_name: Human-readable model label.
+            model: Provider model name.
+            accepts_audio_input: Whether the model supports audio answers.
+
+        Returns:
+            Persisted catalog entry with provider fields resolved.
+
+        Raises:
+            ValueError: If the provider id is unknown.
+        """
+        data = self._read()
+        if provider_id not in data["providers"]:
+            raise ValueError(f"Unknown LLM provider: {provider_id}")
+        models = dict(data["models"])
+        model_id = generate_model_id(display_name, models)
+        models[model_id] = {
+            "provider_id": provider_id,
+            "display_name": display_name,
+            "model": model,
+            "accepts_audio_input": accepts_audio_input,
+        }
+        data["models"] = models
+        data["selected"] = model_id
+        self._write(data)
+        return _parse_catalog(data).models[model_id]
+
+    def update_model(
+        self,
+        provider_id: str,
+        model_id: str,
+        *,
+        display_name: str,
+        model: str,
+        accepts_audio_input: bool,
+    ) -> LLMModelEntry:
+        """Update a model that belongs to a provider.
+
+        Args:
+            provider_id: Provider that should own the model.
+            model_id: Catalog model id to update.
+            display_name: New human-readable label.
+            model: New provider model name.
+            accepts_audio_input: New audio-input capability flag.
+
+        Returns:
+            Updated catalog entry with provider fields resolved.
+
+        Raises:
+            ValueError: If the model is unknown or belongs to another provider.
+        """
+        data = self._read()
+        models = dict(data["models"])
+        raw = models.get(model_id)
+        if not isinstance(raw, dict) or raw.get("provider_id") != provider_id:
+            raise ValueError(f"Unknown LLM model: {model_id}")
+        models[model_id] = {
+            **raw,
+            "display_name": display_name,
+            "model": model,
+            "accepts_audio_input": accepts_audio_input,
+        }
+        data["models"] = models
+        self._write(data)
+        return _parse_catalog(data).models[model_id]
+
+    def delete_model(self, model_id: str) -> str | None:
+        """Remove a model from the catalog.
+
+        Args:
+            model_id: Catalog model id to remove.
+
+        Returns:
+            The new selected model id (``None`` when the selection was removed).
+
+        Raises:
+            ValueError: If the model id is unknown.
+        """
+        data = self._read()
+        models = dict(data["models"])
+        if model_id not in models:
+            raise ValueError(f"Unknown LLM model: {model_id}")
+        del models[model_id]
+        selected = str(data.get("selected", ""))
+        if selected == model_id:
+            selected = ""
+        data["models"] = models
+        data["selected"] = selected
+        self._write(data)
+        return selected or None
+
     def _read(self) -> dict[str, Any]:
-        """Return catalog JSON, seeding an empty file when missing."""
+        """Return catalog JSON, seeding an empty file when missing.
+
+        Legacy flat files are migrated in memory; the new shape is written on
+        the next mutation.
+        """
         path = self._resolve_path()
         if not path.exists():
-            self._write({"selected": "", "models": {}})
-            return {"selected": "", "models": {}}
+            empty: dict[str, Any] = {"selected": "", "providers": {}, "models": {}}
+            self._write(empty)
+            return empty
         data: dict[str, Any] = json.loads(path.read_text())
-        data.setdefault("selected", "")
-        data.setdefault("models", {})
-        return data
+        return _normalize_catalog(data)
 
     def _write(self, data: dict[str, Any]) -> None:
         """Persist catalog JSON atomically to disk."""
@@ -153,7 +402,8 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
         data_dir.mkdir(parents=True, exist_ok=True)
         payload = {
             "selected": str(data["selected"]).strip(),
-            "models": data["models"],
+            "providers": data.get("providers") or {},
+            "models": data.get("models") or {},
         }
         self._atomic_write(json.dumps(payload, indent=2), data_dir)
 
@@ -180,51 +430,166 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
             raise
 
 
-def _model_dict(
+def _find_or_create_provider(
+    providers: dict[str, Any],
     *,
-    display_name: str,
-    model_name: str,
     base_url: str,
-    api_key_required: bool,
-    api_key: str | None = None,
-    provider_type: str = "openai-compatible",
-    accepts_audio_input: bool = False,
-) -> dict[str, Any]:
-    """Build a catalog entry dictionary for persistence."""
-    entry: dict[str, Any] = {
-        "display_name": display_name,
-        "provider_type": provider_type,
-        "model": model_name,
-        "base_url": base_url,
-        "api_key_required": api_key_required,
-        "accepts_audio_input": accepts_audio_input,
+    api_key: str | None,
+) -> str:
+    """Return the provider id for ``base_url``, creating it when needed.
+
+    A submitted API key updates the matched provider so the key stays shared
+    across all of its models.
+    """
+    normalized = _normalize_base_url(base_url)
+    for provider_id, raw in providers.items():
+        if not isinstance(raw, dict):
+            continue
+        if _normalize_base_url(raw.get("base_url", "")) != normalized:
+            continue
+        key = _optional_str(api_key)
+        if key:
+            updated = dict(raw)
+            updated["api_key"] = key
+            providers[provider_id] = updated
+        return provider_id
+
+    provider_id = generate_provider_id(base_url, providers)
+    provider: dict[str, Any] = {
+        "display_name": provider_display_name_from_url(base_url),
+        "base_url": normalized,
+        "provider_type": "openai-compatible",
     }
-    if api_key:
-        entry["api_key"] = api_key
-    return entry
+    key = _optional_str(api_key)
+    if key:
+        provider["api_key"] = key
+    providers[provider_id] = provider
+    return provider_id
 
 
-def _parse_models(raw: dict[str, Any]) -> dict[str, LLMModelEntry]:
-    """Parse a models mapping from catalog JSON."""
-    parsed: dict[str, LLMModelEntry] = {}
-    for model_id, item in raw.items():
-        if isinstance(item, dict):
-            parsed[model_id] = _parse_model(model_id, item)
-    return parsed
+def _normalize_catalog(data: dict[str, Any]) -> dict[str, Any]:
+    """Return catalog data in the provider shape, migrating legacy files.
 
-
-def _parse_model(model_id: str, item: dict[str, Any]) -> LLMModelEntry:
-    """Parse one catalog model entry."""
-    base_url = str(item.get("base_url", "")).strip().rstrip("/")
-    raw_api_key = item.get("api_key")
-    api_key = str(raw_api_key).strip() if raw_api_key else None
-    return LLMModelEntry(
-        id=model_id,
-        display_name=str(item.get("display_name", model_id)),
-        provider_type=str(item.get("provider_type", "openai-compatible")),
-        model=str(item.get("model", "")),
-        base_url=base_url,
-        api_key_required=bool(item.get("api_key_required", False)),
-        api_key=api_key,
-        accepts_audio_input=bool(item.get("accepts_audio_input", False)),
+    The provider shape is detected by ``models`` referencing a ``provider_id``;
+    legacy files carry connection details on every model instead and are
+    grouped into providers on read.
+    """
+    providers = data.get("providers")
+    models = data.get("models")
+    if not isinstance(models, dict):
+        models = {}
+    is_provider_shape = isinstance(providers, dict) and all(
+        not isinstance(item, dict) or item.get("provider_id")
+        for item in models.values()
     )
+    if not is_provider_shape:
+        return _migrate_flat_catalog(data)
+    return {
+        "selected": data.get("selected", ""),
+        "providers": providers,
+        "models": models,
+    }
+
+
+def _migrate_flat_catalog(data: dict[str, Any]) -> dict[str, Any]:
+    """Group legacy per-model entries under providers keyed by base URL."""
+    raw_models = data.get("models")
+    if not isinstance(raw_models, dict):
+        raw_models = {}
+
+    providers: dict[str, dict[str, Any]] = {}
+    by_target: dict[tuple[str, str], str] = {}
+    models: dict[str, dict[str, Any]] = {}
+
+    for model_id, raw in raw_models.items():
+        if not isinstance(raw, dict):
+            continue
+        base_url = _normalize_base_url(raw.get("base_url", ""))
+        provider_type = str(raw.get("provider_type", "openai-compatible"))
+        target = (base_url, provider_type)
+        provider_id = by_target.get(target)
+        if provider_id is None:
+            provider_id = generate_provider_id(base_url, providers)
+            by_target[target] = provider_id
+            providers[provider_id] = {
+                "display_name": provider_display_name_from_url(base_url),
+                "base_url": base_url,
+                "provider_type": provider_type,
+            }
+        _merge_provider_key(providers[provider_id], raw.get("api_key"))
+        models[model_id] = {
+            "provider_id": provider_id,
+            "display_name": str(raw.get("display_name", model_id)),
+            "model": str(raw.get("model", "")),
+            "accepts_audio_input": bool(raw.get("accepts_audio_input", False)),
+        }
+
+    return {
+        "selected": data.get("selected", ""),
+        "providers": providers,
+        "models": models,
+    }
+
+
+def _merge_provider_key(provider: dict[str, Any], raw_key: object) -> None:
+    """Store the first non-empty legacy API key on the grouped provider."""
+    if provider.get("api_key"):
+        return
+    key = _optional_str(raw_key)
+    if key:
+        provider["api_key"] = key
+
+
+def _parse_catalog(data: dict[str, Any]) -> LLMCatalog:
+    """Parse normalized catalog data into the domain object."""
+    providers = {
+        provider_id: _parse_provider(provider_id, item)
+        for provider_id, item in data["providers"].items()
+        if isinstance(item, dict)
+    }
+    models: dict[str, LLMModelEntry] = {}
+    for model_id, item in data["models"].items():
+        if not isinstance(item, dict):
+            continue
+        provider = providers.get(str(item.get("provider_id", "")))
+        if provider is None:
+            continue
+        models[model_id] = LLMModelEntry(
+            id=model_id,
+            display_name=str(item.get("display_name", model_id)),
+            provider_type=provider.provider_type,
+            model=str(item.get("model", "")),
+            base_url=provider.base_url,
+            api_key=provider.api_key,
+            accepts_audio_input=bool(item.get("accepts_audio_input", False)),
+            provider_id=provider.id,
+        )
+    return LLMCatalog(
+        selected_id=str(data.get("selected", "")).strip() or None,
+        models=models,
+        providers=providers,
+    )
+
+
+def _parse_provider(provider_id: str, item: dict[str, Any]) -> LLMProvider:
+    """Parse one provider entry."""
+    return LLMProvider(
+        id=provider_id,
+        display_name=str(item.get("display_name", provider_id)),
+        base_url=_normalize_base_url(item.get("base_url", "")),
+        provider_type=str(item.get("provider_type", "openai-compatible")),
+        api_key=_optional_str(item.get("api_key")),
+    )
+
+
+def _normalize_base_url(value: object) -> str:
+    """Normalize a base URL (strip whitespace and a trailing slash)."""
+    return str(value or "").strip().rstrip("/")
+
+
+def _optional_str(value: object) -> str | None:
+    """Return a stripped string, or ``None`` when empty."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

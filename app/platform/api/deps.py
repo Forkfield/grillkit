@@ -10,6 +10,7 @@ from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.platform.repo.config_composition import ConfigServiceDep, LLMCatalogServiceDep
 from app.platform.use_cases.add_llm_model import AddLLMModelUseCase
 from app.platform.use_cases.delete_config import DeleteConfigUseCase
+from app.platform.use_cases.manage_catalog import ManageCatalogUseCase
 from app.platform.use_cases.save_config import SaveConfigUseCase
 from app.question_voice.api.deps import VoiceStatusServiceDep
 from app.speech.api.deps import WhisperModelServiceDep
@@ -33,6 +34,23 @@ def get_add_llm_model_use_case(
 AddLLMModelUseCaseDep = Annotated[
     AddLLMModelUseCase,
     Depends(get_add_llm_model_use_case),
+]
+
+
+def get_manage_catalog_use_case(
+    config_service: ConfigServiceDep,
+    catalog_service: LLMCatalogServiceDep,
+) -> ManageCatalogUseCase:
+    """Return the provider/model management use case."""
+    return ManageCatalogUseCase(
+        config_service=config_service,
+        llm_catalog_service=catalog_service,
+    )
+
+
+ManageCatalogUseCaseDep = Annotated[
+    ManageCatalogUseCase,
+    Depends(get_manage_catalog_use_case),
 ]
 
 

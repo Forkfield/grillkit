@@ -20,7 +20,6 @@ class TestConfigEdgeCases:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.openai.com",
-            api_key_required=True,
             api_key="stored-secret",
         )
 
@@ -156,7 +155,6 @@ class TestConfigEdgeCases:
             provider_type="openai-compatible",
             model="gpt-4o-audio",
             base_url="https://api.openai.com/v1",
-            api_key_required=True,
             api_key="test-key",
             accepts_audio_input=True,
         )
@@ -192,14 +190,13 @@ class TestConfigEdgeCases:
         assert payload.accepts_audio_input is True
 
     def test_config_save_without_api_key_when_not_required(self, client, isolated_db):
-        """S12.5: Save config with empty api_key when api_key_required=false works."""
+        """S12.5: Saving config with an empty API key works without a key."""
         ollama_entry = LLMModelEntry(
             id="local",
             display_name="Ollama Local",
             provider_type="openai-compatible",
             model="llama3",
             base_url="http://localhost:11434/v1",
-            api_key_required=False,
             api_key=None,
         )
         with ExitStack() as stack:

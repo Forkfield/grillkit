@@ -44,21 +44,29 @@ grillkit/
 │   │   ├── stt.py               # Stt protocol (speech-to-text / offline dictation)
 │   │   ├── whisper_stt.py        # WhisperStt implementation of the Stt protocol
 │   ├── platform/
-│   │   ├── schemas.py          # Config page read models, NewLLMModel (display_name only), mappers
+│   │   ├── schemas.py          # Config page read models, provider/model forms, mappers
 │   │   ├── api/
-│   │   │   ├── config.py       # GET/POST /config
+│   │   │   ├── config.py       # GET/POST /config + provider/model catalog endpoints
 │   │   │   └── deps.py
 │   │   ├── use_cases/
-│   │   │   ├── save_config.py   # SaveConfigUseCase (parse+test+persist)
-│   │   │   └── add_llm_model.py # AddLLMModelUseCase
+│   │   │   ├── save_config.py    # SaveConfigUseCase (parse+test+persist)
+│   │   │   ├── add_llm_model.py  # AddLLMModelUseCase (legacy combined flow)
+│   │   │   └── manage_catalog.py # ManageCatalogUseCase (provider/model CRUD + discover)
 │   │   ├── queries/
-│   │   │   ├── llm_page.py     # LLM catalog page context
+│   │   │   ├── llm_page.py     # LLM preset + provider card read models
 │   │   │   └── platform_page.py
-│   │   └── support/
-│   │       ├── llm_catalog.py  # data/llm_models.json load/save/select
-│   │       ├── speech_runtime.py  # SpeechRuntimeCoordinator (Whisper + Piper lifecycle)
-│   │       ├── speech_settings.py
-│   │       └── ai_context.py   # ai_provider_from_config() async context manager
+│   │   ├── domain/
+│   │   │   ├── config.py         # AppConfig, ApiKeyDecision, probes
+│   │   │   ├── llm_catalog.py    # LLMCatalogService + repository port
+│   │   │   ├── effective_config.py # EffectiveModelConfig aggregate
+│   │   │   ├── speech_runtime.py   # SpeechRuntimeCoordinator (Whisper + Piper lifecycle)
+│   │   │   └── speech_settings.py
+│   │   ├── repo/
+│   │   │   ├── config_repository.py       # data/config.json I/O
+│   │   │   ├── llm_catalog_repository.py  # data/llm_models.json I/O (providers + models)
+│   │   │   └── config_composition.py      # service singletons + FastAPI deps
+│   │   ├── support/
+│   │   │   └── ai_context.py   # ai_provider_from_config() async context manager
 │   ├── interview/              # Session orchestrator (shell, setup, dashboard, completion)
 │   │   ├── domain/             # Interview shell aggregate, SessionSelection, serialization
 │   │   ├── schemas/            # InterviewRead, dashboard/page, known_questions
@@ -165,7 +173,7 @@ grillkit/
 │       └── static/js/          # interview/coding/speech modules loaded by app.js
 ├── data/
 │   ├── config.json             # Locale, speech/TTS flags (gitignored)
-│   ├── llm_models.json         # User LLM catalog + selected model (gitignored)
+│   ├── llm_models.json         # LLM providers + their models + selected id (gitignored)
 │   ├── whisper-models/<size>/  # faster-whisper snapshots (gitignored content)
 │   ├── piper-voices/<voice_id>/
 │   ├── tts-cache/v2/{locale}/
@@ -207,13 +215,18 @@ grillkit/
 | POST | `/api/known-questions` | `interview/api/known_questions.py` | Mark a bank item as known (`{branch, item_id}`) |
 | DELETE | `/api/known-questions` | `interview/api/known_questions.py` | Unmark a known bank item (query `branch`, `item_id`) |
 | GET | `/api/known-questions/manage` | `interview/api/known_questions.py` | JSON manage page (resolved question text, `theory_items`/`coding_items`/`total_count`) |
-| GET | `/api/config` | `platform/api/config.py` | AI provider configuration context (JSON) |
+| GET | `/api/config` | `platform/api/config.py` | AI provider configuration context (JSON, incl. `llm_providers`) |
 | POST | `/api/config` | `platform/api/config.py` | Test connection, then save (`{success, message, page}`) |
 | POST | `/api/config/test` | `platform/api/config.py` | Test connection without saving |
-| POST | `/api/config/llm-models` | `platform/api/config.py` | Add catalog entry (incl. `accepts_audio_input`) |
+| POST | `/api/config/llm-models` | `platform/api/config.py` | Legacy add catalog entry (provider auto-created from base URL) |
+| POST | `/api/config/providers` | `platform/api/config.py` | Add a provider (probe via `models.list()` first) |
+| PUT/DELETE | `/api/config/providers/{provider_id}` | `platform/api/config.py` | Update provider (probe when connection details change) / remove it with its models |
+| POST | `/api/config/providers/{provider_id}/models` | `platform/api/config.py` | Add a model under a provider (text + audio probe) |
+| PUT/DELETE | `/api/config/providers/{provider_id}/models/{model_id}` | `platform/api/config.py` | Update / remove a catalog model |
+| POST | `/api/config/providers/{provider_id}/discover-models` | `platform/api/config.py` | List model ids the endpoint reports (`GET /models`) |
 | DELETE | `/api/config` | `platform/api/config.py` | Remove saved provider configuration |
-| GET | `/speech/model/status` | `speech/api/routes.py` | Whisper model install status (JSON) |
-| POST | `/speech/model/download` | `speech/api/routes.py` | Start Whisper download for `config.speech_model_size` |
+| GET | `/speech/model/status` | `speech/api/routes.py` | Whisper model install status (`size` query, defaults to config) |
+| POST | `/speech/model/download` | `speech/api/routes.py` | Start Whisper download (`size` query, defaults to `config.speech_model_size`) |
 | GET | `/speech/model/options` | `speech/api/routes.py` | JSON size trade-off metadata |
 | GET | `/speech/tts/status` | `question_voice/api/routes.py` | Piper voice status (JSON) when question voice is enabled |
 | POST | `/speech/tts/voice/download` | `question_voice/api/routes.py` | Start Piper voice download for configured `tts_voice_id` |
@@ -281,7 +294,7 @@ main.py ──► lifespan: init_db(), SpeechRuntimeCoordinator.startup() (Whisp
   ├── interview/api/  (dashboard, setup, routes)
   │     ├── routes.py ──► ws_protocol, errors, page (full template context)
   │     └── deps.py ──► interview/use_cases/*, interview/queries/*
-  ├── platform/api/config.py ──► platform/use_cases/config, platform/queries/*
+  ├── platform/api/config.py ──► platform/use_cases/config + manage_catalog, platform/queries/*
   ├── question_voice/api/routes.py ──► question_voice/use_cases/*
   └── speech/api/  (routes, dictation)
         ├── dictation.py ──► dictation_protocol, stt_resolver, dictation session
@@ -328,11 +341,11 @@ coding/queries/
 
 interview/api/deps.py ──► platform/support/ai_context (yields AIProvider for WS/routes)
 
-platform/use_cases/config.py ──► ai/factory, speech/schemas, data/config.json
-platform/support/
-  ├── llm_catalog.py ──► data/llm_models.json
-  ├── speech_runtime.py ──► whisper_runtime, piper_runtime
-  └── speech_settings.py
+platform/use_cases/save_config.py ──► ai/factory, speech/schemas, data/config.json
+platform/use_cases/manage_catalog.py ──► config probes, llm catalog service
+platform/repo/llm_catalog_repository.py ──► data/llm_models.json (providers + models)
+platform/domain/speech_runtime.py ──► whisper_runtime, piper_runtime
+platform/domain/speech_settings.py ──► speech model/voice resolution
 
 speech/queries/
   └── speech_page.py ──► speech status page context
@@ -561,19 +574,32 @@ Instance-wide list (no user accounts). When setup sends `exclude_known: true`, `
 
 ## Data Flow: Configure Provider
 
+The configuration page is a two-pane settings layout: **Configuration**
+(`#/config`) and **Providers & models** (`#/config/providers`).
+
 ```
 User → GET /api/config → ConfigService.get_config() + LLMCatalogService.load_catalog()
 User → POST /api/config/test → test selected catalog model (no save)
 User → POST /api/config → merge form into config.json + catalog selection
-  → ConfigService.test_connection(resolve_effective_config()) → AI provider ping
+  → ConfigService.test_model(resolve_effective_config()) → AI provider ping
   → on success: save config.json and llm_models.json
-User → POST /api/config/llm-models (display_name, base_url, model, optional api_key, accepts_audio_input)
-  → NewLLMModel validated (no manual model id — slug generated by generate_model_id())
-  → LLMCatalogService.add_user_model() → data/llm_models.json (sets selected id)
-  → when accepts_audio_input: test text + audio capability + Whisper readiness
+
+User → POST /api/config/providers (display_name, base_url, api_key)
+  → ConfigService.test_connection() → models.list() probe; failure reports a key hint
+  → on success: LLMCatalogService.create_provider() → data/llm_models.json
+
+User → POST /api/config/providers/{id}/models (display_name, model, accepts_audio_input)
+  → probe with the provider's stored endpoint/key (text + audio when flagged)
+  → on success: LLMCatalogService.add_model() → model saved under the provider, selected
+User → POST /api/config/providers/{id}/discover-models → model ids for the add-model datalist
 ```
 
-`ConfigService.resolve_effective_config()` applies the selected catalog entry’s `base_url`, `model`, and `api_key` for interviews and connection tests. Setup and interview flows require a saved config; otherwise `/setup` redirects to `/#/config`.
+`EffectiveModelConfig.from_entry()` resolves the selected catalog entry's
+`provider_type`, `base_url`, and `api_key` (owned by its provider) for interviews
+and connection tests. Setup and interview flows require a saved config;
+otherwise `/setup` redirects to `/#/config`. Downloads are inline: every Whisper
+size row and the question-voice checkbox own their Download button and status
+text; one Whisper model downloads at a time.
 
 ## Data Flow: Create Interview
 
@@ -770,7 +796,7 @@ data/
 |------|---------|
 | `data/db/grillkit.db` | SQLite database (default; override with `DATABASE_URL`) |
 | `data/config.json` | `locale`, `speech_model_size`, `question_voice_enabled`, `tts_voice_id`, timer defaults |
-| `data/llm_models.json` | User LLM catalog entries and `selected` model id |
+| `data/llm_models.json` | LLM providers (`{id, display_name, base_url, api_key}`) and models referencing them, plus the `selected` model id |
 | `data/whisper-models/<size>/` | Offline faster-whisper snapshots (`WhisperModelService`) |
 | `data/piper-voices/<voice_id>/` | Piper ONNX voice files (`PiperVoiceService`) |
 | `data/tts-cache/v2/{locale}/` | Cached question WAVs (`TtsCacheService`; SHA-256 of normalized text) |
@@ -844,12 +870,14 @@ Follow-up rounds use the same pipeline (cache key from localized `question_text`
 
 | Concern | Location |
 |---------|----------|
-| Catalog file | `data/llm_models.json` (gitignored) — models added via **Add model to catalog** on `/config` (`POST /config/llm-models`) |
-| Loader | `app/platform/support/llm_catalog.py` |
-| Model id | Auto-generated slug from **display name** (`slugify_model_id` + `generate_model_id` in `app/ai/llm_models.py`); collisions get `-2`, `-3`, … suffixes |
-| Selection | `selected` id in catalog JSON; `llm_preset_id` on resolved `AppConfig` |
+| Catalog file | `data/llm_models.json` (gitignored) — providers and models managed on the **Providers & models** tab (`POST /api/config/providers`, `.../models`) |
+| Loader | `app/platform/repo/llm_catalog_repository.py` (JSON I/O, atomic writes, legacy-file migration) |
+| Providers | `providers` in the JSON: `{id, display_name, base_url, provider_type, api_key}`; provider id is a slug of the URL host (`generate_provider_id`), base URLs are unique |
+| Models | `models` in the JSON: `{provider_id, display_name, model, accepts_audio_input}`; id is a slug from display name (`generate_model_id`), collisions get `-2`, `-3`, … suffixes |
+| Legacy files | Flat per-model entries (`base_url`/`api_key` on every model) are grouped by `(base_url, provider_type)` on read and rewritten in provider shape on the next mutation; model ids and the selected id are preserved |
+| Selection | `selected` id in catalog JSON; `llm_preset_id` on resolved `AppConfig` (reset when the selected model is deleted) |
 | Audio flag | `accepts_audio_input` on `LLMModelEntry` — enables interview audio-answer UI and config audio probe |
-| Effective config | `ConfigService.resolve_effective_config()` applies catalog `base_url`, `model`, and `api_key` |
+| Effective config | `EffectiveModelConfig.from_entry()` fills `base_url`/`api_key` from the owning provider for interviews and connection tests |
 
 ## Tests
 
@@ -862,7 +890,7 @@ Pytest discovers modules under `tests/` (`pyproject.toml` → `testpaths = ["tes
 | `theory/` | `tests/theory/{api,use_cases,queries,repositories,integration}/` | `test_submission.py`, `test_ws_routes.py`, `test_review.py` |
 | `coding/` | `tests/coding/{api,use_cases,queries,repositories}/` | `test_runner.py`, `test_evaluator.py`, `test_review.py` |
 | `speech/`, `question_voice/` | `tests/speech/`, `tests/question_voice/` | API + query tests |
-| `platform/` | `tests/platform/{api,use_cases,queries}/` | `test_config.py`, `test_llm_catalog.py` |
+| `platform/` | `tests/platform/{api,domain,use_cases}/` | `test_config.py`, `test_llm_catalog.py`, `test_providers_api.py` |
 | `shared/` | `tests/shared/` (+ `infrastructure/`) | `test_questions.py`, `test_coding.py`, `test_uow.py` |
 | `main.py` | `tests/app/` | `test_main.py` |
 

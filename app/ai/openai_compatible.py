@@ -250,6 +250,18 @@ class OpenAICompatibleProvider(AIProvider, StreamingProvider, AudioCapableProvid
         except OpenAIError:
             return False
 
+    async def list_models(self) -> list[str]:
+        """List model names exposed by the endpoint.
+
+        Returns:
+            Sorted model ids reported by ``GET /models``.
+
+        Raises:
+            OpenAIError: If the endpoint rejects the request.
+        """
+        response = await self.client.models.list()
+        return sorted(item.id for item in response.data)
+
     async def probe_audio_input(self, audio_wav: bytes) -> bool:
         """Probe whether the endpoint accepts multimodal audio input.
 
