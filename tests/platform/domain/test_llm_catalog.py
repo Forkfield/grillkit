@@ -316,6 +316,183 @@ class TestLLMCatalog:
         assert saved["providers"]["api-example-com"]["api_key"] == "rotated"
 
 
+class TestProviderManagement:
+    """Tests for provider and model CRUD on the catalog service."""
+
+    def test_create_provider_persists_details(self, catalog_service, catalog_path):
+        """A provider stores its endpoint, key, and derived id."""
+        provider = catalog_service.create_provider(
+            display_name="Local Ollama",
+            base_url="http://localhost:11434/v1/",
+            api_key="secret",
+        )
+
+        assert provider.id == "localhost-11434"
+        assert provider.base_url == "http://localhost:11434/v1"
+        saved = json.loads(catalog_path.read_text())
+        assert saved["providers"]["localhost-11434"] == {
+            "display_name": "Local Ollama",
+            "base_url": "http://localhost:11434/v1",
+            "provider_type": "openai-compatible",
+            "api_key": "secret",
+        }
+
+    def test_create_provider_rejects_duplicate_base_url(self, catalog_service):
+        """Two providers cannot share one endpoint."""
+        catalog_service.create_provider(
+            display_name="One", base_url="https://api.example.com/v1"
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            catalog_service.create_provider(
+                display_name="Two", base_url="https://api.example.com/v1/"
+            )
+
+    def test_update_provider_keeps_key_when_omitted(
+        self, catalog_service, catalog_path
+    ):
+        """An update without a key leaves the stored key in place."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud",
+            base_url="https://api.example.com/v1",
+            api_key="secret",
+        )
+
+        updated = catalog_service.update_provider(
+            provider.id,
+            display_name="Cloud API",
+            base_url="https://api.example.com/v2",
+        )
+
+        assert updated.display_name == "Cloud API"
+        assert updated.base_url == "https://api.example.com/v2"
+        assert updated.api_key == "secret"
+        saved = json.loads(catalog_path.read_text())
+        assert saved["providers"][provider.id]["api_key"] == "secret"
+
+    def test_update_provider_sets_and_clears_key(self, catalog_service):
+        """A submitted key replaces the stored one; the flag removes it."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+
+        catalog_service.update_provider(
+            provider.id,
+            display_name="Cloud",
+            base_url="https://api.example.com/v1",
+            api_key="secret",
+        )
+        assert catalog_service.get_provider(provider.id).api_key == "secret"
+
+        catalog_service.update_provider(
+            provider.id,
+            display_name="Cloud",
+            base_url="https://api.example.com/v1",
+            clear_api_key=True,
+        )
+        assert catalog_service.get_provider(provider.id).api_key is None
+
+    def test_add_model_links_provider_and_selects_it(self, catalog_service):
+        """A new model references its provider and becomes selected."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud",
+            base_url="https://api.example.com/v1",
+            api_key="secret",
+        )
+
+        entry = catalog_service.add_model(
+            provider.id,
+            display_name="Cloud Audio",
+            model="gpt-4o-audio",
+            accepts_audio_input=True,
+        )
+
+        assert entry.provider_id == provider.id
+        assert entry.base_url == "https://api.example.com/v1"
+        assert entry.api_key == "secret"
+        assert entry.accepts_audio_input is True
+        assert catalog_service.get_selected_model_id() == entry.id
+
+    def test_add_model_rejects_unknown_provider(self, catalog_service):
+        """Models cannot reference a provider that does not exist."""
+        with pytest.raises(ValueError, match="Unknown LLM provider"):
+            catalog_service.add_model("missing", display_name="Ghost", model="gpt-4")
+
+    def test_update_model_changes_fields(self, catalog_service):
+        """Model labels, names, and flags are editable."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        entry = catalog_service.add_model(
+            provider.id, display_name="Cloud", model="gpt-4"
+        )
+
+        updated = catalog_service.update_model(
+            provider.id,
+            entry.id,
+            display_name="Cloud Audio",
+            model="gpt-4o-audio",
+            accepts_audio_input=True,
+        )
+
+        assert updated.display_name == "Cloud Audio"
+        assert updated.model == "gpt-4o-audio"
+        assert updated.accepts_audio_input is True
+
+    def test_update_model_rejects_a_foreign_provider(self, catalog_service):
+        """A provider cannot edit a model that belongs to another provider."""
+        first = catalog_service.create_provider(
+            display_name="One", base_url="https://one.example.com/v1"
+        )
+        second = catalog_service.create_provider(
+            display_name="Two", base_url="https://two.example.com/v1"
+        )
+        entry = catalog_service.add_model(
+            first.id, display_name="One model", model="gpt-4"
+        )
+
+        with pytest.raises(ValueError, match="Unknown LLM model"):
+            catalog_service.update_model(
+                second.id, entry.id, display_name="Nope", model="gpt-4"
+            )
+
+    def test_delete_model_resets_selection(self, catalog_service):
+        """Removing the selected model clears the selection."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        entry = catalog_service.add_model(
+            provider.id, display_name="Cloud", model="gpt-4"
+        )
+
+        assert catalog_service.delete_model(entry.id) is None
+        assert catalog_service.get_model(entry.id) is None
+        assert catalog_service.get_selected_model_id() is None
+
+    def test_delete_provider_removes_its_models(self, catalog_service, catalog_path):
+        """Deleting a provider drops only its models and clears the selection."""
+        first = catalog_service.create_provider(
+            display_name="One", base_url="https://one.example.com/v1"
+        )
+        second = catalog_service.create_provider(
+            display_name="Two", base_url="https://two.example.com/v1"
+        )
+        kept = catalog_service.add_model(second.id, display_name="Kept", model="gpt-4")
+        removed = catalog_service.add_model(
+            first.id, display_name="Removed", model="gpt-4"
+        )
+        catalog_service.set_selected_model(removed.id)
+
+        assert catalog_service.delete_provider(first.id) is None
+
+        catalog = catalog_service.load_catalog()
+        assert first.id not in catalog.providers
+        assert set(catalog.models) == {kept.id}
+        assert catalog.selected_id is None
+        saved = json.loads(catalog_path.read_text())
+        assert saved["selected"] == ""
+
+
 class TestLLMModelHelpers:
     """Tests for id slugification and generation."""
 

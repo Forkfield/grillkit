@@ -14,6 +14,7 @@ from app.ai.audio_probe import minimal_wav_bytes
 from app.ai.base import AIProvider, AudioCapableProvider
 from app.ai.factory import ProviderFactory
 from app.ai.llm_models import LLMModelEntry
+from app.ai.openai_compatible import OpenAICompatibleProvider
 from app.platform.domain.effective_config import EffectiveModelConfig
 from app.platform.domain.llm_catalog import LLMCatalogService
 from app.shared.locales import DEFAULT_LOCALE
@@ -272,6 +273,74 @@ class ConfigService:
     def delete_config(self) -> None:
         """Remove configuration file via the config repository."""
         self._repo.delete()
+
+    async def test_connection(
+        self,
+        *,
+        base_url: str,
+        api_key: str | None,
+        provider_type: str = "openai-compatible",
+        timeout: float = 60.0,
+    ) -> tuple[bool, str]:
+        """Check that a provider endpoint is reachable with the given key.
+
+        Args:
+            base_url: OpenAI-compatible base URL.
+            api_key: API key to use, if any.
+            provider_type: Provider adapter id.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+        """
+        probe = EffectiveModelConfig(
+            provider_type=provider_type,
+            base_url=base_url,
+            model="connection-test",
+            api_key=api_key,
+            timeout=timeout,
+        )
+        return await self.test_model(probe)
+
+    async def discover_models(
+        self,
+        *,
+        base_url: str,
+        api_key: str | None,
+        provider_type: str = "openai-compatible",
+        timeout: float = 60.0,
+    ) -> tuple[list[str], str | None]:
+        """List the models a provider reports through ``GET /models``.
+
+        Args:
+            base_url: OpenAI-compatible base URL.
+            api_key: API key to use, if any.
+            provider_type: Provider adapter id.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            Tuple of (model ids, error message). The error is ``None`` on
+            success; the model list is empty on failure.
+        """
+        provider: AIProvider | None = None
+        try:
+            provider = ProviderFactory.from_config(
+                base_url=base_url,
+                model="connection-test",
+                api_key=api_key,
+                api_type=provider_type,
+                timeout=timeout,
+            )
+            if not isinstance(provider, OpenAICompatibleProvider):
+                return [], "Provider does not support model discovery."
+            return await provider.list_models(), None
+        except ValueError as exc:
+            return [], str(exc)
+        except Exception as exc:
+            return [], f"Could not list models: {exc}"
+        finally:
+            if provider is not None:
+                await provider.close()
 
     async def test_model(self, probe: EffectiveModelConfig) -> tuple[bool, str]:
         """Probe a model's provider connection in a single pass.

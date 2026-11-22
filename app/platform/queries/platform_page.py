@@ -5,7 +5,7 @@
 from app.platform.domain.config import AppConfig
 from app.platform.domain.effective_config import EffectiveModelConfig
 from app.platform.queries.config_read import app_config_read_from
-from app.platform.queries.llm_page import list_preset_options
+from app.platform.queries.llm_page import list_preset_options, list_provider_options
 from app.platform.repo.config_composition import get_default_catalog_service
 from app.platform.schemas import (
     ConfigPageContext,
@@ -62,7 +62,11 @@ async def build_page_context(
     if selected_llm_preset_id is not None:
         preset_id = selected_llm_preset_id
     elif config is not None and config.llm_preset_id:
-        preset_id = config.llm_preset_id
+        if get_default_catalog_service().get_model(config.llm_preset_id) is not None:
+            preset_id = config.llm_preset_id
+        else:
+            selected = get_default_catalog_service().get_selected_model()
+            preset_id = selected.id if selected is not None else None
     else:
         selected = get_default_catalog_service().get_selected_model()
         preset_id = selected.id if selected is not None else None
@@ -86,6 +90,7 @@ async def build_page_context(
         tts_voice_status=tts_voice_status,
         tts_voice_banner=tts_show_banner,
         llm_presets=list_preset_options(),
+        llm_providers=list_provider_options(),
         selected_llm_preset_id=preset_id,
         error=error,
         message=message,

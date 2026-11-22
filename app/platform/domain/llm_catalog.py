@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from app.ai.llm_models import LLMCatalog, LLMModelEntry
+from app.ai.llm_models import LLMCatalog, LLMModelEntry, LLMProvider
 
 if TYPE_CHECKING:
     from app.platform.schemas import NewLLMModel
@@ -49,6 +49,49 @@ class LLMCatalogRepositoryProtocol(Protocol):
     def add_user_model(self, payload: NewLLMModel) -> LLMModelEntry: ...
 
     def update_model_api_key(self, model_id: str, api_key: str | None) -> None: ...
+
+    def create_provider(
+        self,
+        *,
+        display_name: str,
+        base_url: str,
+        provider_type: str,
+        api_key: str | None,
+    ) -> LLMProvider: ...
+
+    def update_provider(
+        self,
+        provider_id: str,
+        *,
+        display_name: str,
+        base_url: str,
+        provider_type: str,
+        api_key: str | None,
+        clear_api_key: bool,
+    ) -> LLMProvider: ...
+
+    def delete_provider(self, provider_id: str) -> str | None: ...
+
+    def add_model(
+        self,
+        provider_id: str,
+        *,
+        display_name: str,
+        model: str,
+        accepts_audio_input: bool,
+    ) -> LLMModelEntry: ...
+
+    def update_model(
+        self,
+        provider_id: str,
+        model_id: str,
+        *,
+        display_name: str,
+        model: str,
+        accepts_audio_input: bool,
+    ) -> LLMModelEntry: ...
+
+    def delete_model(self, model_id: str) -> str | None: ...
 
 
 class LLMCatalogService:
@@ -149,6 +192,154 @@ class LLMCatalogService:
             api_key: API key to store, or ``None`` to remove it.
         """
         self._repo.update_model_api_key(model_id, api_key)
+
+    def get_provider(self, provider_id: str | None) -> LLMProvider | None:
+        """Return one provider by id, or ``None`` when unknown.
+
+        Args:
+            provider_id: Catalog provider id.
+
+        Returns:
+            Matching provider, or ``None``.
+        """
+        if not provider_id:
+            return None
+        return self.load_catalog().providers.get(provider_id)
+
+    def create_provider(
+        self,
+        *,
+        display_name: str,
+        base_url: str,
+        provider_type: str = "openai-compatible",
+        api_key: str | None = None,
+    ) -> LLMProvider:
+        """Persist a new provider.
+
+        Args:
+            display_name: Human-readable provider label.
+            base_url: OpenAI-compatible base URL.
+            provider_type: Provider adapter id.
+            api_key: Optional API key stored on the provider.
+
+        Returns:
+            Persisted provider.
+        """
+        return self._repo.create_provider(
+            display_name=display_name,
+            base_url=base_url,
+            provider_type=provider_type,
+            api_key=api_key,
+        )
+
+    def update_provider(
+        self,
+        provider_id: str,
+        *,
+        display_name: str,
+        base_url: str,
+        provider_type: str = "openai-compatible",
+        api_key: str | None = None,
+        clear_api_key: bool = False,
+    ) -> LLMProvider:
+        """Update a provider's connection details.
+
+        Args:
+            provider_id: Provider to update.
+            display_name: New human-readable label.
+            base_url: New base URL.
+            provider_type: New provider adapter id.
+            api_key: Replacement key, or empty to keep the stored one.
+            clear_api_key: Whether to remove the stored key.
+
+        Returns:
+            Updated provider.
+        """
+        return self._repo.update_provider(
+            provider_id,
+            display_name=display_name,
+            base_url=base_url,
+            provider_type=provider_type,
+            api_key=api_key,
+            clear_api_key=clear_api_key,
+        )
+
+    def delete_provider(self, provider_id: str) -> str | None:
+        """Remove a provider and all of its models.
+
+        Args:
+            provider_id: Provider to remove.
+
+        Returns:
+            The new selected model id (``None`` when it was removed).
+        """
+        return self._repo.delete_provider(provider_id)
+
+    def add_model(
+        self,
+        provider_id: str,
+        *,
+        display_name: str,
+        model: str,
+        accepts_audio_input: bool = False,
+    ) -> LLMModelEntry:
+        """Append a model under an existing provider.
+
+        Args:
+            provider_id: Provider that owns the model.
+            display_name: Human-readable model label.
+            model: Provider model name.
+            accepts_audio_input: Whether the model supports audio answers.
+
+        Returns:
+            Persisted catalog entry.
+        """
+        return self._repo.add_model(
+            provider_id,
+            display_name=display_name,
+            model=model,
+            accepts_audio_input=accepts_audio_input,
+        )
+
+    def update_model(
+        self,
+        provider_id: str,
+        model_id: str,
+        *,
+        display_name: str,
+        model: str,
+        accepts_audio_input: bool = False,
+    ) -> LLMModelEntry:
+        """Update a model owned by a provider.
+
+        Args:
+            provider_id: Provider that owns the model.
+            model_id: Catalog model id to update.
+            display_name: New human-readable label.
+            model: New provider model name.
+            accepts_audio_input: New audio-input capability flag.
+
+        Returns:
+            Updated catalog entry.
+        """
+        return self._repo.update_model(
+            provider_id,
+            model_id,
+            display_name=display_name,
+            model=model,
+            accepts_audio_input=accepts_audio_input,
+        )
+
+    def delete_model(self, model_id: str) -> str | None:
+        """Remove a model from the catalog.
+
+        Args:
+            model_id: Catalog model id to remove.
+
+        Returns:
+            The new selected model id (``None`` when it was removed).
+        """
+        return self._repo.delete_model(model_id)
 
     def save_model_selection(self, model_id: str, api_key: str | None) -> None:
         """Persist the active model and update the stored API key.

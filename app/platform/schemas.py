@@ -68,6 +68,48 @@ class LLMPresetOptionRead(BaseModel):
     accepts_audio_input: bool = False
 
 
+class LLMProviderRead(BaseModel):
+    """One provider card on the providers settings tab.
+
+    Attributes:
+        id: Catalog provider id.
+        display_name: Human-readable label.
+        base_url: OpenAI-compatible base URL.
+        provider_type: Provider adapter id.
+        has_api_key: Whether a key is stored (the key itself is never sent).
+        models: Models configured under this provider.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    id: str
+    display_name: str
+    base_url: str
+    provider_type: str
+    has_api_key: bool = False
+    models: list["LLMModelRead"] = Field(default_factory=list)
+
+
+class LLMModelRead(BaseModel):
+    """One model inside a provider card.
+
+    Attributes:
+        id: Catalog model id.
+        provider_id: Provider that owns the model.
+        display_name: Human-readable label.
+        model: Provider model name.
+        accepts_audio_input: Whether the model supports audio answers.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    id: str
+    provider_id: str
+    display_name: str
+    model: str
+    accepts_audio_input: bool = False
+
+
 class SpeechModelSpecRead(BaseModel):
     """Whisper model metadata for one size tier on the config page.
 
@@ -104,6 +146,7 @@ class ConfigPageContext(BaseModel):
         tts_voice_status: Piper question-voice status snapshot.
         tts_voice_banner: Whether to show the question-voice banner.
         llm_presets: Interview model catalog options.
+        llm_providers: Providers with their models for the providers tab.
         selected_llm_preset_id: Active catalog model id.
         error: Optional validation or connection error message.
         message: Optional success or informational message.
@@ -119,6 +162,7 @@ class ConfigPageContext(BaseModel):
     tts_voice_status: PiperVoiceStatusRead | None = None
     tts_voice_banner: bool = False
     llm_presets: list[LLMPresetOptionRead] = Field(default_factory=list)
+    llm_providers: list[LLMProviderRead] = Field(default_factory=list)
     selected_llm_preset_id: str | None = None
     error: str | None = None
     message: str | None = None
@@ -181,6 +225,91 @@ class NewLLMModel(BaseModel):
         return str(value).strip() or None
 
 
+class LLMProviderForm(BaseModel):
+    """User input for creating or updating a catalog provider.
+
+    Attributes:
+        display_name: Human-readable label shown in the UI.
+        base_url: OpenAI-compatible base URL.
+        provider_type: Provider adapter id.
+        api_key: Replacement API key; empty or ``None`` keeps the stored key.
+        clear_api_key: Whether to remove the stored key.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        str_strip_whitespace=True, frozen=True
+    )
+
+    display_name: str
+    base_url: str
+    provider_type: str = "openai-compatible"
+    api_key: str | None = None
+    clear_api_key: bool = False
+
+    @field_validator("display_name")
+    @classmethod
+    def _validate_display_name(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Display name is required")
+        return value
+
+    @field_validator("base_url")
+    @classmethod
+    def _validate_base_url(cls, value: str) -> str:
+        normalized = value.rstrip("/")
+        if not normalized:
+            raise ValueError("Base URL is required")
+        return normalized
+
+    @field_validator("provider_type")
+    @classmethod
+    def _validate_provider_type(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Provider type is required")
+        return value
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _normalize_api_key(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip() or None
+        return str(value).strip() or None
+
+
+class LLMModelForm(BaseModel):
+    """User input for adding or updating a model under a provider.
+
+    Attributes:
+        display_name: Human-readable label shown in the UI.
+        model: Provider model name.
+        accepts_audio_input: Whether the model supports multimodal audio answers.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        str_strip_whitespace=True, frozen=True
+    )
+
+    display_name: str
+    model: str
+    accepts_audio_input: bool = False
+
+    @field_validator("display_name")
+    @classmethod
+    def _validate_display_name(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Display name is required")
+        return value
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, value: str) -> str:
+        if not value:
+            raise ValueError("Model name is required")
+        return value
+
+
 class SaveConfigBody(BaseModel):
     """JSON body for saving the AI provider configuration.
 
@@ -241,6 +370,32 @@ class AddLLMModelResponse(BaseModel):
     message: str | None = None
     selected_preset_id: str | None = None
     page: ConfigPageContext
+
+
+class CatalogActionResult(BaseModel):
+    """Response for provider and model catalog mutations.
+
+    Attributes:
+        error: Optional validation or connection error message.
+        message: Optional success message.
+        page: Fresh config page context after the operation.
+    """
+
+    error: str | None = None
+    message: str | None = None
+    page: ConfigPageContext
+
+
+class DiscoverModelsResponse(BaseModel):
+    """Response for POST /api/config/providers/{id}/discover-models.
+
+    Attributes:
+        models: Model ids reported by the provider endpoint.
+        error: Optional error message when discovery failed.
+    """
+
+    models: list[str] = Field(default_factory=list)
+    error: str | None = None
 
 
 def speech_model_specs_for_config() -> dict[str, SpeechModelSpecRead]:
