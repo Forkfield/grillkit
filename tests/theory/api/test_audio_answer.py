@@ -189,7 +189,6 @@ class TestAudioAnswerApi:
                         provider_type="openai-compatible",
                         model="text-only",
                         base_url="http://localhost",
-                        api_key_required=False,
                         accepts_audio_input=False,
                     )
                 },

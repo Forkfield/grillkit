@@ -58,7 +58,6 @@ class TestAppConfig:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.example.com/v1",
-            api_key_required=True,
             api_key="secret",
         )
         config = AppConfig(llm_preset_id="cloud", timeout=60.0)
@@ -79,7 +78,6 @@ class TestAppConfig:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.example.com/v1",
-            api_key_required=True,
             api_key="catalog-secret",
         )
         decision = resolve_api_key_from_form("", entry)
@@ -102,7 +100,6 @@ class TestAppConfig:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.example.com/v1",
-            api_key_required=False,
         )
         decision = resolve_api_key_from_form("", entry)
         assert decision.kind is ApiKeyKind.KEEP
@@ -116,7 +113,6 @@ class TestAppConfig:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.example.com/v1",
-            api_key_required=True,
             api_key="catalog-secret",
         )
         decision = resolve_api_key_from_form(CLEAR_API_KEY_MARKER, entry)
@@ -331,7 +327,6 @@ class TestConfigService:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="http://localhost",
-            api_key_required=True,
             api_key="test_key",
         )
         monkeypatch.setattr(
@@ -361,7 +356,6 @@ class TestConfigService:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="http://localhost",
-            api_key_required=True,
             api_key="invalid_key",
         )
         monkeypatch.setattr(
@@ -392,7 +386,6 @@ class TestConfigService:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="http://localhost",
-            api_key_required=True,
             api_key="test_key",
         )
         monkeypatch.setattr(

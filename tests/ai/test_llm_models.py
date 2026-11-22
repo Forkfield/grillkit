@@ -25,14 +25,12 @@ class TestLLMModelEntry:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.openai.com/v1",
-            api_key_required=True,
         )
         assert entry.id == "gpt-4"
         assert entry.display_name == "GPT-4"
         assert entry.provider_type == "openai-compatible"
         assert entry.model == "gpt-4"
         assert entry.base_url == "https://api.openai.com/v1"
-        assert entry.api_key_required is True
         assert entry.api_key is None
         assert entry.accepts_audio_input is False
 
@@ -44,7 +42,6 @@ class TestLLMModelEntry:
             provider_type="openai-compatible",
             model="custom",
             base_url="http://localhost:11434",
-            api_key_required=False,
             api_key="secret",
             accepts_audio_input=True,
         )
@@ -59,7 +56,6 @@ class TestLLMModelEntry:
             provider_type="openai-compatible",
             model="x",
             base_url="http://localhost",
-            api_key_required=False,
         )
         with pytest.raises(AttributeError):
             entry.display_name = "Y"
@@ -76,7 +72,6 @@ class TestLLMCatalog:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.openai.com/v1",
-            api_key_required=True,
         )
         catalog = LLMCatalog(
             selected_id="gpt-4",
@@ -112,7 +107,6 @@ class TestNormalizeModelId:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.openai.com/v1",
-            api_key_required=True,
         )
         catalog = LLMCatalog(
             selected_id="gpt-4",
@@ -128,7 +122,6 @@ class TestNormalizeModelId:
             provider_type="openai-compatible",
             model="gpt-4",
             base_url="https://api.openai.com/v1",
-            api_key_required=True,
         )
         catalog = LLMCatalog(
             selected_id="gpt-4",

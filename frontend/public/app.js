@@ -339,7 +339,6 @@
               '<option value="' + escapeHtml(preset.id) + '"' +
               (preset.id === selectedPreset ? " selected" : "") +
               ' data-description="' + escapeHtml(preset.description || "") + '"' +
-              ' data-api-key-required="' + (preset.api_key_required ? "true" : "false") + '"' +
               ' data-accepts-audio-input="' + (preset.accepts_audio_input ? "true" : "false") + '">' +
               escapeHtml(preset.display_name) +
               (preset.accepts_audio_input ? " (audio)" : "") +
@@ -466,11 +465,7 @@
       '<div class="form-group">' +
       '<label for="catalog_api_key" class="form-label">API key</label>' +
       '<input type="password" name="api_key" id="catalog_api_key" class="form-control" autocomplete="off" placeholder="sk-...">' +
-      '<p class="form-hint">Optional. Stored in <code>data/llm_models.json</code> with the model.</p>' +
-      "</div>" +
-      '<div class="form-group">' +
-      "<label class=\"form-label\">" +
-      '<input type="checkbox" name="api_key_required" id="catalog_api_key_required" value="true"> API key required</label>' +
+      '<p class="form-hint">Optional. Required only when the provider asks for one — leave blank for local servers. Stored in <code>data/llm_models.json</code> with the model.</p>' +
       "</div>" +
       '<div class="form-group">' +
       "<label class=\"form-label\">" +
@@ -659,7 +654,6 @@
   function applyPresetMode(container) {
     var presetSelect = container.querySelector("#llm_preset_id");
     var description = container.querySelector("#llm-preset-description");
-    var apiKeyGroup = container.querySelector("#api-key-group");
     if (!presetSelect) {
       return;
     }
@@ -667,7 +661,6 @@
     if (!option) {
       return;
     }
-    var apiKeyRequired = option.dataset.apiKeyRequired === "true";
     var acceptsAudio = option.dataset.acceptsAudioInput === "true";
     var audioHint =
       "This model accepts audio answers. Whisper must be installed for the selected speech model size.";
@@ -676,9 +669,6 @@
       description.textContent = acceptsAudio
         ? (base ? base + " — " : "") + audioHint
         : base;
-    }
-    if (apiKeyGroup) {
-      apiKeyGroup.hidden = !apiKeyRequired;
     }
   }
 
@@ -704,7 +694,6 @@
       base_url: container.querySelector("#catalog_base_url").value,
       model: container.querySelector("#catalog_model").value,
       api_key: container.querySelector("#catalog_api_key").value,
-      api_key_required: container.querySelector("#catalog_api_key_required").checked,
       accepts_audio_input: container.querySelector("#catalog_accepts_audio_input").checked,
     };
   }

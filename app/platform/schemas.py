@@ -55,7 +55,6 @@ class LLMPresetOptionRead(BaseModel):
         description: Short description shown in the UI.
         model: Provider model name.
         base_url: OpenAI-compatible base URL.
-        api_key_required: Whether the form should require an API key.
         accepts_audio_input: Whether the model supports audio answer submission.
     """
 
@@ -66,7 +65,6 @@ class LLMPresetOptionRead(BaseModel):
     description: str
     model: str
     base_url: str
-    api_key_required: bool
     accepts_audio_input: bool = False
 
 
@@ -136,7 +134,6 @@ class NewLLMModel(BaseModel):
         display_name: Human-readable label shown in the UI.
         base_url: OpenAI-compatible base URL.
         model: Provider model name.
-        api_key_required: Whether an API key is required for this endpoint.
         api_key: Optional API key stored with the catalog entry.
         accepts_audio_input: Whether the model supports multimodal audio answers.
     """
@@ -148,7 +145,6 @@ class NewLLMModel(BaseModel):
     display_name: str
     base_url: str
     model: str
-    api_key_required: bool = False
     api_key: str | None = None
     accepts_audio_input: bool = False
 

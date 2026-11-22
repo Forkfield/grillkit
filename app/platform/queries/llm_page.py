@@ -19,7 +19,6 @@ def list_preset_options() -> list[LLMPresetOptionRead]:
             description=entry.model,
             model=entry.model,
             base_url=entry.base_url,
-            api_key_required=entry.api_key_required,
             accepts_audio_input=entry.accepts_audio_input,
         )
         for entry in get_default_catalog_service().list_models()

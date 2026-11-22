@@ -21,7 +21,6 @@ class LLMModelEntry:
         provider_type: Provider adapter id (always ``openai-compatible`` today).
         model: Model name passed to the provider API.
         base_url: OpenAI-compatible API base URL.
-        api_key_required: Whether the UI should prompt for an API key.
         api_key: Stored API key for catalog entries (optional).
         accepts_audio_input: Whether the model supports multimodal audio answers.
     """
@@ -31,7 +30,6 @@ class LLMModelEntry:
     provider_type: str
     model: str
     base_url: str
-    api_key_required: bool
     api_key: str | None = None
     accepts_audio_input: bool = False
 

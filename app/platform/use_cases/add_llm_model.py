@@ -63,12 +63,13 @@ class AddLLMModelUseCase:
                 timeout=config.timeout if config is not None else 60.0,
                 accepts_audio_input=payload.accepts_audio_input,
             )
-            if payload.api_key_required and not payload.api_key:
-                raise ValueError(
-                    "API key is required for this model but none was provided."
-                )
             success, test_message = await self._config_service.test_model(probe)
             if not success:
+                if not payload.api_key:
+                    test_message = (
+                        f"{test_message}. This provider may require an API key — "
+                        "add one and retry."
+                    )
                 raise ValueError(test_message)
             entry = self._catalog_service.add_user_model(payload)
             return AddLLMModelResult(

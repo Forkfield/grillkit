@@ -20,7 +20,6 @@ def _entry(*, api_key: str | None = None) -> LLMModelEntry:
         provider_type="openai-compatible",
         model="gpt-4",
         base_url="https://api.example.com/v1",
-        api_key_required=True,
         api_key=api_key,
     )
 

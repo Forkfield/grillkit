@@ -21,7 +21,6 @@ class TestConfigRouter:
         provider_type="openai-compatible",
         model="gpt-4",
         base_url="https://api.openai.com",
-        api_key_required=True,
         api_key="stored-secret",
     )
 

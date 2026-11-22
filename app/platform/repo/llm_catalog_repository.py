@@ -99,12 +99,10 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
         model_id = generate_model_id(payload.display_name, models)
 
         api_key = payload.api_key
-        api_key_required = payload.api_key_required or bool(api_key)
         entry_dict = _model_dict(
             display_name=payload.display_name,
             model_name=payload.model,
             base_url=payload.base_url,
-            api_key_required=api_key_required,
             api_key=api_key,
             accepts_audio_input=payload.accepts_audio_input,
         )
@@ -129,7 +127,6 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
         entry = dict(raw_entry)
         if api_key:
             entry["api_key"] = api_key
-            entry["api_key_required"] = True
         else:
             entry.pop("api_key", None)
         models[model_id] = entry
@@ -185,7 +182,6 @@ def _model_dict(
     display_name: str,
     model_name: str,
     base_url: str,
-    api_key_required: bool,
     api_key: str | None = None,
     provider_type: str = "openai-compatible",
     accepts_audio_input: bool = False,
@@ -196,7 +192,6 @@ def _model_dict(
         "provider_type": provider_type,
         "model": model_name,
         "base_url": base_url,
-        "api_key_required": api_key_required,
         "accepts_audio_input": accepts_audio_input,
     }
     if api_key:
@@ -224,7 +219,6 @@ def _parse_model(model_id: str, item: dict[str, Any]) -> LLMModelEntry:
         provider_type=str(item.get("provider_type", "openai-compatible")),
         model=str(item.get("model", "")),
         base_url=base_url,
-        api_key_required=bool(item.get("api_key_required", False)),
         api_key=api_key,
         accepts_audio_input=bool(item.get("accepts_audio_input", False)),
     )
