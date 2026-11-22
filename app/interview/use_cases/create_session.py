@@ -133,4 +133,8 @@ class CreateInterviewSession:
         read_model = load_interview_read(self._uow, interview_id)
         if read_model is None:
             raise InterviewNotFoundError(interview_id)
+        # Commit before returning: the auto-commit dependency teardown runs
+        # after the HTTP response is sent, so a deferred commit lets the
+        # client's first page load race the transaction and 404.
+        self._uow.commit()
         return read_model
