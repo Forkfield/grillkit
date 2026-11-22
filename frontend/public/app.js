@@ -520,7 +520,7 @@
         "</div>"
       );
     }
-    if (status.state === "error" || status.state === "unavailable") {
+    if (status.state === "error") {
       return hint + '<div class="alert alert-error">' + escapeHtml(status.message) + "</div>";
     }
     return hint;

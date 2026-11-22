@@ -2,7 +2,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-PiperVoiceState = Literal["missing", "ready", "downloading", "error", "unavailable"]
+PiperVoiceState = Literal["missing", "ready", "downloading", "error"]
 
 
 class PiperVoiceStatusRead(BaseModel):

@@ -178,8 +178,8 @@ class TestApiPayload:
         assert payload["enabled"] is True
         assert payload["loaded_in_memory"] is True
 
-    def test_replaces_missing_with_unavailable_when_disabled(self):
-        """Missing state becomes unavailable when voice is disabled."""
+    def test_keeps_missing_state_when_disabled(self):
+        """Missing state is reported as-is; enabled flag carries the off state."""
         status = PiperVoiceStatusRead(
             voice_id="en_US-lessac-medium",
             locale="en",
@@ -190,7 +190,7 @@ class TestApiPayload:
             voice_display_name="Lessac (US English, medium)",
         )
         payload = QuestionVoiceStatusService.api_payload(status, enabled=False)
-        assert payload["state"] == "unavailable"
+        assert payload["state"] == "missing"
         assert payload["enabled"] is False
 
     def test_preserves_missing_when_enabled(self):
