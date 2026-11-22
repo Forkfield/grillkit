@@ -367,6 +367,21 @@ class TestImportModels:
         assert len(catalog_service.load_catalog().models) == 1
 
     @pytest.mark.asyncio
+    async def test_import_reports_empty_endpoint_list(
+        self, use_case, catalog_service, config_service
+    ):
+        """An endpoint that reports no models gets its own message."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        config_service.discover_models = AsyncMock(return_value=([], None))
+
+        result = await use_case.import_models(provider.id)
+
+        assert result.error is None
+        assert "reported no models" in result.message
+
+    @pytest.mark.asyncio
     async def test_import_failure_marks_provider(
         self, use_case, catalog_service, config_service
     ):

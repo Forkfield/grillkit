@@ -21,9 +21,12 @@
    * ------------------------------------------------------------------ */
 
   function escapeHtml(value) {
-    var div = document.createElement("div");
-    div.textContent = value == null ? "" : String(value);
-    return div.innerHTML;
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   async function fetchJSON(path, options) {
@@ -1209,6 +1212,10 @@
         }
       });
     });
+    /* The hidden Configuration pane still shows the old "(audio)" suffix and
+       hint; rebuild its picker options from the updated groups. */
+    var filter = container.querySelector("#llm-model-filter");
+    renderPresetOptions(container, filter ? filter.value : "");
   }
 
   function handleConfigSubmit(container, event, activeTab) {

@@ -8,11 +8,18 @@ Work in progress is accumulated under `[Unreleased]`; on release, that section b
 
 ### Added
 
+- **Automatic model import** — adding a provider immediately loads the model list from its endpoint into the catalog; **Load models** on the provider card re-imports it on demand. A failed attempt shows a **Discovery failed** mark with the error on the provider card
+- **Per-model audio flag** — every model in the provider list has an inline **audio** checkbox (defaults to off for imported models); toggling it no longer requires opening the edit form
+
 ### Changed
 
 - **STT/TTS naming** — unified entity naming: general speech-to-text / text-to-speech concepts are now `Stt` / `Tts`, concrete implementations are `WhisperStt` / `PiperTts` (e.g. `WhisperSttRuntime`, `PiperTtsRuntime`, `stt_models`, `whisper_stt`). Internal only; no API or config format changes.
+- **Configuration navigation** — the config page sections are now a proper sidebar list (icon, label, description) instead of plain buttons
+- **Static assets** — the SPA shell, styles and scripts are served with `Cache-Control: no-cache`, so a rebuilt UI is never masked by a stale browser cache
 
 ### Fixed
+
+- **HTML escaping** — quotes in dynamic values (provider error messages, model names from an endpoint) are now escaped, closing an attribute-injection vector in tooltips and option attributes
 
 ### Removed
 

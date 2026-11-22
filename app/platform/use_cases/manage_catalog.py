@@ -80,7 +80,7 @@ class ManageCatalogUseCase:
             )
         except ValueError as exc:
             return CatalogActionResult(error=str(exc))
-        imported, discovery_error = await self._import_discovered_models(provider)
+        imported, discovery_error, reported = await self._import_discovered_models(provider)
         if discovery_error:
             return CatalogActionResult(
                 message=(
@@ -94,6 +94,13 @@ class ManageCatalogUseCase:
                     f"Added provider '{provider.display_name}' — "
                     f"imported {imported} "
                     f"model{'' if imported == 1 else 's'}."
+                )
+            )
+        if reported == 0:
+            return CatalogActionResult(
+                message=(
+                    f"Added provider '{provider.display_name}'. "
+                    "The endpoint reported no models — add one manually."
                 )
             )
         return CatalogActionResult(message=f"Added provider '{provider.display_name}'.")
@@ -280,7 +287,7 @@ class ManageCatalogUseCase:
         provider = self._catalog_service.get_provider(provider_id)
         if provider is None:
             return CatalogActionResult(error=f"Unknown LLM provider: {provider_id}")
-        imported, error = await self._import_discovered_models(provider)
+        imported, error, reported = await self._import_discovered_models(provider)
         if error:
             return CatalogActionResult(error=error)
         if imported:
@@ -289,6 +296,12 @@ class ManageCatalogUseCase:
                     f"Imported {imported} "
                     f"model{'' if imported == 1 else 's'} from "
                     f"'{provider.display_name}'."
+                )
+            )
+        if reported == 0:
+            return CatalogActionResult(
+                message=(
+                    f"The endpoint of '{provider.display_name}' reported no models."
                 )
             )
         return CatalogActionResult(
@@ -335,12 +348,13 @@ class ManageCatalogUseCase:
 
     async def _import_discovered_models(
         self, provider: LLMProvider
-    ) -> tuple[int, str | None]:
+    ) -> tuple[int, str | None, int]:
         """Discover models for ``provider`` and import them into the catalog.
 
         Returns:
-            Tuple of the number of added models and an error message when
-            discovery failed (the provider is then marked with it).
+            Tuple of the number of added models, an error message when
+            discovery failed (the provider is then marked with it), and the
+            number of models the endpoint reported (0 on failure).
         """
         models, error = await self._config_service.discover_models(
             base_url=provider.base_url,
@@ -351,13 +365,13 @@ class ManageCatalogUseCase:
         if error:
             message = self._probe_error(error, provider.api_key)
             self._catalog_service.set_provider_discovery_error(provider.id, message)
-            return 0, message
+            return 0, message, 0
         try:
             imported = self._catalog_service.import_provider_models(provider.id, models)
         except ValueError as exc:
-            return 0, str(exc)
+            return 0, str(exc), len(models)
         self._catalog_service.set_provider_discovery_error(provider.id, None)
-        return imported, None
+        return imported, None, len(models)
 
     async def _probe_model(
         self, provider: LLMProvider, form: LLMModelForm
