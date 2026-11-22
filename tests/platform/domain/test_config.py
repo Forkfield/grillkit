@@ -262,7 +262,7 @@ class TestConfigService:
         config_service.save_config(config)
 
         stored = json.loads(user_path.read_text())
-        assert stored["models"]["cloud"]["api_key"] == "test_key"
+        assert stored["providers"]["localhost"]["api_key"] == "test_key"
 
     def test_save_config_sets_key_with_set_decision(
         self, config_service, mock_config_path
@@ -274,7 +274,7 @@ class TestConfigService:
         config_service.save_config(config, ApiKeyDecision(ApiKeyKind.SET, "new-secret"))
 
         stored = json.loads(user_path.read_text())
-        assert stored["models"]["cloud"]["api_key"] == "new-secret"
+        assert stored["providers"]["localhost"]["api_key"] == "new-secret"
 
     def test_get_config_no_file(self, config_service, mock_config_path):
         """Test retrieving config when file does not exist."""
