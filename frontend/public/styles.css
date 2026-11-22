@@ -550,6 +550,38 @@ a:hover {
     margin-top: 0.75rem;
 }
 
+.discovered-models-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    max-height: 12rem;
+    overflow-y: auto;
+}
+
+.discovered-model-option {
+    text-align: left;
+    padding: 0.4375rem 0.625rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.375rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: monospace;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    word-break: break-all;
+}
+
+.discovered-model-option:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+}
+
+.discovered-model-option.is-selected {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+}
+
 .discovered-models-status {
     font-size: 0.8125rem;
     color: var(--text-muted);
@@ -853,14 +885,22 @@ textarea.form-control {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    min-width: 12rem;
+    min-width: 15rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface);
     position: sticky;
     top: 1rem;
 }
 
 .settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
     text-align: left;
-    padding: 0.625rem 1rem;
+    padding: 0.5625rem 0.75rem;
     border: 1px solid transparent;
     border-radius: 0.5rem;
     background: transparent;
@@ -869,13 +909,38 @@ textarea.form-control {
     cursor: pointer;
 }
 
+.settings-nav-icon {
+    font-size: 1.125rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.settings-nav-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.settings-nav-label {
+    font-weight: 500;
+}
+
+.settings-nav-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 .settings-nav-item:hover {
-    background: var(--accent-light);
+    background: var(--surface-hover);
 }
 
 .settings-nav-item.is-active {
-    border-color: var(--border);
-    background: var(--accent-light);
+    background: var(--primary-soft);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.settings-nav-item.is-active .settings-nav-label {
     font-weight: 600;
 }
 
@@ -893,6 +958,10 @@ textarea.form-control {
         flex-direction: row;
         position: static;
         min-width: 0;
+    }
+
+    .settings-nav-desc {
+        display: none;
     }
 }
 

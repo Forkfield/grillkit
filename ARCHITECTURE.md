@@ -591,7 +591,8 @@ User → POST /api/config/providers (display_name, base_url, api_key)
 User → POST /api/config/providers/{id}/models (display_name, model, accepts_audio_input)
   → probe with the provider's stored endpoint/key (text + audio when flagged)
   → on success: LLMCatalogService.add_model() → model saved under the provider, selected
-User → POST /api/config/providers/{id}/discover-models → model ids for the add-model datalist
+User → POST /api/config/providers/{id}/discover-models → model ids shown as a
+  clickable list under the add-model form (click one to fill the form)
 ```
 
 `EffectiveModelConfig.from_entry()` resolves the selected catalog entry's
