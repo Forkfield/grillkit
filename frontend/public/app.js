@@ -1855,11 +1855,14 @@
     return '<span id="interview-status">' + escapeHtml(cap) + "</span>";
   }
 
-  function interviewAnswerHtml(answer, interviewStatus, questionVoiceEnabled) {
-    var showQuestion =
-      answer.answer_text !== null ||
-      answer.answer_text === "" ||
-      (answer.id === answer.id); // render every answer round
+  function interviewAnswerHtml(
+    answer,
+    interviewStatus,
+    questionVoiceEnabled,
+    currentAnswerId,
+  ) {
+    /* A question bubble appears once it is answered or becomes the active one. */
+    var showQuestion = answer.answer_text !== null || answer.id === currentAnswerId;
     if (!showQuestion) {
       return "";
     }
@@ -2046,7 +2049,12 @@
       ">" +
       '<div class="interview-chat" id="chat-container">';
     (data.answers || []).forEach(function (answer) {
-      body += interviewAnswerHtml(answer, data.interview.status, data.question_voice_enabled);
+      body += interviewAnswerHtml(
+        answer,
+        data.interview.status,
+        data.question_voice_enabled,
+        data.current_answer_id,
+      );
     });
     body += "</div>";
 
