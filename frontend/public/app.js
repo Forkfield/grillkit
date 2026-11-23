@@ -2605,6 +2605,10 @@
       (coding.timer_remaining_seconds != null ? coding.timer_remaining_seconds : "") +
       '" data-llm-timeout="' +
       escapeHtml(data.llm_request_timeout_seconds) +
+      '" data-llm-budget="' +
+      escapeHtml(data.llm_evaluation_budget_seconds) +
+      '" data-llm-completion-budget="' +
+      escapeHtml(data.llm_completion_budget_seconds) +
       '" data-complete="' +
       (coding.complete ? "true" : "false") +
       '" data-task-count="' +
@@ -2705,6 +2709,8 @@
       questionTimeLimitSeconds:
         data.question_time_limit_seconds != null ? data.question_time_limit_seconds : null,
       llmRequestTimeoutSeconds: data.llm_request_timeout_seconds,
+      llmEvaluationBudgetSeconds: data.llm_evaluation_budget_seconds,
+      llmCompletionBudgetSeconds: data.llm_completion_budget_seconds,
       currentRound: data.current_round || 0,
       currentQuestionId: data.current_question ? data.current_question.question_id : "",
       timerRemainingSeconds:

@@ -36,6 +36,10 @@
     var timeoutChatLabel = boot.timeoutChatLabel;
     var questionTimeLimitSeconds = boot.questionTimeLimitSeconds;
     var llmRequestTimeoutSeconds = boot.llmRequestTimeoutSeconds;
+    var llmEvaluationBudgetSeconds =
+        boot.llmEvaluationBudgetSeconds || llmRequestTimeoutSeconds * 2;
+    var llmCompletionBudgetSeconds =
+        boot.llmCompletionBudgetSeconds || llmEvaluationBudgetSeconds * 3;
     var currentRound = boot.currentRound || 0;
     var isSubmitting = false;
     var interviewFinished = false;
@@ -161,7 +165,7 @@
 
             case "evaluating":
                 showEvaluating(true);
-                startEvaluationWatchdog();
+                startEvaluationWatchdog(llmEvaluationBudgetSeconds);
                 break;
 
             case "transcript":
@@ -229,10 +233,12 @@
         }
     }
 
-    function startEvaluationWatchdog() {
+    function startEvaluationWatchdog(budgetSeconds) {
         clearEvaluationWatchdog();
-        var graceMs = 15000;
-        var timeoutMs = llmRequestTimeoutSeconds * 1000 + graceMs;
+        // The server enforces its own total budget and reports failures over
+        // the socket. This timer only recovers from a hung connection.
+        var graceMs = 60000;
+        var timeoutMs = (budgetSeconds || llmCompletionBudgetSeconds) * 1000 + graceMs;
         evaluationWatchdogTimer = setTimeout(function () {
             evaluationWatchdogTimer = null;
             if (!isSubmitting) {
@@ -243,7 +249,7 @@
             window.isSubmitting = false;
             enableForm(true);
             showError(
-                "AI evaluation is taking too long. Check /config (model running and timeout), then try again."
+                "No response from the server while evaluating. Reload the page and check the backend logs."
             );
         }, timeoutMs);
     }
@@ -302,7 +308,7 @@
             endBtn.disabled = true;
         }
         showEvaluating(true);
-        startEvaluationWatchdog();
+        startEvaluationWatchdog(llmCompletionBudgetSeconds);
 
         ws.send(JSON.stringify({ type: "complete" }));
     }

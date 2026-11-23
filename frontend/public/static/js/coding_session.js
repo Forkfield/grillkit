@@ -17,6 +17,9 @@
         ? Number(panel.dataset.timerRemaining)
         : null;
     const llmRequestTimeoutSeconds = Number(panel.dataset.llmTimeout || 60);
+    const llmEvaluationBudgetSeconds = Number(
+        panel.dataset.llmBudget || llmRequestTimeoutSeconds * 2
+    );
     let isSubmitting = false;
     window.isSubmitting = false;
     let ws = null;
@@ -210,8 +213,10 @@
 
     function startEvaluationWatchdog() {
         clearEvaluationWatchdog();
-        const graceMs = 15000;
-        const timeoutMs = llmRequestTimeoutSeconds * 1000 + graceMs;
+        // The server enforces its own total budget and reports failures over
+        // the socket. This timer only recovers from a hung connection.
+        const graceMs = 60000;
+        const timeoutMs = llmEvaluationBudgetSeconds * 1000 + graceMs;
         evaluationWatchdogTimer = setTimeout(function () {
             evaluationWatchdogTimer = null;
             if (!isSubmitting) {
@@ -222,7 +227,7 @@
             window.isSubmitting = false;
             setComposerEnabled(true);
             showError(
-                "AI evaluation is taking too long. Check /config, then try again."
+                "No response from the server while evaluating. Reload the page and check the backend logs."
             );
         }, timeoutMs);
     }

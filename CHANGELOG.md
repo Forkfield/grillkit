@@ -20,6 +20,7 @@ Work in progress is accumulated under `[Unreleased]`; on release, that section b
 ### Fixed
 
 - **HTML escaping** — quotes in dynamic values (provider error messages, model names from an endpoint) are now escaped, closing an attribute-injection vector in tooltips and option attributes
+- **AI evaluation timeout** — each evaluation now has a hard total time budget (2× the configured timeout; session completion allows 3 sequential evaluations). A slow or failing provider is cut off at that deadline with a clear message instead of leaving the page stuck on an invisible watchdog. The browser no longer shows a misleading "check /config" error on a timer — it waits for the server and surfaces the real provider error (including upstream 5xx errors)
 
 ### Removed
 

@@ -27,6 +27,10 @@ from app.shared.locales import (
     TIMEOUT_CHAT_LABELS,
     localized_string,
 )
+from app.shared.structured_evaluation import (
+    completion_budget_seconds,
+    evaluation_budget_seconds,
+)
 from app.speech.queries.speech_page import SttModelPageService
 from app.theory.queries.task_page import build_theory_context
 from app.theory.schemas.page import TheoryPageContext
@@ -92,6 +96,7 @@ class ActiveSessionPage:
             session=session,
         )
 
+        request_timeout = config.timeout if config else 60.0
         return InterviewPageContext(
             interview=interview,
             interview_title=session_display_title(session),
@@ -112,7 +117,13 @@ class ActiveSessionPage:
             ),
             current_round=theory.current_round if theory is not None else 0,
             timeout_chat_label=localized_string(interview.locale, TIMEOUT_CHAT_LABELS),
-            llm_request_timeout_seconds=int(config.timeout) if config else 60,
+            llm_request_timeout_seconds=int(request_timeout),
+            llm_evaluation_budget_seconds=int(
+                evaluation_budget_seconds(request_timeout)
+            ),
+            llm_completion_budget_seconds=int(
+                completion_budget_seconds(request_timeout)
+            ),
             interview_model_accepts_audio=interview_model_accepts_audio,
         )
 

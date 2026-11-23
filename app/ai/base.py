@@ -47,14 +47,22 @@ class AIProvider(ABC):
     methods.  Streaming and audio are opt-in via separate capability protocols.
     """
 
-    def __init__(self, model: str, **kwargs: object) -> None:
+    def __init__(
+        self,
+        model: str,
+        timeout: float = 60.0,
+        **kwargs: object,
+    ) -> None:
         """Initialize the provider.
 
         Args:
             model: The model name to use.
+            timeout: Per-request timeout in seconds. Callers use it to derive
+                an overall time budget for multi-attempt evaluations.
             **kwargs: Additional provider-specific configuration options.
         """
         self.model = model
+        self.timeout = timeout
         self.config = kwargs
 
     @property
