@@ -25,6 +25,8 @@ class LLMProvider:
         base_url: OpenAI-compatible API base URL.
         provider_type: Provider adapter id (always ``openai-compatible`` today).
         api_key: Stored API key for the provider (optional).
+        discovery_error: Message from the last failed model discovery, cleared
+            on success (``None`` when the last attempt worked).
     """
 
     id: str
@@ -32,6 +34,7 @@ class LLMProvider:
     base_url: str
     provider_type: str = "openai-compatible"
     api_key: str | None = None
+    discovery_error: str | None = None
 
 
 @dataclass(frozen=True)

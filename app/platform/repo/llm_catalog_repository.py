@@ -357,6 +357,76 @@ class LLMCatalogRepository(LLMCatalogRepositoryProtocol):
         self._write(data)
         return _parse_catalog(data).models[model_id]
 
+    def import_provider_models(self, provider_id: str, models: list[str]) -> int:
+        """Bulk-add discovered model names under a provider.
+
+        Models already in the catalog (matched by provider model name) are
+        skipped; imported ones default to ``accepts_audio_input=False`` and a
+        display name equal to the model name. The selection never changes.
+
+        Args:
+            provider_id: Provider that owns the imported models.
+            models: Model names reported by the provider endpoint.
+
+        Returns:
+            Number of models actually added.
+
+        Raises:
+            ValueError: If the provider id is unknown.
+        """
+        data = self._read()
+        if provider_id not in data["providers"]:
+            raise ValueError(f"Unknown LLM provider: {provider_id}")
+        models_dict = dict(data["models"])
+        known = {
+            str(raw.get("model", ""))
+            for raw in models_dict.values()
+            if isinstance(raw, dict) and raw.get("provider_id") == provider_id
+        }
+        added = 0
+        for name in models:
+            model_name = str(name or "").strip()
+            if not model_name or model_name in known:
+                continue
+            model_id = generate_model_id(model_name, models_dict)
+            models_dict[model_id] = {
+                "provider_id": provider_id,
+                "display_name": model_name,
+                "model": model_name,
+                "accepts_audio_input": False,
+            }
+            known.add(model_name)
+            added += 1
+        if added:
+            data["models"] = models_dict
+            self._write(data)
+        return added
+
+    def set_provider_discovery_error(self, provider_id: str, error: str | None) -> None:
+        """Persist the last model-discovery outcome on a provider.
+
+        Args:
+            provider_id: Provider to mark.
+            error: Error message from the failed attempt, or ``None`` to clear.
+
+        Raises:
+            ValueError: If the provider id is unknown.
+        """
+        data = self._read()
+        providers = dict(data["providers"])
+        raw = providers.get(provider_id)
+        if not isinstance(raw, dict):
+            raise ValueError(f"Unknown LLM provider: {provider_id}")
+        updated = dict(raw)
+        if error:
+            updated["discovery_error"] = str(error)
+        else:
+            updated.pop("discovery_error", None)
+        providers[provider_id] = updated
+        data["providers"] = providers
+        self._write(data)
+        return None
+
     def delete_model(self, model_id: str) -> str | None:
         """Remove a model from the catalog.
 
@@ -579,6 +649,7 @@ def _parse_provider(provider_id: str, item: dict[str, Any]) -> LLMProvider:
         base_url=_normalize_base_url(item.get("base_url", "")),
         provider_type=str(item.get("provider_type", "openai-compatible")),
         api_key=_optional_str(item.get("api_key")),
+        discovery_error=_optional_str(item.get("discovery_error")),
     )
 
 

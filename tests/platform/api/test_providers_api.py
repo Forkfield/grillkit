@@ -102,6 +102,7 @@ class TestProviderEndpoints:
                 "base_url": "https://api.example.com/v1",
                 "provider_type": "openai-compatible",
                 "has_api_key": True,
+                "discovery_error": None,
                 "models": [
                     {
                         "id": "cloud-model",
@@ -115,7 +116,7 @@ class TestProviderEndpoints:
         ]
 
     def test_create_provider(self, client, catalog):
-        """POST /api/config/providers persists the provider and returns a page."""
+        """POST /api/config/providers persists the provider and imports models."""
         with catalog_api(catalog):
             response = client.post(
                 "/api/config/providers", json=_provider_body(api_key="secret")
@@ -124,9 +125,25 @@ class TestProviderEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["error"] is None
-        assert data["message"] == "Added provider 'Cloud'."
-        assert data["page"]["llm_providers"][0]["has_api_key"] is True
+        assert data["message"] == "Added provider 'Cloud' — imported 2 models."
+        page_provider = data["page"]["llm_providers"][0]
+        assert page_provider["has_api_key"] is True
+        assert page_provider["discovery_error"] is None
+        assert [item["model"] for item in page_provider["models"]] == [
+            "gpt-4",
+            "gpt-4o",
+        ]
         assert catalog.load_catalog().providers["api-example-com"].api_key == "secret"
+
+    def test_create_provider_marks_discovery_failure(self, client, catalog):
+        """A failed discovery still saves the provider and marks the card."""
+        with catalog_api(catalog, discover=([], "Unauthorized")):
+            response = client.post("/api/config/providers", json=_provider_body())
+
+        data = response.json()
+        assert data["error"] is None
+        assert "Could not load models" in data["message"]
+        assert "Unauthorized" in data["page"]["llm_providers"][0]["discovery_error"]
 
     def test_create_provider_reports_probe_failure(self, client, catalog):
         """A failed probe returns an error and persists nothing."""
@@ -337,3 +354,75 @@ class TestDiscoverEndpoint:
             response = client.post("/api/config/providers/missing/discover-models")
 
         assert response.json()["error"] == "Unknown LLM provider: missing"
+
+    def test_import_models(self, client, catalog):
+        """POST import-models adds every unknown model and returns a page."""
+        provider = catalog.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        catalog.add_model(provider.id, display_name="Cloud model", model="gpt-4")
+
+        with catalog_api(catalog):
+            response = client.post(f"/api/config/providers/{provider.id}/import-models")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["error"] is None
+        assert data["message"] == "Imported 1 model from 'Cloud'."
+        page_models = data["page"]["llm_providers"][0]["models"]
+        assert sorted(item["model"] for item in page_models) == ["gpt-4", "gpt-4o"]
+        assert all(not item["accepts_audio_input"] for item in page_models)
+
+    def test_import_models_failure_marks_provider(self, client, catalog):
+        """A failed import returns an error and marks the provider card."""
+        provider = catalog.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+
+        with catalog_api(catalog, discover=([], "Unauthorized")):
+            response = client.post(f"/api/config/providers/{provider.id}/import-models")
+
+        data = response.json()
+        assert "Unauthorized" in data["error"]
+        assert "Unauthorized" in data["page"]["llm_providers"][0]["discovery_error"]
+
+    def test_import_unknown_provider(self, client, catalog):
+        """Unknown provider ids are reported."""
+        with catalog_api(catalog):
+            response = client.post("/api/config/providers/missing/import-models")
+
+        assert response.json()["error"] == "Unknown LLM provider: missing"
+
+    def test_set_model_audio_input(self, client, catalog):
+        """PATCH on a model toggles its audio-input flag."""
+        provider = catalog.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        entry = catalog.add_model(
+            provider.id, display_name="Cloud model", model="gpt-4"
+        )
+
+        with catalog_api(catalog):
+            response = client.patch(
+                f"/api/config/providers/{provider.id}/models/{entry.id}",
+                json={"accepts_audio_input": True},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["error"] is None
+        page_models = response.json()["page"]["llm_providers"][0]["models"]
+        assert page_models[0]["accepts_audio_input"] is True
+
+    def test_set_model_audio_input_unknown_model(self, client, catalog):
+        """PATCH on an unknown model id is reported."""
+        provider = catalog.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+
+        with catalog_api(catalog):
+            response = client.patch(
+                f"/api/config/providers/{provider.id}/models/missing",
+                json={"accepts_audio_input": True},
+            )
+
+        assert "Unknown LLM model" in response.json()["error"]

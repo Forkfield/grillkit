@@ -60,14 +60,33 @@ class TestProviderActions:
     async def test_create_provider_probes_and_persists(
         self, use_case, catalog_service, config_service
     ):
-        """A successful probe persists the provider."""
+        """A successful probe persists the provider and imports its models."""
         result = await use_case.create_provider(_provider_form(api_key="secret"))
 
         assert result.error is None
-        assert result.message == "Added provider 'Cloud'."
+        assert result.message == "Added provider 'Cloud' — imported 2 models."
         config_service.test_connection.assert_awaited_once()
         providers = catalog_service.load_catalog().providers
         assert providers["api-example-com"].api_key == "secret"
+        assert providers["api-example-com"].discovery_error is None
+        imported = catalog_service.load_catalog().models
+        assert [entry.model for entry in imported.values()] == ["gpt-4", "gpt-4o"]
+        assert all(not entry.accepts_audio_input for entry in imported.values())
+
+    @pytest.mark.asyncio
+    async def test_create_provider_marks_discovery_failure(
+        self, use_case, catalog_service, config_service
+    ):
+        """A failed model discovery still saves the provider and marks it."""
+        config_service.discover_models = AsyncMock(return_value=([], "Unauthorized"))
+
+        result = await use_case.create_provider(_provider_form())
+
+        assert result.error is None
+        assert "Could not load models" in result.message
+        provider = catalog_service.load_catalog().providers["api-example-com"]
+        assert provider.discovery_error is not None
+        assert "Unauthorized" in provider.discovery_error
 
     @pytest.mark.asyncio
     async def test_create_provider_reports_probe_failure(
@@ -238,6 +257,169 @@ class TestModelActions:
 
         assert result.error == f"Unknown LLM model: {entry.id}"
         assert catalog_service.get_model(entry.id) is not None
+
+    @pytest.mark.asyncio
+    async def test_set_model_audio_input_toggles_without_probe(
+        self, use_case, catalog_service, config_service
+    ):
+        """The audio flag is persisted directly, without a connection probe."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        entry = catalog_service.add_model(
+            provider.id, display_name="Cloud model", model="gpt-4"
+        )
+
+        result = use_case.set_model_audio_input(provider.id, entry.id, True)
+
+        assert result.error is None
+        assert catalog_service.get_model(entry.id).accepts_audio_input is True
+        config_service.test_model.assert_not_awaited()
+
+        result = use_case.set_model_audio_input(provider.id, entry.id, False)
+
+        assert result.error is None
+        assert catalog_service.get_model(entry.id).accepts_audio_input is False
+
+    @pytest.mark.asyncio
+    async def test_set_model_audio_input_rejects_foreign_provider(
+        self, use_case, catalog_service
+    ):
+        """A provider cannot toggle a model that belongs to another provider."""
+        first = catalog_service.create_provider(
+            display_name="One", base_url="https://one.example.com/v1"
+        )
+        second = catalog_service.create_provider(
+            display_name="Two", base_url="https://two.example.com/v1"
+        )
+        entry = catalog_service.add_model(first.id, display_name="One", model="gpt-4")
+
+        result = use_case.set_model_audio_input(second.id, entry.id, True)
+
+        assert result.error == f"Unknown LLM model: {entry.id}"
+
+    @pytest.mark.asyncio
+    async def test_add_model_clears_discovery_mark(
+        self, use_case, catalog_service, config_service
+    ):
+        """A successful manual add drops a stale discovery-failure mark."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        catalog_service.set_provider_discovery_error(provider.id, "Unauthorized")
+
+        result = await use_case.add_model(provider.id, _model_form())
+
+        assert result.error is None
+        assert catalog_service.get_provider(provider.id).discovery_error is None
+
+
+class TestImportModels:
+    """Tests for bulk-importing discovered models into the catalog."""
+
+    @pytest.mark.asyncio
+    async def test_import_adds_missing_models(
+        self, use_case, catalog_service, config_service
+    ):
+        """Import persists unknown models with defaults and keeps the selection."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        entry = catalog_service.add_model(
+            provider.id, display_name="Cloud model", model="gpt-4"
+        )
+        catalog_service.set_selected_model(entry.id)
+        config_service.discover_models = AsyncMock(
+            return_value=(["gpt-4", "gpt-4o", "o3-mini"], None)
+        )
+
+        result = await use_case.import_models(provider.id)
+
+        assert result.error is None
+        assert result.message == "Imported 2 models from 'Cloud'."
+        catalog = catalog_service.load_catalog()
+        models = [
+            item for item in catalog.models.values() if item.provider_id == provider.id
+        ]
+        assert sorted(item.model for item in models) == ["gpt-4", "gpt-4o", "o3-mini"]
+        assert all(not item.accepts_audio_input for item in models)
+        assert catalog.models[entry.id].display_name == "Cloud model"
+        assert catalog_service.get_selected_model_id() == entry.id
+        assert catalog_service.get_provider(provider.id).discovery_error is None
+
+    @pytest.mark.asyncio
+    async def test_import_reports_all_known(
+        self, use_case, catalog_service, config_service
+    ):
+        """Importing a fully known model list adds nothing and says so."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        catalog_service.add_model(
+            provider.id, display_name="Cloud model", model="gpt-4"
+        )
+        config_service.discover_models = AsyncMock(return_value=(["gpt-4"], None))
+
+        result = await use_case.import_models(provider.id)
+
+        assert result.error is None
+        assert "already in the catalog" in result.message
+        assert len(catalog_service.load_catalog().models) == 1
+
+    @pytest.mark.asyncio
+    async def test_import_reports_empty_endpoint_list(
+        self, use_case, catalog_service, config_service
+    ):
+        """An endpoint that reports no models gets its own message."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        config_service.discover_models = AsyncMock(return_value=([], None))
+
+        result = await use_case.import_models(provider.id)
+
+        assert result.error is None
+        assert "reported no models" in result.message
+
+    @pytest.mark.asyncio
+    async def test_import_failure_marks_provider(
+        self, use_case, catalog_service, config_service
+    ):
+        """A failed import reports the error and marks the provider card."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        config_service.discover_models = AsyncMock(return_value=([], "Unauthorized"))
+
+        result = await use_case.import_models(provider.id)
+
+        assert "Unauthorized" in result.error
+        assert "may require an API key" in result.error
+        assert (
+            "Unauthorized" in catalog_service.get_provider(provider.id).discovery_error
+        )
+
+    @pytest.mark.asyncio
+    async def test_import_success_clears_failure_mark(
+        self, use_case, catalog_service, config_service
+    ):
+        """A successful import clears an earlier failure mark."""
+        provider = catalog_service.create_provider(
+            display_name="Cloud", base_url="https://api.example.com/v1"
+        )
+        catalog_service.set_provider_discovery_error(provider.id, "Unauthorized")
+
+        result = await use_case.import_models(provider.id)
+
+        assert result.error is None
+        assert catalog_service.get_provider(provider.id).discovery_error is None
+
+    @pytest.mark.asyncio
+    async def test_import_unknown_provider(self, use_case):
+        """Unknown provider ids are reported instead of raising."""
+        result = await use_case.import_models("missing")
+
+        assert result.error == "Unknown LLM provider: missing"
 
 
 class TestDiscoverModels:

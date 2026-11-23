@@ -21,9 +21,12 @@
    * ------------------------------------------------------------------ */
 
   function escapeHtml(value) {
-    var div = document.createElement("div");
-    div.textContent = value == null ? "" : String(value);
-    return div.innerHTML;
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   async function fetchJSON(path, options) {
@@ -391,7 +394,7 @@
     return html;
   }
 
-  function modelFormFieldsHTML(providerId, entry) {
+  function modelFormFieldsHTML(entry) {
     entry = entry || {};
     return (
       '<div class="form-row">' +
@@ -402,16 +405,10 @@
       '<input type="text" name="model" class="form-control" required value="' +
       escapeHtml(entry.model || "") + '" placeholder="gpt-4o"></label>' +
       "</div>" +
-      '<div class="inline-form-actions">' +
-      '<button type="button" class="btn btn-sm btn-secondary" data-discover data-provider-id="' +
-      escapeHtml(providerId) + '">Load models from provider</button>' +
-      '<span class="discovered-models-status" data-discover-status></span>' +
-      "</div>" +
-      '<div class="discovered-models-list" data-discovered-list hidden></div>' +
       '<label class="form-check"><input type="checkbox" name="accepts_audio_input"' +
       (entry.accepts_audio_input ? " checked" : "") +
       "> Accepts audio input</label>" +
-      '<p class="form-hint">Discovery queries the provider\'s model list; you can always type a model name manually.</p>' +
+      '<p class="form-hint">Use "Load models" on the provider to import the whole list at once; add a single model here when it is missing from the endpoint.</p>' +
       '<div class="inline-form-actions">' +
       '<button type="submit" class="btn btn-sm btn-primary">Save model</button>' +
       '<button type="button" class="btn btn-sm btn-secondary" data-form-cancel>Cancel</button>' +
@@ -424,20 +421,17 @@
       '<div class="provider-model-row" data-model-id="' + escapeHtml(entry.id) + '">' +
       '<div class="provider-model-info">' +
       '<span class="provider-model-name">' + escapeHtml(entry.display_name) + "</span>" +
-      '<span class="provider-model-meta">' + escapeHtml(entry.model) +
-      (entry.accepts_audio_input ? " &middot; audio" : "") + "</span>" +
+      '<span class="provider-model-meta">' + escapeHtml(entry.model) + "</span>" +
       "</div>" +
       '<div class="provider-model-actions">' +
-      '<button type="button" class="btn btn-sm btn-secondary" data-model-edit="' +
-      escapeHtml(entry.id) + '">Edit</button>' +
+      '<label class="provider-model-audio" title="Whether the model accepts audio answers">' +
+      '<input type="checkbox" data-model-audio data-provider-id="' +
+      escapeHtml(provider.id) + '" data-model-id="' + escapeHtml(entry.id) + '"' +
+      (entry.accepts_audio_input ? " checked" : "") + "> audio</label>" +
       '<button type="button" class="btn btn-sm btn-danger" data-model-delete="' +
       escapeHtml(entry.id) + '" data-provider-id="' + escapeHtml(provider.id) +
       '">Delete</button>' +
       "</div>" +
-      '<form class="form provider-model-form" data-model-form="' + escapeHtml(entry.id) +
-      '" data-provider-id="' + escapeHtml(provider.id) + '" hidden>' +
-      modelFormFieldsHTML(provider.id, entry) +
-      "</form>" +
       "</div>"
     );
   }
@@ -450,7 +444,7 @@
             return buildModelRowHTML(provider, entry);
           })
           .join("")
-      : '<p class="provider-empty">No models yet — add one below.</p>';
+      : '<p class="provider-empty">No models yet — use "Load models" or add one below.</p>';
     return (
       '<div class="provider-card" data-provider-card="' + escapeHtml(provider.id) + '">' +
       '<div class="provider-card-header">' +
@@ -463,13 +457,24 @@
         : '<span class="badge badge-muted">No API key</span>') +
       '<span class="badge badge-muted">' + models.length +
       (models.length === 1 ? " model" : " models") + "</span>" +
+      (provider.discovery_error
+        ? '<span class="badge badge-warning" title="' +
+          escapeHtml(provider.discovery_error) + '">Discovery failed</span>'
+        : "") +
       "</div></div>" +
       '<div class="provider-card-actions">' +
+      '<button type="button" class="btn btn-sm btn-secondary" data-import-models="' +
+      escapeHtml(provider.id) +
+      '" title="Load the model list from the provider endpoint and add every new model">Load models</button>' +
       '<button type="button" class="btn btn-sm btn-secondary" data-provider-edit="' +
       escapeHtml(provider.id) + '">Edit</button>' +
       '<button type="button" class="btn btn-sm btn-danger" data-provider-delete="' +
       escapeHtml(provider.id) + '">Delete</button>' +
       "</div></div>" +
+      (provider.discovery_error
+        ? '<p class="provider-discovery-error">' +
+          escapeHtml(provider.discovery_error) + "</p>"
+        : "") +
       '<form class="form provider-edit-form" data-provider-edit-form="' +
       escapeHtml(provider.id) + '" hidden>' +
       '<div class="form-row">' +
@@ -499,7 +504,7 @@
       escapeHtml(provider.id) + '">Add model</button></div>' +
       '<form class="form provider-model-form" data-model-form="" data-provider-id="' +
       escapeHtml(provider.id) + '" hidden>' +
-      modelFormFieldsHTML(provider.id, null) +
+      modelFormFieldsHTML(null) +
       "</form></div>"
     );
   }
@@ -1006,6 +1011,17 @@
       });
     }
 
+    if (container._configChangeHandler) {
+      container.removeEventListener("change", container._configChangeHandler);
+    }
+    container._configChangeHandler = function (event) {
+      var audio = event.target.closest ? event.target.closest("[data-model-audio]") : null;
+      if (audio) {
+        toggleModelAudio(container, audio);
+      }
+    };
+    container.addEventListener("change", container._configChangeHandler);
+
     if (container._configClickHandler) {
       container.removeEventListener("click", container._configClickHandler);
     }
@@ -1098,14 +1114,6 @@
       return;
     }
 
-    var editModelBtn = target.closest("[data-model-edit]");
-    if (editModelBtn) {
-      var row = editModelBtn.closest(".provider-model-row");
-      var modelForm = row.querySelector("[data-model-form]");
-      modelForm.hidden = !modelForm.hidden;
-      return;
-    }
-
     var deleteModelBtn = target.closest("[data-model-delete]");
     if (deleteModelBtn) {
       if (!window.confirm("Delete this model?")) {
@@ -1132,28 +1140,9 @@
       return;
     }
 
-    var discoveredOption = target.closest("[data-discovered-model]");
-    if (discoveredOption) {
-      var discoveredForm = discoveredOption.closest("form");
-      if (discoveredForm) {
-        var modelInput = discoveredForm.querySelector('input[name="model"]');
-        var nameInput = discoveredForm.querySelector('input[name="display_name"]');
-        if (modelInput) {
-          modelInput.value = discoveredOption.dataset.discoveredModel;
-        }
-        if (nameInput && !nameInput.value.trim()) {
-          nameInput.value = discoveredOption.dataset.discoveredModel;
-        }
-        discoveredForm.querySelectorAll("[data-discovered-model]").forEach(function (item) {
-          item.classList.toggle("is-selected", item === discoveredOption);
-        });
-      }
-      return;
-    }
-
-    var discoverBtn = target.closest("[data-discover]");
-    if (discoverBtn) {
-      discoverProviderModels(container, discoverBtn);
+    var importBtn = target.closest("[data-import-models]");
+    if (importBtn) {
+      importProviderModels(container, importBtn, activeTab);
       return;
     }
 
@@ -1162,71 +1151,71 @@
       var form = cancelBtn.closest("form");
       form.hidden = true;
       form.reset();
-      clearDiscoveredModels(form);
     }
   }
 
-  function clearDiscoveredModels(form) {
-    var listEl = form.querySelector("[data-discovered-list]");
-    if (listEl) {
-      listEl.hidden = true;
-      listEl.innerHTML = "";
-    }
-    var status = form.querySelector("[data-discover-status]");
-    if (status) {
-      status.textContent = "";
-      delete status.dataset.state;
-    }
-  }
-
-  function renderDiscoveredModels(form, models) {
-    var listEl = form.querySelector("[data-discovered-list]");
-    if (!listEl) {
-      return;
-    }
-    listEl.innerHTML = models
-      .map(function (name) {
-        return (
-          '<button type="button" class="discovered-model-option" data-discovered-model="' +
-          escapeHtml(name) + '">' + escapeHtml(name) + "</button>"
-        );
-      })
-      .join("");
-    listEl.hidden = models.length === 0;
-  }
-
-  function discoverProviderModels(container, discoverBtn) {
-    discoverBtn.disabled = true;
-    var form = discoverBtn.closest("form");
-    var status = form.querySelector("[data-discover-status]");
-    var providerId = discoverBtn.dataset.providerId;
-    clearDiscoveredModels(form);
-    fetchJSON("/api/config/providers/" + encodeURIComponent(providerId) + "/discover-models", {
-      method: "POST",
-    })
+  function importProviderModels(container, importBtn, activeTab) {
+    importBtn.disabled = true;
+    fetchJSON(
+      "/api/config/providers/" + encodeURIComponent(importBtn.dataset.importModels) +
+        "/import-models",
+      { method: "POST" }
+    )
       .then(function (result) {
-        discoverBtn.disabled = false;
-        if (!status) {
-          return;
-        }
-        if (result.error) {
-          status.textContent = result.error;
-          status.dataset.state = "error";
-          return;
-        }
-        renderDiscoveredModels(form, result.models || []);
-        status.textContent =
-          "Found " + (result.models || []).length +
-          " models — click one to fill the form, or keep typing.";
-        status.dataset.state = "ok";
+        handleConfigAction(container, result, activeTab, "Could not import models.");
       })
       .catch(function (err) {
-        discoverBtn.disabled = false;
-        if (status) {
-          status.textContent = errMessage(err, "Could not load models.");
-          status.dataset.state = "error";
+        importBtn.disabled = false;
+        container.insertAdjacentHTML(
+          "beforeend",
+          errorCard(errMessage(err, "Could not import models."))
+        );
+      });
+  }
+
+  function toggleModelAudio(container, checkbox) {
+    var desired = checkbox.checked;
+    checkbox.disabled = true;
+    fetchJSON(
+      "/api/config/providers/" + encodeURIComponent(checkbox.dataset.providerId) +
+        "/models/" + encodeURIComponent(checkbox.dataset.modelId),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepts_audio_input: desired }),
+      }
+    )
+      .then(function (result) {
+        checkbox.disabled = false;
+        if (result.error) {
+          checkbox.checked = !desired;
+          container.insertAdjacentHTML("beforeend", errorCard(result.error));
+          return;
+        }
+        syncAudioFlag(container, checkbox.dataset.modelId, desired);
+      })
+      .catch(function (err) {
+        checkbox.disabled = false;
+        checkbox.checked = !desired;
+        container.insertAdjacentHTML(
+          "beforeend",
+          errorCard(errMessage(err, "Could not update model."))
+        );
+      });
+  }
+
+  function syncAudioFlag(container, modelId, value) {
+    (container._llmGroups || []).forEach(function (group) {
+      group.models.forEach(function (entry) {
+        if (entry.id === modelId) {
+          entry.accepts_audio_input = value;
         }
       });
+    });
+    /* The hidden Configuration pane still shows the old "(audio)" suffix and
+       hint; rebuild its picker options from the updated groups. */
+    var filter = container.querySelector("#llm-model-filter");
+    renderPresetOptions(container, filter ? filter.value : "");
   }
 
   function handleConfigSubmit(container, event, activeTab) {
@@ -1254,17 +1243,9 @@
     } else if (form.matches("[data-model-form]")) {
       event.preventDefault();
       payload = collectProviderModelForm(form);
-      if (form.dataset.modelForm) {
-        action = "put";
-        url =
-          "/api/config/providers/" + encodeURIComponent(form.dataset.providerId) +
-          "/models/" + encodeURIComponent(form.dataset.modelForm);
-        fallback = "Could not save model.";
-      } else {
-        action = "post";
-        url = "/api/config/providers/" + encodeURIComponent(form.dataset.providerId) + "/models";
-        fallback = "Could not add model.";
-      }
+      action = "post";
+      url = "/api/config/providers/" + encodeURIComponent(form.dataset.providerId) + "/models";
+      fallback = "Could not add model.";
     } else {
       return;
     }
