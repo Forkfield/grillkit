@@ -82,6 +82,41 @@ def test_build_page_context_sets_audio_flag_from_catalog(monkeypatch, isolated_d
     assert disabled.interview_model_accepts_audio is False
 
 
+def test_build_page_context_exposes_llm_timeout_budgets(isolated_db):
+    """Page context carries per-request and total evaluation budgets."""
+    del isolated_db
+
+    context = ActiveSessionPage.build_page_context(
+        _session(),
+        config=AppConfig(
+            llm_preset_id="m",
+            timeout=30,
+        ),
+        question_voice_enabled=False,
+    )
+
+    assert context.llm_request_timeout_seconds == 30
+    assert context.llm_evaluation_budget_seconds == 60
+    assert context.llm_completion_budget_seconds == 180
+
+
+def test_build_page_context_exposes_default_llm_budgets_without_config(
+    isolated_db,
+):
+    """Budgets fall back to the default timeout when no config exists."""
+    del isolated_db
+
+    context = ActiveSessionPage.build_page_context(
+        _session(),
+        config=None,
+        question_voice_enabled=False,
+    )
+
+    assert context.llm_request_timeout_seconds == 60
+    assert context.llm_evaluation_budget_seconds == 120
+    assert context.llm_completion_budget_seconds == 360
+
+
 def test_build_page_context_coding_only_session(isolated_db):
     """Coding-only sessions build page context without theory sources."""
     del isolated_db

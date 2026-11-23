@@ -47,7 +47,7 @@ class OpenAICompatibleProvider(AIProvider, StreamingProvider, AudioCapableProvid
             timeout: Request timeout in seconds.
             **kwargs: Additional provider-specific options.
         """
-        super().__init__(model, **kwargs)
+        super().__init__(model, timeout=timeout, **kwargs)
         # OpenAI library requires api_key, provide dummy for local providers
         effective_key = api_key if api_key else "not-needed"
         self.client = AsyncOpenAI(

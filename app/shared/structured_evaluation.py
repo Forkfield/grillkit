@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 
 from pydantic import BaseModel
@@ -12,12 +13,75 @@ from app.ai.base import AIProvider, AudioCapableProvider, GenerationResult, Mess
 from app.shared.json_parser import parse_json_response
 
 _MAX_RETRY_TOKENS = 4096
+_EVALUATION_TIMEOUT_FACTOR = 2.0
+_COMPLETION_EVALUATIONS = 3
 _COMPACT_JSON_RETRY_NOTE = (
     "\n\nYour previous response was truncated or invalid JSON. "
     "Keep all string fields brief (feedback at most 4 sentences, "
     "follow-up questions one sentence). "
     "Return ONLY one complete valid JSON object, no markdown fences."
 )
+
+
+class EvaluationTimeoutError(TimeoutError):
+    """Raised when a structured evaluation exceeds its total time budget."""
+
+
+def evaluation_budget_seconds(timeout: float) -> float:
+    """Return the total time budget for one structured evaluation.
+
+    The configured timeout bounds a single HTTP attempt, while the provider
+    client may retry internally. The total budget allows one retry without
+    letting a single evaluation run unbounded.
+
+    Args:
+        timeout: Configured per-request timeout in seconds.
+
+    Returns:
+        Total budget in seconds.
+    """
+    return max(float(timeout), 0.1) * _EVALUATION_TIMEOUT_FACTOR
+
+
+def completion_budget_seconds(timeout: float) -> float:
+    """Return the time budget for session completion.
+
+    Completion prefetches theory and coding section feedback before the final
+    session evaluation, so it can run up to three evaluations in sequence.
+
+    Args:
+        timeout: Configured per-request timeout in seconds.
+
+    Returns:
+        Total budget in seconds.
+    """
+    return evaluation_budget_seconds(timeout) * _COMPLETION_EVALUATIONS
+
+
+async def _with_budget[T](provider: AIProvider, operation: Awaitable[T]) -> T:
+    """Await one evaluation within the provider's total time budget.
+
+    Args:
+        provider: Provider carrying the configured per-request timeout.
+        operation: Coroutine that performs the evaluation.
+
+    Returns:
+        Operation result.
+
+    Raises:
+        EvaluationTimeoutError: When the total budget is exhausted.
+    """
+    budget = evaluation_budget_seconds(provider.timeout)
+    timeout_ctx = asyncio.timeout(budget)
+    try:
+        async with timeout_ctx:
+            return await operation
+    except TimeoutError as exc:
+        if not timeout_ctx.expired():
+            raise
+        raise EvaluationTimeoutError(
+            f"AI evaluation timed out after {budget:.0f} seconds"
+        ) from exc
 
 
 def _should_retry_structured_parse(
@@ -143,7 +207,10 @@ async def generate_and_parse_json_response[TModel: BaseModel](
             max_tokens=budget,
         )
 
-    return await _generate_with_retry(response_model, max_tokens, _generate)
+    return await _with_budget(
+        provider,
+        _generate_with_retry(response_model, max_tokens, _generate),
+    )
 
 
 async def evaluate_with_schema[TModel: BaseModel](
@@ -195,4 +262,7 @@ async def evaluate_with_schema[TModel: BaseModel](
             max_tokens=budget,
         )
 
-    return await _generate_with_retry(response_model, max_tokens, _generate)
+    return await _with_budget(
+        provider,
+        _generate_with_retry(response_model, max_tokens, _generate),
+    )

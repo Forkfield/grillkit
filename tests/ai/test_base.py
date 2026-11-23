@@ -152,5 +152,5 @@ class TestAIProvider:
             base_url="http://localhost",
             timeout=30.0,
         )
+        assert provider.timeout == 30.0
         assert provider.config["base_url"] == "http://localhost"
-        assert provider.config["timeout"] == 30.0

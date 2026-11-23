@@ -8,6 +8,9 @@
 
     const interviewId = panel.dataset.interviewId || "";
     const llmRequestTimeoutSeconds = Number(panel.dataset.llmTimeout || 60);
+    const llmCompletionBudgetSeconds = Number(
+        panel.dataset.llmCompletionBudget || llmRequestTimeoutSeconds * 6
+    );
 
     let completeWs = null;
     let completeReconnectTimer = null;
@@ -39,8 +42,10 @@
 
     function startEvaluationWatchdog() {
         clearEvaluationWatchdog();
-        const graceMs = 15000;
-        const timeoutMs = llmRequestTimeoutSeconds * 1000 + graceMs;
+        // The server enforces its own total budget and reports failures over
+        // the socket. This timer only recovers from a hung connection.
+        const graceMs = 60000;
+        const timeoutMs = llmCompletionBudgetSeconds * 1000 + graceMs;
         evaluationWatchdogTimer = setTimeout(function () {
             evaluationWatchdogTimer = null;
             if (!isEndingInterview) {
@@ -53,7 +58,7 @@
                 endBtn.disabled = false;
             }
             alert(
-                "Final evaluation is taking too long. Check /config and try again."
+                "No response from the server while evaluating. Reload the page and check the backend logs."
             );
         }, timeoutMs);
     }

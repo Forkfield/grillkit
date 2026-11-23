@@ -45,6 +45,29 @@ class TestTimeout:
         assert "AI evaluation timed out" in result
 
 
+class TestProviderServerError:
+    """Tests for upstream provider server errors."""
+
+    def test_502_upstream_error(self) -> None:
+        exc = Exception(
+            "API error: Error code: 502 - {'error': {'message': "
+            "'An error occurred with the upstream provider', ",
+        )
+        result = ai_error_message_for_client(exc)
+        assert "server error" in result
+        assert "temporarily unavailable" in result
+
+    def test_503_service_unavailable(self) -> None:
+        exc = Exception("Error code: 503 - service unavailable")
+        result = ai_error_message_for_client(exc)
+        assert "server error" in result
+
+    def test_server_error_keyword(self) -> None:
+        exc = Exception("we encountered a server_error while processing")
+        result = ai_error_message_for_client(exc)
+        assert "server error" in result
+
+
 class TestGenericError:
     """Tests for generic error messages."""
 

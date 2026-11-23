@@ -2,13 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for shared structured LLM evaluation helpers."""
 
+import asyncio
 from collections.abc import AsyncIterator
 import json
 
 import pytest
 
 from app.ai.base import AIProvider, GenerationResult, Message
-from app.shared.structured_evaluation import generate_and_parse_json_response
+from app.shared.structured_evaluation import (
+    EvaluationTimeoutError,
+    completion_budget_seconds,
+    evaluate_with_schema,
+    evaluation_budget_seconds,
+    generate_and_parse_json_response,
+)
 from app.theory.domain.evaluator_models import AnswerEvaluation
 
 
@@ -137,3 +144,75 @@ async def test_generate_and_parse_json_response_does_not_retry_validation_error(
         )
 
     assert provider.calls == 1
+
+
+class _SlowProvider(AIProvider):
+    """Provider whose generation hangs until the total budget cancels it."""
+
+    def __init__(self, timeout: float, delay: float) -> None:
+        super().__init__("test-model", timeout=timeout)
+        self._delay = delay
+
+    @property
+    def name(self) -> str:
+        return "Slow Provider"
+
+    async def validate(self) -> bool:
+        return True
+
+    async def generate(
+        self,
+        messages: list[Message],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> GenerationResult:
+        del messages, temperature, max_tokens
+        await asyncio.sleep(self._delay)
+        raise AssertionError("generate should be cancelled before returning")
+
+    async def close(self) -> None:
+        pass
+
+
+def test_evaluation_budget_seconds_scales_with_timeout() -> None:
+    """Budgets double the per-request timeout and triple for completion."""
+    assert evaluation_budget_seconds(60.0) == 120.0
+    assert evaluation_budget_seconds(30.0) == 60.0
+    assert completion_budget_seconds(60.0) == 360.0
+
+
+@pytest.mark.asyncio
+async def test_generate_and_parse_json_response_enforces_total_budget() -> None:
+    """A hanging provider is cancelled once the total budget is exhausted."""
+    provider = _SlowProvider(timeout=0.05, delay=5.0)
+    messages = [
+        Message(role="system", content="Evaluate the answer."),
+        Message(role="user", content="Question and answer text."),
+    ]
+
+    with pytest.raises(
+        EvaluationTimeoutError,
+        match="timed out",
+    ):
+        await generate_and_parse_json_response(
+            provider,
+            messages=messages,
+            response_model=AnswerEvaluation,
+        )
+
+
+@pytest.mark.asyncio
+async def test_evaluate_with_schema_enforces_total_budget() -> None:
+    """Schema-based evaluation shares the same total budget guard."""
+    provider = _SlowProvider(timeout=0.05, delay=5.0)
+
+    with pytest.raises(
+        EvaluationTimeoutError,
+        match="timed out",
+    ):
+        await evaluate_with_schema(
+            provider,
+            system_prompt="Return a validation JSON object.",
+            response_model=AnswerEvaluation,
+            user_text="Question and answer text.",
+        )
