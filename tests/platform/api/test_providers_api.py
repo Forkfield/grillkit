@@ -363,9 +363,7 @@ class TestDiscoverEndpoint:
         catalog.add_model(provider.id, display_name="Cloud model", model="gpt-4")
 
         with catalog_api(catalog):
-            response = client.post(
-                f"/api/config/providers/{provider.id}/import-models"
-            )
+            response = client.post(f"/api/config/providers/{provider.id}/import-models")
 
         assert response.status_code == 200
         data = response.json()
@@ -382,9 +380,7 @@ class TestDiscoverEndpoint:
         )
 
         with catalog_api(catalog, discover=([], "Unauthorized")):
-            response = client.post(
-                f"/api/config/providers/{provider.id}/import-models"
-            )
+            response = client.post(f"/api/config/providers/{provider.id}/import-models")
 
         data = response.json()
         assert "Unauthorized" in data["error"]
@@ -402,7 +398,9 @@ class TestDiscoverEndpoint:
         provider = catalog.create_provider(
             display_name="Cloud", base_url="https://api.example.com/v1"
         )
-        entry = catalog.add_model(provider.id, display_name="Cloud model", model="gpt-4")
+        entry = catalog.add_model(
+            provider.id, display_name="Cloud model", model="gpt-4"
+        )
 
         with catalog_api(catalog):
             response = client.patch(

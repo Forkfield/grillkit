@@ -339,9 +339,7 @@ class TestImportModels:
         assert result.message == "Imported 2 models from 'Cloud'."
         catalog = catalog_service.load_catalog()
         models = [
-            item
-            for item in catalog.models.values()
-            if item.provider_id == provider.id
+            item for item in catalog.models.values() if item.provider_id == provider.id
         ]
         assert sorted(item.model for item in models) == ["gpt-4", "gpt-4o", "o3-mini"]
         assert all(not item.accepts_audio_input for item in models)
@@ -357,7 +355,9 @@ class TestImportModels:
         provider = catalog_service.create_provider(
             display_name="Cloud", base_url="https://api.example.com/v1"
         )
-        catalog_service.add_model(provider.id, display_name="Cloud model", model="gpt-4")
+        catalog_service.add_model(
+            provider.id, display_name="Cloud model", model="gpt-4"
+        )
         config_service.discover_models = AsyncMock(return_value=(["gpt-4"], None))
 
         result = await use_case.import_models(provider.id)
@@ -395,7 +395,9 @@ class TestImportModels:
 
         assert "Unauthorized" in result.error
         assert "may require an API key" in result.error
-        assert "Unauthorized" in catalog_service.get_provider(provider.id).discovery_error
+        assert (
+            "Unauthorized" in catalog_service.get_provider(provider.id).discovery_error
+        )
 
     @pytest.mark.asyncio
     async def test_import_success_clears_failure_mark(

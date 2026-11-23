@@ -80,7 +80,9 @@ class ManageCatalogUseCase:
             )
         except ValueError as exc:
             return CatalogActionResult(error=str(exc))
-        imported, discovery_error, reported = await self._import_discovered_models(provider)
+        imported, discovery_error, reported = await self._import_discovered_models(
+            provider
+        )
         if discovery_error:
             return CatalogActionResult(
                 message=(
