@@ -576,19 +576,6 @@ a:hover {
     margin-top: 0.75rem;
 }
 
-.discovered-models-status {
-    font-size: 0.8125rem;
-    color: var(--text-muted);
-}
-
-.discovered-models-status[data-state="ok"] {
-    color: var(--success-text);
-}
-
-.discovered-models-status[data-state="error"] {
-    color: var(--error-text);
-}
-
 /* Buttons */
 
 .button-group {

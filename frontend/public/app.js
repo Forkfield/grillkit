@@ -394,7 +394,7 @@
     return html;
   }
 
-  function modelFormFieldsHTML(providerId, entry) {
+  function modelFormFieldsHTML(entry) {
     entry = entry || {};
     return (
       '<div class="form-row">' +
@@ -403,18 +403,12 @@
       escapeHtml(entry.display_name || "") + '" placeholder="Work GPT-4o"></label>' +
       '<label class="form-field"><span class="form-label">Model name</span>' +
       '<input type="text" name="model" class="form-control" required value="' +
-      escapeHtml(entry.model || "") + '" list="discovered-models-' +
-      escapeHtml(providerId) + '" placeholder="gpt-4o"></label>' +
-      "</div>" +
-      '<div class="inline-form-actions">' +
-      '<button type="button" class="btn btn-sm btn-secondary" data-discover data-provider-id="' +
-      escapeHtml(providerId) + '">Load models from provider</button>' +
-      '<span class="discovered-models-status" data-discover-status></span>' +
+      escapeHtml(entry.model || "") + '" placeholder="gpt-4o"></label>' +
       "</div>" +
       '<label class="form-check"><input type="checkbox" name="accepts_audio_input"' +
       (entry.accepts_audio_input ? " checked" : "") +
       "> Accepts audio input</label>" +
-      '<p class="form-hint">Discovery fills the model-name dropdown; "Load models" on the provider card imports the whole list, and you can always type a model name manually.</p>' +
+      '<p class="form-hint">Use "Load models" on the provider to import the whole list at once; add a single model here when it is missing from the endpoint.</p>' +
       '<div class="inline-form-actions">' +
       '<button type="submit" class="btn btn-sm btn-primary">Save model</button>' +
       '<button type="button" class="btn btn-sm btn-secondary" data-form-cancel>Cancel</button>' +
@@ -442,7 +436,7 @@
       "</div>" +
       '<form class="form provider-model-form" data-model-form="' + escapeHtml(entry.id) +
       '" data-provider-id="' + escapeHtml(provider.id) + '" hidden>' +
-      modelFormFieldsHTML(provider.id, entry) +
+      modelFormFieldsHTML(entry) +
       "</form>" +
       "</div>"
     );
@@ -511,13 +505,12 @@
       '<button type="button" class="btn btn-sm btn-secondary" data-form-cancel>Cancel</button>' +
       "</div></form>" +
       '<div class="provider-models">' + rows + "</div>" +
-      '<datalist id="discovered-models-' + escapeHtml(provider.id) + '"></datalist>' +
       '<div class="provider-card-footer">' +
       '<button type="button" class="btn btn-sm btn-secondary" data-model-add="' +
       escapeHtml(provider.id) + '">Add model</button></div>' +
       '<form class="form provider-model-form" data-model-form="" data-provider-id="' +
       escapeHtml(provider.id) + '" hidden>' +
-      modelFormFieldsHTML(provider.id, null) +
+      modelFormFieldsHTML(null) +
       "</form></div>"
     );
   }
@@ -1167,12 +1160,6 @@
       return;
     }
 
-    var discoverBtn = target.closest("[data-discover]");
-    if (discoverBtn) {
-      discoverProviderModels(container, discoverBtn);
-      return;
-    }
-
     var cancelBtn = target.closest("[data-form-cancel]");
     if (cancelBtn) {
       var form = cancelBtn.closest("form");
@@ -1243,49 +1230,6 @@
        hint; rebuild its picker options from the updated groups. */
     var filter = container.querySelector("#llm-model-filter");
     renderPresetOptions(container, filter ? filter.value : "");
-  }
-
-  function discoverProviderModels(container, discoverBtn) {
-    discoverBtn.disabled = true;
-    var form = discoverBtn.closest("form");
-    var status = form.querySelector("[data-discover-status]");
-    var providerId = discoverBtn.dataset.providerId;
-    var card = discoverBtn.closest(".provider-card");
-    fetchJSON(
-      "/api/config/providers/" +
-        encodeURIComponent(providerId) +
-        "/discover-models",
-      { method: "POST" }
-    )
-      .then(function (result) {
-        discoverBtn.disabled = false;
-        if (!status) {
-          return;
-        }
-        if (result.error) {
-          status.textContent = result.error;
-          status.dataset.state = "error";
-          return;
-        }
-        var datalist = card ? card.querySelector("datalist") : null;
-        if (datalist) {
-          datalist.innerHTML = result.models
-            .map(function (name) {
-              return '<option value="' + escapeHtml(name) + '"></option>';
-            })
-            .join("");
-        }
-        status.textContent =
-          "Found " + result.models.length + " models — pick one from the dropdown or keep typing.";
-        status.dataset.state = "ok";
-      })
-      .catch(function (err) {
-        discoverBtn.disabled = false;
-        if (status) {
-          status.textContent = errMessage(err, "Could not load models.");
-          status.dataset.state = "error";
-        }
-      });
   }
 
   function handleConfigSubmit(container, event, activeTab) {
