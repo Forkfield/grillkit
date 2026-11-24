@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.interview.domain.events import EvaluatingEvent
 from app.interview.queries.loader import InterviewLoader
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.interview.use_cases.complete_session import (
@@ -201,3 +202,82 @@ async def test_complete_session_preserves_partial_theory_scores(isolated_db):
     assert theory_breakdown["score"] == 4
     assert theory_breakdown["max"] == 5
     assert theory_breakdown["questions"]["q1"]["score"] == 4
+
+
+@pytest.mark.asyncio
+async def test_completion_emits_evaluating_after_section_prefetch(isolated_db):
+    """EvaluatingEvent must follow both prefetches.
+
+    The browser shrinks its evaluation watchdog to a single-evaluation budget
+    on this event, so it has to mark the start of the only remaining LLM call.
+    """
+    interview_id = "completion-event-order-1"
+    persist_interview_with_answers(
+        Interview(
+            id=interview_id,
+            locale="en",
+            selection_spec=minimal_selection_spec(categories=["basics"]),
+            status="active",
+        ),
+        [
+            Answer(
+                question_id="q1",
+                order=1,
+                round=0,
+                question_text="What is Python?",
+                answer_text="A programming language",
+                score=5,
+            )
+        ],
+    )
+
+    order: list[str] = []
+    mock_eval = InterviewEvaluation(
+        overall_feedback="Good work",
+        strengths_summary=[],
+        topics_to_review=[],
+        score_breakdown={},
+    )
+    theory_prefetch = AsyncMock(
+        side_effect=lambda *_args, **_kwargs: order.append("theory_prefetch")
+    )
+    coding_prefetch = AsyncMock(
+        side_effect=lambda *_args, **_kwargs: order.append("coding_prefetch")
+    )
+
+    def _evaluate(*_args: object, **_kwargs: object) -> InterviewEvaluation:
+        order.append("session_eval")
+        return mock_eval
+
+    real_evaluating = EvaluatingEvent
+
+    def _track_evaluating() -> EvaluatingEvent:
+        order.append("evaluating")
+        return real_evaluating()
+
+    with (
+        patch(
+            "app.theory.queries.section_state.TheorySectionState.ensure_section_feedback",
+            theory_prefetch,
+        ),
+        patch(
+            "app.coding.queries.section_state.CodingSectionState.ensure_section_feedback",
+            coding_prefetch,
+        ),
+        patch(
+            "app.interview.use_cases.complete_session.SessionEvaluator.evaluate_session",
+            AsyncMock(side_effect=_evaluate),
+        ),
+        patch(
+            "app.interview.use_cases.complete_session.EvaluatingEvent",
+            side_effect=_track_evaluating,
+        ),
+    ):
+        await _complete_session(interview_id, FakeProvider([]))
+
+    assert order == [
+        "theory_prefetch",
+        "coding_prefetch",
+        "evaluating",
+        "session_eval",
+    ]

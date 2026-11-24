@@ -8,10 +8,6 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.coding.schemas.coding import CodingTaskRead
-from app.shared.structured_evaluation import (
-    completion_budget_seconds,
-    evaluation_budget_seconds,
-)
 from app.theory.schemas.theory import TheoryTaskRead
 
 
@@ -94,10 +90,6 @@ class InterviewPageContext(BaseModel):
     current_round: int
     timeout_chat_label: str
     llm_request_timeout_seconds: int = Field(default=60)
-    llm_evaluation_budget_seconds: int = Field(
-        default=int(evaluation_budget_seconds(60.0))
-    )
-    llm_completion_budget_seconds: int = Field(
-        default=int(completion_budget_seconds(60.0))
-    )
+    llm_evaluation_budget_seconds: int
+    llm_completion_budget_seconds: int
     interview_model_accepts_audio: bool = False

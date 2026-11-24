@@ -14,6 +14,10 @@ from app.shared.json_parser import parse_json_response
 
 _MAX_RETRY_TOKENS = 4096
 _EVALUATION_TIMEOUT_FACTOR = 2.0
+# Session completion runs three sequential evaluations: theory section
+# prefetch, coding section prefetch, then the final session evaluation (see
+# ``CompleteInterviewSession.complete_session``). Keep in sync if that flow
+# gains more LLM calls, otherwise the client watchdog fires before the server.
 _COMPLETION_EVALUATIONS = 3
 _COMPACT_JSON_RETRY_NOTE = (
     "\n\nYour previous response was truncated or invalid JSON. "

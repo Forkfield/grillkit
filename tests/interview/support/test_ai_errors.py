@@ -67,6 +67,16 @@ class TestProviderServerError:
         result = ai_error_message_for_client(exc)
         assert "server error" in result
 
+    def test_status_code_503(self) -> None:
+        exc = Exception("provider responded with status code: 503")
+        result = ai_error_message_for_client(exc)
+        assert "server error" in result
+
+    def test_bare_number_is_not_a_server_error(self) -> None:
+        exc = Exception("vector index returned 500 rows")
+        result = ai_error_message_for_client(exc)
+        assert result == "AI evaluation failed: vector index returned 500 rows"
+
 
 class TestGenericError:
     """Tests for generic error messages."""

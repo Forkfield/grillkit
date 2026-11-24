@@ -2,6 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """User-facing AI provider error messages for interview clients."""
 
+import re
+
+_SERVER_ERROR_MARKERS = ("upstream", "server_error")
+_HTTP_SERVER_ERROR = re.compile(r"(?:error|status) code:\s*5\d{2}\b")
+
 
 def ai_error_message_for_client(exc: Exception) -> str:
     """Turn provider failures into a short client error message.
@@ -26,9 +31,8 @@ def ai_error_message_for_client(exc: Exception) -> str:
             "wait and try again, or increase the timeout on the Configuration "
             "page."
         )
-    if any(
-        marker in lowered
-        for marker in ("upstream", "server_error", "500", "502", "503", "504")
+    if any(marker in lowered for marker in _SERVER_ERROR_MARKERS) or (
+        _HTTP_SERVER_ERROR.search(lowered)
     ):
         return (
             "AI provider returned a server error. The model endpoint may be "
