@@ -595,6 +595,7 @@ User → POST /api/config/providers/{id}/models (display_name, model, accepts_au
   → on success: LLMCatalogService.add_model() → model saved under the provider, selected
 User → POST /api/config/providers/{id}/import-models → discovery + bulk import of
   every new model (defaults, no probe; failure marks the provider card)
+User → POST /api/config/providers/{id}/discover-models → model ids for the add-model datalist
 User → PATCH /api/config/providers/{id}/models/{model_id} → toggle
   accepts_audio_input directly (flag only, no probe)
 ```
