@@ -105,6 +105,9 @@ class CompleteInterviewSession:
 
             merged = SessionEvaluationAggregator.merge(theory_summary, coding_summary)
 
+            # Emitted only after both prefetches: the browser shrinks its
+            # evaluation watchdog to a single-evaluation budget on this event,
+            # so it must mark the start of the only remaining LLM call.
             events: list[InterviewEvent] = [EvaluatingEvent()]
 
             session_eval = await SessionEvaluator.evaluate_session(
