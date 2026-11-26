@@ -604,7 +604,7 @@
       "<label class=\"form-label\">" +
       '<input type="checkbox" name="question_voice_enabled" id="question_voice_enabled" value="true"' + questionVoiceChecked + ">" +
       " Read questions aloud</label>" +
-      '<p class="form-hint">When enabled, the interview page reads each question aloud using an offline Piper voice.</p>' +
+      '<p class="form-hint">When enabled, the interview page reads each question aloud using an offline Silero voice.</p>' +
       '<div class="inline-artifact" id="question-voice-status">' +
       '<span class="inline-artifact-state">Checking&hellip;</span>' +
       "</div>" +

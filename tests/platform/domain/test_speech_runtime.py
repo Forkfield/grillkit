@@ -29,7 +29,7 @@ class MockConfigServiceWithModel:
         return AppConfig(
             speech_model_size="small",
             question_voice_enabled=True,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
             locale="en",
         )
 
@@ -93,7 +93,7 @@ class TestStartup:
 
     @pytest.mark.asyncio
     async def test_startup_loads_both_when_installed(self):
-        """startup reads config and loads Whisper and Piper when installed."""
+        """startup reads config and loads Whisper and Silero when installed."""
         loader = make_loader(installed=True)
         engine = make_engine(installed=True)
         coordinator = make_coordinator(loader, engine, MockConfigServiceWithModel)
@@ -101,7 +101,7 @@ class TestStartup:
         await coordinator.startup()
 
         loader.load_size.assert_awaited_once_with("small")
-        engine.load_voice.assert_awaited_once_with("en_US-lessac-medium")
+        engine.load_voice.assert_awaited_once_with("en-en_0")
 
     @pytest.mark.asyncio
     async def test_startup_unloads_when_no_config(self):
@@ -156,27 +156,27 @@ class TestSyncWhisper:
         loader.unload.assert_called_once()
 
 
-class TestSyncPiper:
-    """Tests for SpeechRuntimeCoordinator.sync_piper."""
+class TestSyncTts:
+    """Tests for SpeechRuntimeCoordinator.sync_tts."""
 
     @pytest.mark.asyncio
     async def test_loads_when_enabled_and_installed(self):
-        """sync_piper loads a voice when enabled and installed."""
+        """sync_tts loads a voice when enabled and installed."""
         loader = make_loader()
         engine = make_engine(installed=True)
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
             question_voice_enabled=True,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
         )
 
-        await coordinator.sync_piper(config)
+        await coordinator.sync_tts(config)
 
-        engine.load_voice.assert_awaited_once_with("en_US-lessac-medium")
+        engine.load_voice.assert_awaited_once_with("en-en_0")
 
     @pytest.mark.asyncio
     async def test_unloads_when_disabled(self):
-        """sync_piper unloads when question voice is disabled."""
+        """sync_tts unloads when question voice is disabled."""
         loader = make_loader()
         engine = make_engine()
         coordinator = make_coordinator(loader, engine)
@@ -184,33 +184,33 @@ class TestSyncPiper:
             question_voice_enabled=False,
         )
 
-        await coordinator.sync_piper(config)
+        await coordinator.sync_tts(config)
 
         engine.unload.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_unloads_when_not_installed(self):
-        """sync_piper unloads when the voice is not on disk."""
+        """sync_tts unloads when the voice is not on disk."""
         loader = make_loader()
         engine = make_engine(installed=False)
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
             question_voice_enabled=True,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
         )
 
-        await coordinator.sync_piper(config)
+        await coordinator.sync_tts(config)
 
         engine.unload.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_unloads_when_no_config(self):
-        """sync_piper unloads when config is None."""
+        """sync_tts unloads when config is None."""
         loader = make_loader()
         engine = make_engine()
         coordinator = make_coordinator(loader, engine)
 
-        await coordinator.sync_piper(None)
+        await coordinator.sync_tts(None)
 
         engine.unload.assert_called_once()
 
@@ -220,20 +220,20 @@ class TestReloadAfterConfigSave:
 
     @pytest.mark.asyncio
     async def test_syncs_both_runtimes(self):
-        """reload_after_config_save syncs Whisper and Piper."""
+        """reload_after_config_save syncs Whisper and Silero."""
         loader = make_loader(installed=True)
         engine = make_engine(installed=True)
         coordinator = make_coordinator(loader, engine)
         config = AppConfig(
             speech_model_size="small",
             question_voice_enabled=True,
-            tts_voice_id="ru_RU-dmitri-medium",
+            tts_voice_id="ru-aidar",
         )
 
         await coordinator.reload_after_config_save(config)
 
         loader.load_size.assert_awaited_once_with("small")
-        engine.load_voice.assert_awaited_once_with("ru_RU-dmitri-medium")
+        engine.load_voice.assert_awaited_once_with("ru-aidar")
 
 
 class TestPreloadWhisperForActiveInterview:

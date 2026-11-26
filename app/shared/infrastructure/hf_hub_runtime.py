@@ -13,7 +13,7 @@ _HF_HOME = DATA_DIR / ".cache" / "huggingface"
 
 
 def configure_hf_hub() -> None:
-    """Prefer HTTP Hub downloads over Xet for Whisper and Piper models.
+    """Prefer HTTP Hub downloads over Xet for Whisper models.
 
     Some networks stall Xet transfers at 0 bytes while HTTP downloads work.
     ``HF_HUB_DISABLE_XET`` alone is ignored when ``hf_xet`` is installed, so

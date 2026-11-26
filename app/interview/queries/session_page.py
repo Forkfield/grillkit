@@ -63,7 +63,7 @@ class ActiveSessionPage:
         Args:
             interview: Loaded interview read model.
             config: Application config, if configured.
-            question_voice_enabled: Whether Piper TTS is enabled in config.
+            question_voice_enabled: Whether question-voice TTS is enabled in config.
             theory: Optional pre-built theory page context.
             coding: Coding section aggregate for the score fallback.
             session: Parsed selection; parsed from the read model when omitted.

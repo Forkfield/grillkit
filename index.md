@@ -36,7 +36,7 @@ A general chat assistant is flexible — but it doesn't run an *interview* for y
 | Practice history | Scattered chats | Dashboard with past sessions and detailed review pages |
 | Skip what you know | You repeat prompts | Mark questions as known and exclude them from future sessions |
 | Time pressure | None | Optional per-round timer |
-| Voice practice | Depends on the product | Offline Whisper dictation, optional Piper narration, audio answers |
+| Voice practice | Depends on the product | Offline Whisper dictation, optional Silero narration, audio answers |
 | Where your data lives | Vendor cloud | Fully self-hosted — SQLite and files stay on your machine |
 
 **Structured practice.** Pick tracks, difficulty, and topics — GrillKit builds a full session plan and scores you across it, not just a single prompt.
@@ -71,7 +71,7 @@ A general chat assistant is flexible — but it doesn't run an *interview* for y
 - **Live coding** with a Monaco editor, public-test runs, and AI-reviewed submissions (via Judge0)
 - **Question banks** covering Python, Database/SQL, System Design, Kafka, RabbitMQ, Docker, Kubernetes, Observability, Airflow, and more — across junior, middle, and senior levels
 - **Optional timers** per round, with expired rounds automatically scored 0
-- **Voice support** — offline Whisper dictation and optional Piper text-to-speech for questions
+- **Voice support** — offline Whisper dictation and optional Silero text-to-speech for questions
 - **Audio answers** for models that support audio input
 - **Results hub** with full theory and coding review after each session
 - **Known questions** — mark items you've mastered and exclude them from future sessions

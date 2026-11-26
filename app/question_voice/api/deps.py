@@ -8,19 +8,19 @@ from fastapi import Depends
 
 from app.question_voice.queries.voice_status import VoiceStatus
 from app.shared.infrastructure.artifact_composition import (
-    get_default_piper_voice_service,
+    get_default_silero_voice_service,
 )
-from app.shared.infrastructure.gateways.piper_voice import PiperVoiceService
+from app.shared.infrastructure.gateways.silero_voice import SileroVoiceService
 
 
-def get_piper_voice_service() -> PiperVoiceService:
-    """Return the shared Piper voice service instance (FastAPI dependency)."""
-    return get_default_piper_voice_service()
+def get_silero_voice_service() -> SileroVoiceService:
+    """Return the shared Silero voice service instance (FastAPI dependency)."""
+    return get_default_silero_voice_service()
 
 
-PiperVoiceServiceDep = Annotated[
-    PiperVoiceService,
-    Depends(get_piper_voice_service),
+SileroVoiceServiceDep = Annotated[
+    SileroVoiceService,
+    Depends(get_silero_voice_service),
 ]
 
 

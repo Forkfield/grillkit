@@ -51,7 +51,7 @@ class SpeechRuntimeCoordinator:
         return self._tts
 
     def unload_all(self) -> None:
-        """Unload any in-memory Whisper and Piper models."""
+        """Unload any in-memory Whisper and Silero models."""
         self._stt.unload()
         self._tts.unload()
 
@@ -75,7 +75,7 @@ class SpeechRuntimeCoordinator:
         errors: list[str] = []
         if stt_error := await self.sync_whisper(config):
             errors.append(stt_error)
-        if tts_error := await self.sync_piper(config):
+        if tts_error := await self.sync_tts(config):
             errors.append(tts_error)
         return errors
 
@@ -109,14 +109,14 @@ class SpeechRuntimeCoordinator:
             self._stt.unload()
         return self._stt.load_error()
 
-    async def sync_piper(self, config: AppConfig | None) -> str | None:
-        """Load or unload Piper based on configuration and on-disk install state.
+    async def sync_tts(self, config: AppConfig | None) -> str | None:
+        """Load or unload the Silero voice based on configuration and disk state.
 
         Args:
             config: Saved provider configuration, if any.
 
         Returns:
-            A load error message when Piper failed to load, otherwise ``None``.
+            A load error message when the voice failed to load, otherwise ``None``.
         """
         if config is None:
             self._tts.unload()

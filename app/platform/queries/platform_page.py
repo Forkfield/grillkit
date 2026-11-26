@@ -32,7 +32,7 @@ async def build_page_context(
 ) -> ConfigPageContext:
     """Assemble the full config page context into a single DTO.
 
-    Reads the Whisper (STT) and Piper (TTS) status snapshots and combines them
+    Reads the Whisper (STT) and Silero (TTS) status snapshots and combines them
     with the saved provider config into one immutable ``ConfigPageContext``.
 
     Args:

@@ -18,7 +18,7 @@ def _config(**overrides: object) -> AppConfig:
         "locale": "en",
         "speech_model_size": "small",
         "question_voice_enabled": False,
-        "tts_voice_id": "en_US-lessac-medium",
+        "tts_voice_id": "en-en_0",
     }
     base.update(overrides)
     return AppConfig(**base)
@@ -78,6 +78,17 @@ def test_load_normalizes_locale_and_voice(tmp_path):
     assert loaded is not None
     assert loaded.locale == "ru"  # normalized
     assert loaded.tts_voice_id  # default voice filled in
+
+
+def test_load_remaps_legacy_piper_voice_id(tmp_path):
+    """A config saved with a Piper voice id loads as its Silero replacement."""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"locale": "ru", "tts_voice_id": "ru_RU-dmitri-medium"}))
+    repo = ConfigRepository(path=path, data_dir=tmp_path)
+
+    loaded = repo.load()
+    assert loaded is not None
+    assert loaded.tts_voice_id == "ru-aidar"
 
 
 def test_delete_removes_file(tmp_path):

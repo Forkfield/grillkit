@@ -59,7 +59,7 @@ grillkit/
 │   │   │   ├── config.py         # AppConfig, ApiKeyDecision, probes
 │   │   │   ├── llm_catalog.py    # LLMCatalogService + repository port
 │   │   │   ├── effective_config.py # EffectiveModelConfig aggregate
-│   │   │   ├── speech_runtime.py   # SpeechRuntimeCoordinator (Whisper + Piper lifecycle)
+│   │   │   ├── speech_runtime.py   # SpeechRuntimeCoordinator (Whisper + Silero lifecycle)
 │   │   │   └── speech_settings.py
 │   │   ├── repo/
 │   │   │   ├── config_repository.py       # data/config.json I/O
@@ -175,7 +175,7 @@ grillkit/
 │   ├── config.json             # Locale, speech/TTS flags (gitignored)
 │   ├── llm_models.json         # LLM providers + their models + selected id (gitignored)
 │   ├── whisper-models/<size>/  # faster-whisper snapshots (gitignored content)
-│   ├── piper-voices/<voice_id>/
+│   ├── silero-voices/<voice_id>/
 │   ├── tts-cache/v2/{locale}/
 │   ├── db/grillkit.db
 │   └── questions/              # YAML banks: {track}/{level}/{category}.yaml
@@ -228,8 +228,8 @@ grillkit/
 | GET | `/speech/model/status` | `speech/api/routes.py` | Whisper model install status (`size` query, defaults to config) |
 | POST | `/speech/model/download` | `speech/api/routes.py` | Start Whisper download (`size` query, defaults to `config.speech_model_size`) |
 | GET | `/speech/model/options` | `speech/api/routes.py` | JSON size trade-off metadata |
-| GET | `/speech/tts/status` | `question_voice/api/routes.py` | Piper voice status (JSON) when question voice is enabled |
-| POST | `/speech/tts/voice/download` | `question_voice/api/routes.py` | Start Piper voice download for configured `tts_voice_id` |
+| GET | `/speech/tts/status` | `question_voice/api/routes.py` | Silero voice status (JSON) when question voice is enabled |
+| POST | `/speech/tts/voice/download` | `question_voice/api/routes.py` | Start Silero voice download for configured `tts_voice_id` |
 | GET | `/interview/{interview_id}/question-audio` | `interview/api/routes.py` | WAV for current theory task (`answer_id` query param) |
 | POST | `/interview/{interview_id}/theory/audio-answer` | `theory/api/routes.py` | Multipart WAV theory answer → NDJSON |
 | WS | `/interview/{interview_id}/theory/ws` | `theory/api/routes.py` | Real-time theory task submit, timeout, session complete |
@@ -290,7 +290,7 @@ Workflow use cases (submit, create, complete, section creation, evaluation persi
 Dependencies flow **downward** (caller → callee). Plain-text diagram for editors that do not render Mermaid.
 
 ```
-main.py ──► lifespan: init_db(), SpeechRuntimeCoordinator.startup() (WhisperStt + PiperTts when configured)
+main.py ──► lifespan: init_db(), SpeechRuntimeCoordinator.startup() (WhisperStt + SileroTts when configured)
   ├── interview/api/  (dashboard, setup, routes)
   │     ├── routes.py ──► ws_protocol, errors, page (full template context)
   │     └── deps.py ──► interview/use_cases/*, interview/queries/*
@@ -344,7 +344,7 @@ interview/api/deps.py ──► platform/support/ai_context (yields AIProvider f
 platform/use_cases/save_config.py ──► ai/factory, speech/schemas, data/config.json
 platform/use_cases/manage_catalog.py ──► config probes, llm catalog service
 platform/repo/llm_catalog_repository.py ──► data/llm_models.json (providers + models)
-platform/domain/speech_runtime.py ──► whisper_runtime, piper_runtime
+platform/domain/speech_runtime.py ──► whisper_runtime, silero_runtime
 platform/domain/speech_settings.py ──► speech model/voice resolution
 
 speech/queries/
@@ -792,7 +792,7 @@ data/
 ├── llm_models.json          # Interview model catalog + selected id (gitignored)
 ├── db/grillkit.db           # SQLite (gitignored; created on startup)
 ├── whisper-models/<size>/   # faster-whisper snapshots (gitignored content)
-├── piper-voices/<voice_id>/ # Piper ONNX voices (gitignored content)
+├── silero-voices/<voice_id>/ # Silero .pt voice packages (gitignored content)
 ├── tts-cache/v2/{locale}/   # Cached question WAVs (gitignored content)
 ├── coding/                  # YAML coding task banks (Judge0 / AI tasks)
 └── questions/               # YAML banks: {track}/{level}/{category}.yaml
@@ -804,7 +804,7 @@ data/
 | `data/config.json` | `locale`, `speech_model_size`, `question_voice_enabled`, `tts_voice_id`, timer defaults |
 | `data/llm_models.json` | LLM providers (`{id, display_name, base_url, api_key}`) and models referencing them, plus the `selected` model id |
 | `data/whisper-models/<size>/` | Offline faster-whisper snapshots (`WhisperModelService`) |
-| `data/piper-voices/<voice_id>/` | Piper ONNX voice files (`PiperVoiceService`) |
+| `data/silero-voices/<voice_id>/` | Silero `.pt` voice packages (`SileroVoiceService`) |
 | `data/tts-cache/v2/{locale}/` | Cached question WAVs (`TtsCacheService`; SHA-256 of normalized text) |
 | `data/questions/{track}/{level}/{category}.yaml` | Theory question banks |
 | `data/coding/{track}/{level}/{category}.yaml` | Coding task banks |
@@ -814,7 +814,7 @@ data/
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | SQLAlchemy connection string (default: `sqlite:///<project>/data/db/grillkit.db`; Docker Compose uses `sqlite:////app/data/db/grillkit.db`) |
-| `HF_TOKEN` | Hugging Face read token for Whisper/Piper downloads |
+| `HF_TOKEN` | Hugging Face read token for Whisper downloads |
 | `WHISPER_DEVICE` | `cpu` or `cuda` (default `cpu`) |
 | `WHISPER_COMPUTE_TYPE` | `int8` or `float16` (default `int8` on CPU) |
 | `CODING_ENABLED` | Enable coding session modes on setup (default `true`; requires healthy Judge0) |
@@ -857,18 +857,19 @@ Missing locale → `en` with a warning log. Supported codes: `app/shared/locales
 
 ## Question voice (TTS)
 
-Optional offline Piper synthesis in the main app process.
+Optional offline Silero synthesis in the main app process (CPU-only PyTorch, models from `models.silero.ai`, CC BY-NC 4.0).
 
 | Topic | Implementation |
 |-------|----------------|
 | Config gate | `question_voice_enabled` in `data/config.json` |
 | Voice id | `tts_voice_id` on `AppConfig` (default per locale in `app/shared/tts_voices.py`) |
-| Voice files | `data/piper-voices/<voice_id>/` via `POST /speech/tts/voice/download` on `/config` |
-| Synthesis | `PiperTtsRuntime` in-process (`piper-tts` dependency) |
-| App cache | `data/tts-cache/v2/{locale}/{sha256}.wav` via `TtsCacheService` |
+| Voice files | `data/silero-voices/<voice_id>/<model_id>.pt` via `POST /speech/tts/voice/download` on `/config` |
+| Synthesis | `SileroTtsRuntime` in-process (`torch` CPU wheel; `torch.package` load, `apply_tts`, 24 kHz mono WAV) |
+| Text prep | `app/shared/tts_terms.py` — for `ru`, Latin terms and digits are expanded to Cyrillic (Silero's Russian token set drops them) before hashing and synthesis |
+| App cache | `data/tts-cache/v3/{locale}/{sha256}.wav` via `TtsCacheService` |
 | Audio route | `GET /interview/{id}/question-audio` — `question_text` snapshot only, never `question_code` |
 | Status | `GET /speech/tts/status` — banners when voice is missing, downloading, or not loaded |
-| UI | `static/js/interview_voice.js` auto-play + **Play question**; `question_voice_status.js` on `/config` |
+| UI | `static/js/interview_voice.js` auto-play + **Play question**; config banners rendered by `app.js` |
 
 Follow-up rounds use the same pipeline (cache key from localized `question_text` on the answer row).
 
@@ -925,8 +926,8 @@ uv run pytest tests/theory/use_cases/test_submission.py   # single module
 - Dictation returns a **single final transcript** on stop (no streaming `partial` messages)
 - Audio answers require a catalog model with `accepts_audio_input` and a loaded Whisper transcriber
 - Question bank localization is partial: many YAML entries still fall back to `en` for non-English locales
-- Question TTS: Piper voice must be downloaded on `/config` before synthesis; first load is per process (not shared across multiple uvicorn workers)
-- Piper synthesis uses CPU ONNX; plan extra RAM on the host when question voice is enabled
+- Question TTS: Silero voice must be downloaded on `/config` before synthesis; first load is per process (not shared across multiple uvicorn workers)
+- Silero synthesis uses CPU PyTorch (up to 4 threads); plan ~0.5–1 GB extra RAM on the host when question voice is enabled
 
 ## SQLite concurrency
 

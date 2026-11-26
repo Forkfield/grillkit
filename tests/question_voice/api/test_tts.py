@@ -10,7 +10,7 @@ import pytest
 
 from app.interview.queries.loader import InterviewLoader
 from app.platform.domain.config import AppConfig
-from app.question_voice.schemas import PiperVoiceStatusRead
+from app.question_voice.schemas import VoiceStatusRead
 from tests.helpers.session_creation import create_session
 
 
@@ -32,14 +32,14 @@ class TestTtsStatusApi:
         config = AppConfig(
             question_voice_enabled=False,
         )
-        missing = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        missing = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="missing",
             percent=0,
             message="Question voice is not installed.",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         with (
             patch(
@@ -47,7 +47,7 @@ class TestTtsStatusApi:
                 return_value=config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.piper_voice.PiperVoiceService.get_status",
+                "app.shared.infrastructure.gateways.silero_voice.SileroVoiceService.get_status",
                 return_value=missing,
             ),
         ):
@@ -61,15 +61,15 @@ class TestTtsStatusApi:
         assert payload["enabled"] is False
 
     def test_status_json_when_voice_ready(self, client, voice_config):
-        """Status reports ready when the Piper voice is installed."""
-        ready = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        """Status reports ready when the Silero voice is installed."""
+        ready = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="ready",
             percent=100,
             message="Question voice ready for English.",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
             loaded_in_memory=True,
         )
         with (
@@ -78,7 +78,7 @@ class TestTtsStatusApi:
                 return_value=voice_config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.piper_voice.PiperVoiceService.get_status",
+                "app.shared.infrastructure.gateways.silero_voice.SileroVoiceService.get_status",
                 return_value=ready,
             ),
         ):
@@ -93,14 +93,14 @@ class TestTtsStatusApi:
 
     def test_status_locale_query_overrides_saved_config(self, client, voice_config):
         """Status endpoint honors locale query param over saved config on Configuration."""
-        missing = PiperVoiceStatusRead(
-            voice_id="ru_RU-dmitri-medium",
+        missing = VoiceStatusRead(
+            voice_id="ru-aidar",
             locale="ru",
             locale_label="Russian",
             state="missing",
             percent=0,
             message="Question voice is not installed.",
-            voice_display_name="Dmitri (Russian, medium)",
+            voice_display_name="Aidar (Russian)",
         )
         with (
             patch(
@@ -108,7 +108,7 @@ class TestTtsStatusApi:
                 return_value=voice_config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.piper_voice.PiperVoiceService.get_status",
+                "app.shared.infrastructure.gateways.silero_voice.SileroVoiceService.get_status",
                 return_value=missing,
             ) as get_status,
         ):
@@ -118,20 +118,20 @@ class TestTtsStatusApi:
             )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["voice_id"] == "ru_RU-dmitri-medium"
+        assert payload["voice_id"] == "ru-aidar"
         assert payload["locale"] == "ru"
-        get_status.assert_called_once_with("ru_RU-dmitri-medium", "ru")
+        get_status.assert_called_once_with("ru-aidar", "ru")
 
     def test_voice_download_without_config_uses_defaults(self, client):
         """Download schedules work before provider config is saved."""
-        ready = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        ready = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="downloading",
             percent=5,
             message="Downloading question voice…",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         with (
             patch(
@@ -139,7 +139,7 @@ class TestTtsStatusApi:
                 return_value=None,
             ),
             patch(
-                "app.shared.infrastructure.gateways.piper_voice.PiperVoiceService.start_download",
+                "app.shared.infrastructure.gateways.silero_voice.SileroVoiceService.start_download",
                 new_callable=AsyncMock,
                 return_value=ready,
             ),
@@ -154,15 +154,15 @@ class TestTtsStatusApi:
         assert payload["enabled"] is False
 
     def test_voice_download_schedules_work(self, client, voice_config):
-        """Download returns status after scheduling Piper voice install."""
-        ready = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        """Download returns status after scheduling Silero voice install."""
+        ready = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="downloading",
             percent=5,
             message="Downloading question voice…",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         with (
             patch(
@@ -170,7 +170,7 @@ class TestTtsStatusApi:
                 return_value=voice_config,
             ),
             patch(
-                "app.shared.infrastructure.gateways.piper_voice.PiperVoiceService.start_download",
+                "app.shared.infrastructure.gateways.silero_voice.SileroVoiceService.start_download",
                 new_callable=AsyncMock,
                 return_value=ready,
             ),

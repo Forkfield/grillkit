@@ -17,7 +17,8 @@ dependencies = [
     "httpx>=0.28.1",
     "faster-whisper>=1.2.1",
     "huggingface-hub>=1.15.0",
-    "piper-tts>=1.4.2",
+    "torch>=2.0,<3",
+    "numpy>=1.26,<3",
     "alembic>=1.18.4",
 ]
 
@@ -30,6 +31,14 @@ dev = [
     "types-pyyaml==6.0.12.20260518",
     "types-tqdm>=4.67.3.20260518",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 target-version = "py312"
@@ -65,10 +74,6 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = ["faster_whisper"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["piper", "piper.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -1,25 +1,21 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Piper voice download and on-disk installation."""
+"""Silero voice download and on-disk installation."""
 
 import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download
+import httpx
 
-from app.question_voice.schemas import PiperVoiceStatusRead
+from app.question_voice.schemas import VoiceStatusRead
 from app.shared.infrastructure.artifact_download import ArtifactDownloadService
 from app.shared.infrastructure.artifact_status import ArtifactStatusBuilder
-from app.shared.infrastructure.gateways.piper import PiperTtsRuntime
-from app.shared.infrastructure.gateways.piper_storage import (
+from app.shared.infrastructure.gateways.silero import SileroTtsRuntime
+from app.shared.infrastructure.gateways.silero_storage import (
     is_valid_voice_dir,
     is_voice_installed,
     voice_dir,
-)
-from app.shared.infrastructure.hf_download_progress import (
-    copy_file_with_progress,
-    hf_progress_tqdm_factory,
 )
 from app.shared.infrastructure.model_download import (
     cleanup_staging_dir,
@@ -27,18 +23,28 @@ from app.shared.infrastructure.model_download import (
     promote_staging_dir,
 )
 from app.shared.locales import SUPPORTED_LOCALES, normalize_locale
-from app.shared.paths import PIPER_VOICES_ROOT
+from app.shared.paths import SILERO_VOICES_ROOT
 from app.shared.tts_voices import (
-    PiperVoiceSpec,
+    SileroVoiceSpec,
     normalize_tts_voice_id,
     voice_spec_for_id,
 )
 
-PIPER_VOICES_REPO_ID = "rhasspy/piper-voices"
+_DOWNLOAD_CONNECT_TIMEOUT_S = 30.0
+_DOWNLOAD_READ_TIMEOUT_S = 120.0
+_READ_CHUNK_BYTES = 1 << 20
+
+# Percent layout matches the Whisper flow:
+# 1 start, 5-90 body, 95 validate, 100 done.
+_PERCENT_START = 1
+_PERCENT_BODY_MIN = 5
+_PERCENT_BODY_MAX = 90
+_PERCENT_VALIDATE = 95
+_PERCENT_DONE = 100
 
 
-class PiperVoiceService(ArtifactDownloadService):
-    """Download and verify offline Piper voices under ``data/piper-voices/``."""
+class SileroVoiceService(ArtifactDownloadService):
+    """Download and verify offline Silero voices under ``data/silero-voices/``."""
 
     _DOWNLOADING_MESSAGE = "Downloading question voice…"
     _MISSING_MESSAGE = "Question voice is not installed."
@@ -48,11 +54,11 @@ class PiperVoiceService(ArtifactDownloadService):
         "Question voice files are installed but could not be loaded: {error}"
     )
 
-    def get_status(self, voice_id: str, locale: str) -> PiperVoiceStatusRead:
+    def get_status(self, voice_id: str, locale: str) -> VoiceStatusRead:
         """Build current voice status for UI and API consumers.
 
         Args:
-            voice_id: Piper voice id from provider configuration.
+            voice_id: Silero voice id from provider configuration.
             locale: Interview locale for status messaging.
 
         Returns:
@@ -67,8 +73,8 @@ class PiperVoiceService(ArtifactDownloadService):
             key=code,
             service=self,
             is_installed=lambda: is_voice_installed(code),
-            is_loaded=lambda: PiperTtsRuntime.is_loaded(code),
-            load_error=PiperTtsRuntime.load_error,
+            is_loaded=lambda: SileroTtsRuntime.is_loaded(code),
+            load_error=SileroTtsRuntime.load_error,
             downloading_message=self._DOWNLOADING_MESSAGE,
             missing_message=self._MISSING_MESSAGE,
             ready_loaded_message=self._READY_LOADED_TEMPLATE.format(
@@ -79,7 +85,7 @@ class PiperVoiceService(ArtifactDownloadService):
                 self._READY_LOAD_FAILED_TEMPLATE.format(error=err)
             ),
         )
-        return PiperVoiceStatusRead(
+        return VoiceStatusRead(
             voice_id=code,
             locale=locale_code,
             locale_label=locale_label,
@@ -90,11 +96,11 @@ class PiperVoiceService(ArtifactDownloadService):
             loaded_in_memory=built.loaded_in_memory,
         )
 
-    async def start_download(self, voice_id: str, locale: str) -> PiperVoiceStatusRead:
+    async def start_download(self, voice_id: str, locale: str) -> VoiceStatusRead:
         """Start a background download when the voice is not yet installed.
 
         Args:
-            voice_id: Piper voice id from provider configuration.
+            voice_id: Silero voice id from provider configuration.
             locale: Interview locale for status messaging.
 
         Returns:
@@ -103,8 +109,8 @@ class PiperVoiceService(ArtifactDownloadService):
         code = normalize_tts_voice_id(voice_id)
         locale_code = normalize_locale(locale)
         if is_voice_installed(code):
-            if not PiperTtsRuntime.is_loaded(code):
-                _ = await PiperTtsRuntime.load_voice(code)
+            if not SileroTtsRuntime.is_loaded(code):
+                _ = await SileroTtsRuntime.load_voice(code)
             return self.get_status(code, locale_code)
 
         _ = await self.schedule_download(
@@ -116,74 +122,70 @@ class PiperVoiceService(ArtifactDownloadService):
     async def _run_download(self, voice_id: str) -> None:
         """Execute download and installation, updating shared progress state."""
         await self._download_and_install(voice_id)
-        _ = await PiperTtsRuntime.load_voice(voice_id)
+        _ = await SileroTtsRuntime.load_voice(voice_id)
 
     async def _download_and_install(self, voice_id: str) -> None:
-        """Download Piper voice files into ``data/piper-voices/<voice_id>/``."""
-        spec = voice_spec_for_id(voice_id)
+        """Download the Silero package into ``data/silero-voices/<voice_id>/``."""
+        voice_spec_for_id(voice_id)
         target_dir = voice_dir(voice_id)
-        PIPER_VOICES_ROOT.mkdir(parents=True, exist_ok=True)
-        staging_dir = prepare_staging_dir(PIPER_VOICES_ROOT, f".staging-{voice_id}")
+        SILERO_VOICES_ROOT.mkdir(parents=True, exist_ok=True)
+        staging_dir = prepare_staging_dir(SILERO_VOICES_ROOT, f".staging-{voice_id}")
 
         try:
-            self.set_download_percent(1)
+            self.set_download_percent(_PERCENT_START)
             await asyncio.to_thread(
-                self._download_voice_files,
-                spec,
+                self._download_model_package,
+                voice_spec_for_id(voice_id),
                 staging_dir,
                 self.set_download_percent,
             )
-            self.set_download_percent(95)
+            self.set_download_percent(_PERCENT_VALIDATE)
             if not is_valid_voice_dir(staging_dir, voice_id):
                 raise ValueError(
-                    f"Downloaded files do not contain a valid Piper voice: {voice_id}"
+                    f"Downloaded files do not contain a valid Silero voice: {voice_id}"
                 )
 
             promote_staging_dir(staging_dir, target_dir)
-            self.set_download_percent(100)
+            self.set_download_percent(_PERCENT_DONE)
         finally:
             cleanup_staging_dir(staging_dir)
 
-    def _download_voice_files(
+    def _download_model_package(
         self,
-        spec: PiperVoiceSpec,
-        destination: Path,
+        spec: SileroVoiceSpec,
+        destination_dir: Path,
         set_percent: Callable[[int], None],
+        *,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
-        """Download ``.onnx`` and ``.onnx.json`` from Hugging Face into ``destination``."""
-        filenames = (
-            f"{spec.voice_id}.onnx",
-            f"{spec.voice_id}.onnx.json",
+        """Stream the ``.pt`` package from ``models.silero.ai`` into staging.
+
+        Args:
+            spec: Silero voice spec with the package URL.
+            destination_dir: Staging directory for the download.
+            set_percent: Callback receiving 5-90 as bytes arrive.
+            transport: Optional httpx transport override (used by tests).
+        """
+        destination = destination_dir / f"{spec.model_id}.pt"
+        expected_bytes = max(1, spec.approx_download_mb * 1_000_000)
+        timeout = httpx.Timeout(
+            _DOWNLOAD_CONNECT_TIMEOUT_S, read=_DOWNLOAD_READ_TIMEOUT_S
         )
-        file_count = len(filenames)
-        span = 90 - 5
-        expected_bytes_per_file = max(
-            1,
-            (spec.approx_download_mb * 1_000_000) // file_count,
-        )
-        for index, filename in enumerate(filenames):
-            percent_min = 5 + (span * index) // file_count
-            percent_max = 5 + (span * (index + 1)) // file_count
-            file_span = percent_max - percent_min
-            download_max = percent_min + (file_span * 8) // 10
-            progress_tqdm = hf_progress_tqdm_factory(
-                set_percent,
-                percent_min=percent_min,
-                percent_max=download_max,
-                expected_bytes=expected_bytes_per_file,
-            )
-            repo_path = f"{spec.hf_repo_relpath}/{filename}"
-            cached_path = Path(
-                hf_hub_download(
-                    repo_id=PIPER_VOICES_REPO_ID,
-                    filename=repo_path,
-                    tqdm_class=progress_tqdm,
-                )
-            )
-            copy_file_with_progress(
-                cached_path,
-                destination / filename,
-                set_percent,
-                percent_min=download_max,
-                percent_max=percent_max,
-            )
+        with (
+            httpx.Client(
+                timeout=timeout, follow_redirects=True, transport=transport
+            ) as client,
+            client.stream("GET", spec.package_url) as response,
+        ):
+            response.raise_for_status()
+            content_length = response.headers.get("Content-Length")
+            if content_length is not None and content_length.isdigit():
+                expected_bytes = max(1, int(content_length))
+            span = _PERCENT_BODY_MAX - _PERCENT_BODY_MIN
+            downloaded = 0
+            with destination.open("wb") as package_file:
+                for chunk in response.iter_bytes(_READ_CHUNK_BYTES):
+                    package_file.write(chunk)
+                    downloaded += len(chunk)
+                    ratio = min(1.0, downloaded / expected_bytes)
+                    set_percent(_PERCENT_BODY_MIN + int(span * ratio))

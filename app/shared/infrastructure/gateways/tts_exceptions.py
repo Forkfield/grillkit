@@ -16,7 +16,7 @@ class QuestionVoiceDisabledError(TtsDomainError):
 
 
 class QuestionVoiceSynthesisError(TtsDomainError):
-    """Raised when the Piper voice is missing or synthesis fails."""
+    """Raised when the TTS voice is missing or synthesis fails."""
 
     def __init__(self, message: str) -> None:
         """Initialize with a user-facing detail.

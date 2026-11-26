@@ -20,7 +20,7 @@ A general chat assistant is flexible, but it does not run an **interview** for y
 | Practice history | Scattered chats | **Dashboard** with past sessions; open **results** and per-section **review** pages after completion |
 | Skip what you already know | You repeat the same prompts | **Known questions** — mark bank items during practice; optionally exclude them when starting a new session |
 | Time pressure | None | Optional **per-round timer** on theory and coding (expired round → 0, move on) |
-| Voice practice | Depends on product | Offline **Whisper** dictation; optional **Piper** question audio; **audio answers** when your model supports it |
+| Voice practice | Depends on product | Offline **Whisper** dictation; optional **Silero** question audio; **audio answers** when your model supports it |
 | Where data lives | Vendor cloud | **Self-hosted**: SQLite + `data/` on your machine; use **Ollama**, vLLM, or any OpenAI-compatible API |
 
 **Structured practice** — You pick tracks, difficulty, and topics; GrillKit builds a question plan and keeps score across the whole session, not a single ad-hoc prompt.
@@ -74,12 +74,12 @@ Coding modes need a running [Judge0](https://github.com/judge0/judge0) instance 
 - **Coding** — Monaco editor, Run (`POST /coding/run`) on public tests, Submit (`WS /coding/ws`) with hidden tests and AI feedback
 - **Question banks** — Python, Database/SQL, System Design, Kafka, RabbitMQ, Docker, Kubernetes, Observability, Airflow, and more (junior / middle / senior where applicable)
 - **Timer** — optional per-round limit on theory and coding; expired rounds score 0 and the session moves on
-- **Voice** — offline Whisper dictation; optional Piper TTS to read theory questions aloud
+- **Voice** — offline Whisper dictation; optional Silero TTS to read theory questions aloud
 - **Audio answers** — record a WAV theory answer when your model supports audio input and Whisper is ready
 - **Results hub** — after you finish, `#/interview/{id}/results` shows overall evaluation and links to **theory** and **coding** review pages with full chat/code history
 - **Known questions** — mark theory or coding bank items as **I know this** during an interview or on review pages; optionally exclude them on **New interview** setup; manage the list at `#/known-questions`
 - **Dashboard** — recent sessions on the home page (completed sessions link to results)
-- **Setup** — model catalog on `#/config`, interview locale, Whisper/Piper downloads from the UI
+- **Setup** — model catalog on `#/config`, interview locale, Whisper/Silero downloads from the UI
 - **Theme** — light theme by default with a **dark mode toggle** (sun/moon) in the navbar; your choice is remembered and follows your system preference on first visit
 - **Deployment** — Docker Compose on port 8000 with `./data` volume for config, DB, and models
 
@@ -100,14 +100,14 @@ docker compose up --build
 
 Open [http://localhost:8000](http://localhost:8000).
 
-Optional **question voice** (Piper TTS, same `app` container):
+Optional **question voice** (Silero TTS on CPU PyTorch, same `app` container):
 
 1. Run `docker compose up` (or `uv run uvicorn app.main:app` for development).
 2. Open `/config`, enable **Read questions aloud**, save.
-3. On the Configuration page, use **Download question voice** when prompted (~60 MB per locale voice from Hugging Face).
-4. Start an interview — questions can play aloud; WAV cache lives under `data/tts-cache/v2/{locale}/`.
+3. On the Configuration page, use **Download question voice** when prompted (~140 MB for Russian, ~57 MB for other locales, from `models.silero.ai`; models are CC BY-NC 4.0, see `NOTICE`).
+4. Start an interview — questions can play aloud; WAV cache lives under `data/tts-cache/v3/{locale}/`.
 
-`./data` on the host holds SQLite, `config.json`, `llm_models.json`, Whisper/Piper models, and TTS cache. Question banks ship in the backend image; the SPA (page, styles, and JS modules) ships in the frontend nginx image.
+`./data` on the host holds SQLite, `config.json`, `llm_models.json`, Whisper/Silero models, and TTS cache. Question banks ship in the backend image; the SPA (page, styles, and JS modules) ships in the frontend nginx image.
 
 If bind-mounted `data/` is not writable (Linux UID mismatch):
 
@@ -128,7 +128,7 @@ On some Linux hosts Judge0 needs **cgroup v1** (`systemd.unified_cgroup_hierarch
 ### First-time flow
 
 1. **Providers & models** (`/config/providers`) — add an OpenAI-compatible provider (base URL + optional API key); the model list is imported automatically from the endpoint's `/models`, and **Load models** re-imports it on demand (a failed attempt is marked on the provider card). Imported models default to no audio; tick **audio** next to a model that accepts multimodal input, or add a single model manually with **Add model**.
-2. **Configuration** (`/config`) — select an interview model, set the interview locale; download Whisper (and optionally a Piper voice) here if you want voice features; test connection, then save.
+2. **Configuration** (`/config`) — select an interview model, set the interview locale; download Whisper (and optionally a Silero voice) here if you want voice features; test connection, then save.
 3. **New interview** (`/setup`) — pick a **session mode** (theory only, coding only, or combined). Choose tracks, levels, topics, how many questions/tasks, optional per-round timers, and whether to **exclude known questions**. Coding modes require Judge0 (see **Coding sessions** above).
 4. **Practice** (`/interview/{id}`) — answer theory questions in the chat (type, dictate, or record audio). On coding phases, use the editor: **Run** to check public tests, **Submit** when ready. Combined sessions switch panels automatically when a section ends (or use **Continue to Coding**). End the interview from the sidebar at any time.
 5. **Review** (`/interview/{id}/results`) — after completion, read the overall evaluation, then open **Theory** or **Coding** review for full conversation history, scores, and feedback.
@@ -159,7 +159,7 @@ Any **OpenAI-compatible** HTTP API works:
 On `/config` (two tabs):
 
 - **Providers & models** tab — provider cards: display name, base URL, API key (stored once per provider, shared by its models). Add models under a provider, load the model list from the endpoint, edit or delete providers/models.
-- **Configuration** tab — **Interview model**: a native select grouped by provider with a filter field; **Locale** — language for AI feedback and speech; **Whisper** — choose size (`small`, `medium`, `large`), each row has its own Download button; **Read questions aloud** — enable Piper, download a voice (~60 MB); then **Test Connection** and save.
+- **Configuration** tab — **Interview model**: a native select grouped by provider with a filter field; **Locale** — language for AI feedback and speech; **Whisper** — choose size (`small`, `medium`, `large`), each row has its own Download button; **Read questions aloud** — enable Silero, download a voice (~60–140 MB); then **Test Connection** and save.
 
 Everything is stored in `data/config.json` and `data/llm_models.json` (both gitignored).
 
@@ -170,7 +170,7 @@ Optional environment variables (full list in [ARCHITECTURE.md](ARCHITECTURE.md#p
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | SQLAlchemy URL (default: SQLite under `data/db/`) |
-| `HF_TOKEN` | Hugging Face token for faster Whisper/Piper downloads |
+| `HF_TOKEN` | Hugging Face token for faster Whisper downloads |
 | `WHISPER_DEVICE` | `cpu` or `cuda` |
 | `WHISPER_COMPUTE_TYPE` | `int8` or `float16` |
 | `CODING_ENABLED` | Enable coding session modes (default `true`; requires healthy Judge0) |

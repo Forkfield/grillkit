@@ -13,7 +13,7 @@ class ArtifactDownloadService:
     """Download lock, progress, and background task orchestration for artifacts.
 
     Each instance carries its own download lock, progress, and error state, so
-    Whisper, Piper, and other artifacts never share one download lock or
+    Whisper, Silero, and other artifacts never share one download lock or
     progress stream.
     """
 

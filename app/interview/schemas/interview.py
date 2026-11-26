@@ -57,7 +57,7 @@ class InterviewPageContext(BaseModel):
         answers: All answer rounds for the chat history.
         current_question: First unanswered answer, if any.
         current_answer_id: Primary key of the current answer row.
-        question_voice_enabled: Whether Piper TTS is enabled in config.
+        question_voice_enabled: Whether question-voice TTS is enabled in config.
         overall_feedback: Parsed final evaluation for completed sessions.
         max_score: Maximum achievable score for display.
         locale_label: Localized language label.

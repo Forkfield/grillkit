@@ -18,7 +18,7 @@ from app.interview.api import router as interview_router
 from app.platform.api import router as platform_router
 from app.platform.domain.speech_runtime import SpeechRuntimeCoordinator
 from app.question_voice.api import router as question_voice_router
-from app.shared.infrastructure.gateways.piper import PiperTtsRuntime
+from app.shared.infrastructure.gateways.silero import SileroTtsRuntime
 from app.shared.infrastructure.gateways.whisper import WhisperSttRuntime
 from app.speech.api import router as speech_router
 from app.theory.api import router as theory_router
@@ -28,10 +28,10 @@ from app.theory.api import router as theory_router
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler.
 
-    Creates the speech runtime coordinator, loads the Whisper model (and Piper
-    when configured) on startup, and unloads them on shutdown.
+    Creates the speech runtime coordinator, loads the Whisper model (and the
+    Silero voice when configured) on startup, and unloads them on shutdown.
     """
-    coordinator = SpeechRuntimeCoordinator(WhisperSttRuntime, PiperTtsRuntime)
+    coordinator = SpeechRuntimeCoordinator(WhisperSttRuntime, SileroTtsRuntime)
     app.state.speech_runtime = coordinator
     await coordinator.startup()
     yield

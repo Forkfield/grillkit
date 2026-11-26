@@ -47,17 +47,17 @@ class TestSpeechSettings:
 class TestQuestionVoiceSettings:
     """Tests for question_voice_settings_from_config."""
 
-    def test_extracts_piper_settings(self):
+    def test_extracts_silero_settings(self):
         """question_voice_settings_from_config yields enabled, voice_id, locale."""
         config = AppConfig(
             question_voice_enabled=True,
-            tts_voice_id="ru_RU-dmitri-medium",
+            tts_voice_id="ru-aidar",
             locale="ru",
         )
         settings = question_voice_settings_from_config(config)
         assert settings == QuestionVoiceSettings(
             enabled=True,
-            voice_id="ru_RU-dmitri-medium",
+            voice_id="ru-aidar",
             locale="ru",
         )
 
@@ -65,19 +65,19 @@ class TestQuestionVoiceSettings:
         """Disabled voice sets enabled flag to False."""
         config = AppConfig(
             question_voice_enabled=False,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
             locale="en",
         )
         settings = question_voice_settings_from_config(config)
         assert settings.enabled is False
-        assert settings.voice_id == "en_US-lessac-medium"
+        assert settings.voice_id == "en-en_0"
         assert settings.locale == "en"
 
     def test_question_voice_settings_is_frozen(self):
         """QuestionVoiceSettings dataclass is immutable."""
         settings = QuestionVoiceSettings(
             enabled=True,
-            voice_id="en_US-lessac-medium",
+            voice_id="en-en_0",
             locale="en",
         )
         with pytest.raises(FrozenInstanceError):
@@ -87,17 +87,17 @@ class TestQuestionVoiceSettings:
         """Mutating voice_id on QuestionVoiceSettings raises error."""
         settings = QuestionVoiceSettings(
             enabled=True,
-            voice_id="en_US-lessac-medium",
+            voice_id="en-en_0",
             locale="en",
         )
         with pytest.raises(FrozenInstanceError):
-            settings.voice_id = "ru_RU-dmitri-medium"
+            settings.voice_id = "ru-aidar"
 
     def test_question_voice_settings_is_frozen_for_locale(self):
         """Mutating locale on QuestionVoiceSettings raises error."""
         settings = QuestionVoiceSettings(
             enabled=True,
-            voice_id="en_US-lessac-medium",
+            voice_id="en-en_0",
             locale="en",
         )
         with pytest.raises(FrozenInstanceError):
@@ -108,5 +108,5 @@ class TestQuestionVoiceSettings:
         config = AppConfig()
         settings = question_voice_settings_from_config(config)
         assert settings.enabled is False
-        assert settings.voice_id == "en_US-lessac-medium"
+        assert settings.voice_id == "en-en_0"
         assert settings.locale == "en"

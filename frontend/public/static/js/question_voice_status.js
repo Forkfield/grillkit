@@ -27,7 +27,7 @@
         }
         const localeLabel = localeSelect.options[localeSelect.selectedIndex].text;
         subtitle.textContent =
-            "Offline Piper voice for reading interview questions aloud in " +
+            "Offline Silero voice for reading interview questions aloud in " +
             localeLabel;
     }
 

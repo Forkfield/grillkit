@@ -24,11 +24,11 @@ class SpeechSettings:
 
 @dataclass(frozen=True)
 class QuestionVoiceSettings:
-    """Piper question-voice settings from provider configuration.
+    """Silero question-voice settings from provider configuration.
 
     Attributes:
         enabled: Whether question TTS is enabled.
-        voice_id: Piper voice identifier.
+        voice_id: Silero voice identifier.
         locale: Interview locale for status messaging.
     """
 
@@ -55,7 +55,7 @@ def speech_settings_from_config(config: "AppConfig") -> SpeechSettings:
 def question_voice_settings_from_config(
     config: "AppConfig",
 ) -> QuestionVoiceSettings:
-    """Extract Piper settings from a provider configuration.
+    """Extract Silero voice settings from a provider configuration.
 
     Args:
         config: Saved or submitted provider configuration.

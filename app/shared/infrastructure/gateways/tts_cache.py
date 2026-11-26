@@ -11,21 +11,22 @@ from app.shared.infrastructure.gateways.tts_exceptions import (
 )
 from app.shared.locales import normalize_locale
 from app.shared.paths import TTS_CACHE_DIR
+from app.shared.tts_terms import apply_term_substitutions
 from app.speech.domain.tts_engine import TtsEngine
 
 _WHITESPACE_RE = re.compile(r"\s+")
-_CACHE_VERSION = "v2"
+_CACHE_VERSION = "v3"
 
 
 class TtsCacheService:
-    """Store and retrieve WAV files under ``data/tts-cache/v2/{locale}/``."""
+    """Store and retrieve WAV files under ``data/tts-cache/v3/{locale}/``."""
 
     @staticmethod
     def normalize_text(text: str) -> str:
         """Collapse whitespace for stable cache keys.
 
         Args:
-            text: Raw question text snapshot.
+            text: Prepared question text snapshot.
 
         Returns:
             Normalized text used for hashing.
@@ -38,7 +39,7 @@ class TtsCacheService:
 
         Args:
             locale: Interview locale code.
-            text: Question text snapshot.
+            text: Prepared question text (term substitutions applied).
 
         Returns:
             Path to ``{sha256}.wav`` under the locale directory.
@@ -58,11 +59,15 @@ class TtsCacheService:
     ) -> Path:
         """Return a cached WAV path, synthesizing on miss.
 
+        The raw question text is prepared with the terms dictionary first, so
+        the cache key covers both the question text and the current
+        substitutions, and the engine never receives dropped Latin terms.
+
         Args:
             engine: TTS engine used to synthesize on a cache miss.
-            voice_id: Piper voice id from provider configuration.
+            voice_id: Silero voice id from provider configuration.
             locale: Interview locale code.
-            text: Question text snapshot.
+            text: Raw question text snapshot.
 
         Returns:
             Path to an existing or newly written WAV file.
@@ -70,7 +75,8 @@ class TtsCacheService:
         Raises:
             QuestionVoiceSynthesisError: When the voice is missing or synthesis fails.
         """
-        path = TtsCacheService.cache_path(locale, text)
+        prepared = apply_term_substitutions(text, locale)
+        path = TtsCacheService.cache_path(locale, prepared)
         if path.is_file():
             return path
 
@@ -86,7 +92,7 @@ class TtsCacheService:
                 raise QuestionVoiceSynthesisError(detail)
 
         try:
-            audio = await engine.synthesize_wav_bytes(text)
+            audio = await engine.synthesize_wav_bytes(prepared)
         except Exception as exc:
             raise QuestionVoiceSynthesisError("TTS synthesis failed.") from exc
 

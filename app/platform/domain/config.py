@@ -96,7 +96,7 @@ class AppConfig:
         locale: Interview language for AI feedback and voice input.
         speech_model_size: Whisper model size for offline dictation.
         question_voice_enabled: Read interview questions aloud when TTS is available.
-        tts_voice_id: Piper voice id for question audio synthesis.
+        tts_voice_id: Silero voice id for question audio synthesis.
         llm_preset_id: Active catalog model id from ``llm_models.json``.
     """
 

@@ -8,9 +8,9 @@ from app.platform.domain.config import AppConfig
 from app.question_voice.queries.voice_status import (
     VoiceStatus as QuestionVoiceStatusService,
 )
-from app.question_voice.schemas import PiperVoiceStatusRead
+from app.question_voice.schemas import VoiceStatusRead
 from app.shared.infrastructure.artifact_composition import (
-    get_default_piper_voice_service,
+    get_default_silero_voice_service,
 )
 
 
@@ -20,53 +20,53 @@ class TestResolveTtsTarget:
     def test_defaults_when_no_config_no_overrides(self):
         """No config and no overrides use default locale and voice."""
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(None)
-        assert voice_id == "en_US-lessac-medium"
+        assert voice_id == "en-en_0"
         assert locale == "en"
 
     def test_uses_config_when_present(self):
         """Saved config determines voice and locale."""
         config = AppConfig(
             locale="ru",
-            tts_voice_id="ru_RU-dmitri-medium",
+            tts_voice_id="ru-aidar",
         )
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(config)
-        assert voice_id == "ru_RU-dmitri-medium"
+        assert voice_id == "ru-aidar"
         assert locale == "ru"
 
     def test_locale_override_takes_precedence(self):
         """Query locale overrides saved config locale and voice."""
         config = AppConfig(
             locale="en",
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
         )
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(
             config, locale="de"
         )
         assert locale == "de"
-        assert voice_id == "de_DE-thorsten-medium"
+        assert voice_id == "de-eva_k"
 
     def test_voice_id_override_takes_precedence(self):
         """Query voice_id overrides all other sources."""
         config = AppConfig(
             locale="en",
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
         )
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(
-            config, voice_id="fr_FR-siwis-medium"
+            config, voice_id="fr-fr_0"
         )
-        assert voice_id == "fr_FR-siwis-medium"
+        assert voice_id == "fr-fr_0"
         assert locale == "en"
 
     def test_locale_and_voice_id_override_together(self):
         """Both query params override saved config."""
         config = AppConfig(
             locale="en",
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
         )
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(
-            config, locale="es", voice_id="es_ES-davefx-medium"
+            config, locale="es", voice_id="es-es_0"
         )
-        assert voice_id == "es_ES-davefx-medium"
+        assert voice_id == "es-es_0"
         assert locale == "es"
 
     def test_defaults_with_only_locale_override(self):
@@ -74,15 +74,15 @@ class TestResolveTtsTarget:
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(
             None, locale="fr"
         )
-        assert voice_id == "fr_FR-siwis-medium"
+        assert voice_id == "fr-fr_0"
         assert locale == "fr"
 
     def test_defaults_with_only_voice_id_override(self):
         """No config but voice_id override uses that voice and default locale."""
         voice_id, locale = QuestionVoiceStatusService.resolve_tts_target(
-            None, voice_id="de_DE-thorsten-medium"
+            None, voice_id="de-eva_k"
         )
-        assert voice_id == "de_DE-thorsten-medium"
+        assert voice_id == "de-eva_k"
         assert locale == "en"
 
 
@@ -94,19 +94,19 @@ class TestResolveForConfig:
         config = AppConfig(
             locale="en",
             question_voice_enabled=True,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
         )
-        ready = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        ready = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="ready",
             percent=100,
             message="Ready",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         with patch.object(
-            get_default_piper_voice_service(),
+            get_default_silero_voice_service(),
             "get_status",
             return_value=ready,
         ):
@@ -120,17 +120,17 @@ class TestResolveForConfig:
             locale="en",
             question_voice_enabled=False,
         )
-        missing = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        missing = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="missing",
             percent=0,
             message="Not installed",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         with patch.object(
-            get_default_piper_voice_service(),
+            get_default_silero_voice_service(),
             "get_status",
             return_value=missing,
         ):
@@ -140,17 +140,17 @@ class TestResolveForConfig:
 
     def test_no_config_returns_default_and_false(self):
         """No config returns default voice status and disabled."""
-        missing = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        missing = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="missing",
             percent=0,
             message="Not installed",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         with patch.object(
-            get_default_piper_voice_service(),
+            get_default_silero_voice_service(),
             "get_status",
             return_value=missing,
         ):
@@ -163,14 +163,14 @@ class TestApiPayload:
 
     def test_serializes_status_with_enabled_true(self):
         """Enabled flag is added to payload."""
-        status = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        status = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="ready",
             percent=100,
             message="Ready",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
             loaded_in_memory=True,
         )
         payload = QuestionVoiceStatusService.api_payload(status, enabled=True)
@@ -180,14 +180,14 @@ class TestApiPayload:
 
     def test_keeps_missing_state_when_disabled(self):
         """Missing state is reported as-is; enabled flag carries the off state."""
-        status = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        status = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="missing",
             percent=0,
             message="Not installed",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         payload = QuestionVoiceStatusService.api_payload(status, enabled=False)
         assert payload["state"] == "missing"
@@ -195,14 +195,14 @@ class TestApiPayload:
 
     def test_preserves_missing_when_enabled(self):
         """Missing state stays missing when voice is enabled."""
-        status = PiperVoiceStatusRead(
-            voice_id="en_US-lessac-medium",
+        status = VoiceStatusRead(
+            voice_id="en-en_0",
             locale="en",
             locale_label="English",
             state="missing",
             percent=0,
             message="Not installed",
-            voice_display_name="Lessac (US English, medium)",
+            voice_display_name="en_0 (US English)",
         )
         payload = QuestionVoiceStatusService.api_payload(status, enabled=True)
         assert payload["state"] == "missing"
@@ -210,14 +210,14 @@ class TestApiPayload:
     def test_preserves_non_missing_states_when_disabled(self):
         """Non-missing states are unchanged even when disabled."""
         for state in ("ready", "downloading", "error"):
-            status = PiperVoiceStatusRead(
-                voice_id="en_US-lessac-medium",
+            status = VoiceStatusRead(
+                voice_id="en-en_0",
                 locale="en",
                 locale_label="English",
                 state=state,
                 percent=50,
                 message="Progress",
-                voice_display_name="Lessac (US English, medium)",
+                voice_display_name="en_0 (US English)",
             )
             payload = QuestionVoiceStatusService.api_payload(status, enabled=False)
             assert payload["state"] == state

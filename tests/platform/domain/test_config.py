@@ -121,17 +121,17 @@ class TestAppConfig:
 
     def test_resolve_tts_voice_keeps_chosen_voice_for_same_locale(self):
         """Same locale keeps the previously user-selected voice."""
-        existing = AppConfig(locale="ru", tts_voice_id="ru_RU-dmitri-medium")
-        assert resolve_tts_voice_id(existing, "ru") == "ru_RU-dmitri-medium"
+        existing = AppConfig(locale="ru", tts_voice_id="ru-aidar")
+        assert resolve_tts_voice_id(existing, "ru") == "ru-aidar"
 
     def test_resolve_tts_voice_defaults_on_locale_change(self):
         """Locale change falls back to the default voice for the new locale."""
-        existing = AppConfig(locale="ru", tts_voice_id="ru_RU-dmitri-medium")
-        assert resolve_tts_voice_id(existing, "en") == "en_US-lessac-medium"
+        existing = AppConfig(locale="ru", tts_voice_id="ru-aidar")
+        assert resolve_tts_voice_id(existing, "en") == "en-en_0"
 
     def test_resolve_tts_voice_defaults_without_existing_config(self):
         """No existing config uses the default voice for the locale."""
-        assert resolve_tts_voice_id(None, "fr") == "fr_FR-siwis-medium"
+        assert resolve_tts_voice_id(None, "fr") == "fr-fr_0"
 
     def _effective(self, **overrides) -> EffectiveModelConfig:
         base = {

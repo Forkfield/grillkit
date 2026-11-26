@@ -6,7 +6,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.question_voice.schemas import PiperVoiceStatusRead
+from app.question_voice.schemas import VoiceStatusRead
 from app.shared.locales import DEFAULT_LOCALE
 from app.shared.stt_models import (
     DEFAULT_STT_MODEL_SIZE,
@@ -27,8 +27,8 @@ class AppConfigRead(BaseModel):
         timeout: Request timeout in seconds.
         locale: Interview language for AI feedback and voice.
         speech_model_size: Whisper model size for dictation.
-        question_voice_enabled: Whether Piper TTS reads questions aloud.
-        tts_voice_id: Piper voice id for question audio.
+        question_voice_enabled: Whether Silero TTS reads questions aloud.
+        tts_voice_id: Silero voice id for question audio.
         llm_preset_id: Active catalog model id, if set.
     """
 
@@ -145,7 +145,7 @@ class ConfigPageContext(BaseModel):
         speech_model_specs: Whisper size options keyed by size slug.
         speech_model_status: Whisper install/load status snapshot.
         speech_model_banner: Whether to show the speech model banner.
-        tts_voice_status: Piper question-voice status snapshot.
+        tts_voice_status: Silero question-voice status snapshot.
         tts_voice_banner: Whether to show the question-voice banner.
         llm_presets: Interview model catalog options.
         llm_providers: Providers with their models for the providers tab.
@@ -161,7 +161,7 @@ class ConfigPageContext(BaseModel):
     speech_model_specs: dict[str, SpeechModelSpecRead]
     speech_model_status: WhisperModelStatusRead | None = None
     speech_model_banner: bool = False
-    tts_voice_status: PiperVoiceStatusRead | None = None
+    tts_voice_status: VoiceStatusRead | None = None
     tts_voice_banner: bool = False
     llm_presets: list[LLMPresetOptionRead] = Field(default_factory=list)
     llm_providers: list[LLMProviderRead] = Field(default_factory=list)
@@ -333,7 +333,7 @@ class SaveConfigBody(BaseModel):
         timeout: Request timeout in seconds.
         locale: Interview language code.
         speech_model_size: Whisper model size slug.
-        question_voice_enabled: Whether Piper TTS reads questions aloud.
+        question_voice_enabled: Whether Silero TTS reads questions aloud.
     """
 
     llm_preset_id: str

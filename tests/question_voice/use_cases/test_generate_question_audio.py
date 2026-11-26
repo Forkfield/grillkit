@@ -96,7 +96,7 @@ class TestGetQuestionAudioPath:
         engine = _engine()
         config = AppConfig(
             question_voice_enabled=True,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
             locale="en",
         )
         answer = _make_answer(answer_id=7)
@@ -125,7 +125,7 @@ class TestGetQuestionAudioPath:
         assert result == cached_path
         mock_cache.assert_called_once_with(
             engine,
-            "en_US-lessac-medium",
+            "en-en_0",
             "en",
             "What is Python?",
         )
@@ -136,7 +136,7 @@ class TestGetQuestionAudioPath:
         engine = _engine()
         config = AppConfig(
             question_voice_enabled=True,
-            tts_voice_id="en_US-lessac-medium",
+            tts_voice_id="en-en_0",
             locale="en",
         )
         answer = _make_answer(answer_id=3)
@@ -163,7 +163,7 @@ class TestGetQuestionAudioPath:
         assert result == cached_path
         mock_cache.assert_called_once_with(
             engine,
-            "en_US-lessac-medium",
+            "en-en_0",
             "en",
             "What is Python?",
         )

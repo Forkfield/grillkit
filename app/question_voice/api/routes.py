@@ -1,6 +1,6 @@
 # Copyright 2026 GrillKit Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Question-voice HTTP routes (Piper status and download)."""
+"""Question-voice HTTP routes (Silero status and download)."""
 
 from typing import Annotated
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from app.platform.api.deps import ConfigServiceDep
-from app.question_voice.api.deps import PiperVoiceServiceDep
+from app.question_voice.api.deps import SileroVoiceServiceDep
 from app.question_voice.queries.voice_status import (
     VoiceStatus as QuestionVoiceStatusService,
 )
@@ -22,12 +22,12 @@ async def tts_status(
     locale: Annotated[str | None, Query()] = None,
     voice_id: Annotated[str | None, Query()] = None,
 ) -> JSONResponse:
-    """Return Piper question-voice status for config and interview banners.
+    """Return Silero question-voice status for config and interview banners.
 
     Args:
         config_service: Provider configuration service.
         locale: Interview locale when provider config is not saved yet.
-        voice_id: Piper voice id when provider config is not saved yet.
+        voice_id: Silero voice id when provider config is not saved yet.
 
     Returns:
         JSON status payload.
@@ -44,17 +44,17 @@ async def tts_status(
 @router.post("/tts/voice/download")
 async def tts_voice_download(
     config_service: ConfigServiceDep,
-    piper_voice_service: PiperVoiceServiceDep,
+    silero_voice_service: SileroVoiceServiceDep,
     locale: Annotated[str | None, Query()] = None,
     voice_id: Annotated[str | None, Query()] = None,
 ) -> JSONResponse:
-    """Start downloading the configured Piper voice for question audio.
+    """Start downloading the configured Silero voice for question audio.
 
     Args:
         config_service: App configuration service.
-        piper_voice_service: Piper voice download service.
+        silero_voice_service: Silero voice download service.
         locale: Interview locale when provider config is not saved yet.
-        voice_id: Piper voice id when provider config is not saved yet.
+        voice_id: Silero voice id when provider config is not saved yet.
 
     Returns:
         JSON status payload after scheduling work.
@@ -65,7 +65,7 @@ async def tts_voice_download(
         locale=locale,
         voice_id=voice_id,
     )
-    status = await piper_voice_service.start_download(
+    status = await silero_voice_service.start_download(
         resolved_voice,
         resolved_locale,
     )
