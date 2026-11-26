@@ -15,7 +15,7 @@ Work in progress is accumulated under `[Unreleased]`; on release, that section b
 
 - **Question voice engine** — Piper is replaced by **Silero TTS** (in-process, CPU PyTorch). Russian uses `v5_5_ru` (automatic stress, homographs, question intonation); en/de/es/fr use Silero v3 models. Voices download from `models.silero.ai` into `data/silero-voices/` (no Hugging Face token needed). Saved Piper voice ids in `config.json` are remapped automatically — re-download the voice on `/config`. Silero models are licensed CC BY-NC 4.0 (see `NOTICE`)
 - **Russian question narration** — Latin technical terms (Kubernetes, CI/CD, PostgreSQL…) and numbers are expanded to Cyrillic words before synthesis; the TTS cache moves to `data/tts-cache/v3/`
-- **Docker image** — about 0.6–1 GB larger because of the CPU-only PyTorch wheel; `piper-tts` is removed
+- **Docker image** — about 1.2 GB larger (920 MB → 2.1 GB) because of the CPU-only PyTorch wheel; `piper-tts` is removed
 - **STT/TTS naming** — unified entity naming: general speech-to-text / text-to-speech concepts are now `Stt` / `Tts`, concrete implementations are `WhisperStt` / `PiperTts` (e.g. `WhisperSttRuntime`, `PiperTtsRuntime`, `stt_models`, `whisper_stt`). Internal only; no API or config format changes.
 - **Configuration navigation** — the config page sections are now a proper sidebar list (icon, label, description) instead of plain buttons
 - **Static assets** — the SPA shell, styles and scripts are served with `Cache-Control: no-cache`, so a rebuilt UI is never masked by a stale browser cache
