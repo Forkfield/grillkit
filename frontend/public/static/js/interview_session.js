@@ -190,7 +190,7 @@
             case "feedback":
                 clearEvaluationWatchdog();
                 showEvaluating(false);
-                if (data.timed_out) {
+                if (data.timed_out || data.skipped) {
                     showTimeoutBubble(data.feedback);
                 }
                 stopQuestionTimer();
@@ -286,6 +286,34 @@
                 type: "answer",
                 question_id: currentQuestionId,
                 answer_text: answerText,
+            })
+        );
+    }
+
+    function skipQuestion() {
+        if (isSubmitting || !ws || ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        if (typeof window.grillkitAbortDictation === "function") {
+            window.grillkitAbortDictation();
+        }
+        if (typeof window.grillkitAbortAudioRecording === "function") {
+            window.grillkitAbortAudioRecording();
+        }
+        isSubmitting = true;
+        window.isSubmitting = true;
+
+        var textarea = document.getElementById("answer_text");
+        if (textarea) {
+            textarea.value = "";
+        }
+        enableForm(false);
+        stopQuestionTimer();
+
+        ws.send(
+            JSON.stringify({
+                type: "skip",
+                question_id: currentQuestionId,
             })
         );
     }
@@ -473,6 +501,7 @@
     function enableForm(enabled) {
         var textarea = document.getElementById("answer_text");
         var submitBtn = document.getElementById("submit-btn");
+        var skipBtn = document.getElementById("skip-btn");
         var endBtn = document.getElementById("end-btn");
         var dictationBtn = document.getElementById("dictation-mic-btn");
         var audioRecordBtn = document.getElementById("audio-record-btn");
@@ -486,6 +515,9 @@
         }
         if (submitBtn) {
             submitBtn.disabled = !enabled;
+        }
+        if (skipBtn) {
+            skipBtn.disabled = !enabled;
         }
         if (dictationBtn) {
             dictationBtn.disabled = !enabled;
@@ -560,6 +592,10 @@
         var submitBtn = document.getElementById("submit-btn");
         if (submitBtn) {
             submitBtn.addEventListener("click", submitAnswer);
+        }
+        var skipBtn = document.getElementById("skip-btn");
+        if (skipBtn) {
+            skipBtn.addEventListener("click", skipQuestion);
         }
         var endBtn = document.getElementById("end-btn");
         if (endBtn) {

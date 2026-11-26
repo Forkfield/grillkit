@@ -8,6 +8,7 @@ Work in progress is accumulated under `[Unreleased]`; on release, that section b
 
 ### Added
 
+- **Skip question** — a **Skip** button next to **Submit Answer** in the theory phase closes the current question (or its follow-up) with 0 points and moves on without an AI call
 - **Automatic model import** — adding a provider immediately loads the model list from its endpoint into the catalog; **Load models** on the provider card re-imports it on demand. A failed attempt shows a **Discovery failed** mark with the error on the provider card
 - **Per-model audio flag** — every model in the provider list has an inline **audio** checkbox (defaults to off for imported models); toggling it no longer requires opening the edit form
 

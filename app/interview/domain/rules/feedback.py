@@ -2,7 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Localized feedback strings for interview services."""
 
-from app.shared.locales import TIMEOUT_FEEDBACK_MESSAGES, localized_string
+from app.shared.locales import (
+    SKIP_FEEDBACK_MESSAGES,
+    TIMEOUT_FEEDBACK_MESSAGES,
+    localized_string,
+)
 
 
 def timeout_feedback_for_locale(locale: str) -> str:
@@ -15,3 +19,15 @@ def timeout_feedback_for_locale(locale: str) -> str:
         Short feedback string shown to the user.
     """
     return localized_string(locale, TIMEOUT_FEEDBACK_MESSAGES)
+
+
+def skip_feedback_for_locale(locale: str) -> str:
+    """Return user-facing feedback text for a round skipped by the user.
+
+    Args:
+        locale: Interview locale code (e.g. ``en``, ``ru``).
+
+    Returns:
+        Short feedback string shown to the user.
+    """
+    return localized_string(locale, SKIP_FEEDBACK_MESSAGES)

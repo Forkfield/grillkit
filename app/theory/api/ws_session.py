@@ -73,6 +73,15 @@ class TheoryWebSocketService:
                 yield message
             return
 
+        if msg_type == "skip":
+            async for message in TheoryWebSocketService._handle_skip(
+                raw,
+                interview_id=interview_id,
+                submission_service=submission_service,
+            ):
+                yield message
+            return
+
         if msg_type == "ping":
             yield TheoryWebSocketService._handle_ping(
                 interview_id,
@@ -165,6 +174,30 @@ class TheoryWebSocketService:
                 "type": "error",
                 "message": f"Timeout processing failed: {exc}",
             }
+
+    @staticmethod
+    async def _handle_skip(
+        raw: dict[str, Any],
+        *,
+        interview_id: str,
+        submission_service: TheorySubmissionService,
+    ) -> AsyncIterator[dict[str, Any]]:
+        question_id = raw.get("question_id", "")
+        if not question_id:
+            yield {"type": "error", "message": "question_id is required"}
+            return
+
+        try:
+            async for event in submission_service.stream_skip_submission(
+                interview_id=interview_id,
+                question_id=question_id,
+            ):
+                yield event_to_message(event)
+        except (InterviewDomainError, TheoryDomainError) as exc:
+            yield domain_error_to_wire(exc)
+        except Exception as exc:
+            logger.exception("WebSocket skip failed for session %s", interview_id)
+            yield {"type": "error", "message": f"Skip failed: {exc}"}
 
     @staticmethod
     def _handle_ping(

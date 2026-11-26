@@ -43,6 +43,7 @@ class TheoryTask(TimedTask):
     """
 
     TIME_EXPIRED_ANSWER_TEXT = "[Time expired]"
+    SKIPPED_ANSWER_TEXT = "[Skipped]"
     NEW_ID = 0
 
     id: int
@@ -241,6 +242,29 @@ class TheorySection(Section[TheoryTask]):
         """
         tasks = tuple(
             replace(task, answer_text=text) if task.id == task_id else task
+            for task in self.tasks
+        )
+        return replace(self, tasks=tasks)
+
+    def with_skipped_round(self, task_id: int, feedback: str) -> TheorySection:
+        """Return aggregate with a task round skipped by the user (zero score).
+
+        Args:
+            task_id: Primary key of the task row to skip.
+            feedback: Localized feedback stored on the round.
+
+        Returns:
+            A new aggregate with the skip marker, ``score=0`` and ``feedback``.
+        """
+        tasks = tuple(
+            replace(
+                task,
+                answer_text=TheoryTask.SKIPPED_ANSWER_TEXT,
+                score=0,
+                feedback=feedback,
+            )
+            if task.id == task_id
+            else task
             for task in self.tasks
         )
         return replace(self, tasks=tasks)

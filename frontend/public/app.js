@@ -2558,6 +2558,7 @@
           '<span id="audio-record-hint" class="audio-record-hint" hidden>Recording… click Cancel or Send audio</span>';
       }
       body +=
+        '<button type="button" id="skip-btn" class="btn btn-outline" title="Skip this question (0 points)">Skip</button>' +
         '<button type="button" id="submit-btn" class="btn btn-primary">Submit Answer</button>' +
         "</div>" +
         '<div id="evaluating-indicator" class="evaluating-indicator" style="display:none;"><div class="spinner"></div><span>AI is evaluating your answer...</span></div>' +

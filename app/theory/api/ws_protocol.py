@@ -86,6 +86,7 @@ def server_message_from_event(
             feedback=event.feedback,
             timer_remaining_seconds=event.timer_remaining_seconds,
             follow_up_answer_id=event.follow_up_answer_id,
+            skipped=event.skipped,
         )
     if isinstance(event, InterviewCompletedEvent):
         return InterviewCompletedMessage(

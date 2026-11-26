@@ -28,6 +28,7 @@ class AnswerFeedbackEvent:
         follow_up_text: Follow-up question text when applicable.
         next_question: Next unanswered question payload for the client.
         timed_out: Whether this round ended due to timer expiry.
+        skipped: Whether the user skipped this round.
         feedback: Short feedback for the client (e.g. timeout message).
         timer_remaining_seconds: Seconds left on the next round timer, if any.
         follow_up_answer_id: Task row id for a newly created follow-up round.
@@ -43,6 +44,7 @@ class AnswerFeedbackEvent:
     feedback: str | None = None
     timer_remaining_seconds: int | None = None
     follow_up_answer_id: int | None = None
+    skipped: bool = False
 
 
 @dataclass(frozen=True)

@@ -49,6 +49,7 @@ class AnswerFeedbackMessage(BaseModel):
     feedback: str | None = None
     timer_remaining_seconds: int | None = None
     follow_up_answer_id: int | None = None
+    skipped: bool = False
 
 
 class InterviewCompletedMessage(BaseModel):

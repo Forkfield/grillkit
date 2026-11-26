@@ -22,6 +22,14 @@ TIMEOUT_FEEDBACK_MESSAGES: Final[dict[str, str]] = {
     "de": "Die Zeit ist abgelaufen. Für diese Antwort wurden 0 Punkte vergeben.",
 }
 
+SKIP_FEEDBACK_MESSAGES: Final[dict[str, str]] = {
+    "en": "Question skipped. You received 0 points for this answer.",
+    "ru": "Вопрос пропущен. За этот ответ начислено 0 баллов.",
+    "fr": "Question passée. Vous avez reçu 0 point pour cette réponse.",
+    "es": "Pregunta omitida. Has recibido 0 puntos por esta respuesta.",
+    "de": "Frage übersprungen. Für diese Antwort wurden 0 Punkte vergeben.",
+}
+
 TIMEOUT_CHAT_LABELS: Final[dict[str, str]] = {
     "en": "Time expired — 0 points",
     "ru": "Время вышло — 0 баллов",

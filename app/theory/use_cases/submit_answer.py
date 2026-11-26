@@ -14,12 +14,14 @@ import logging
 from app.ai.base import AIProvider
 from app.ai.stt import Stt
 from app.interview.domain.events import (
+    AnswerFeedbackEvent,
     AnswerSavedEvent,
     EvaluatingEvent,
     InterviewEvent,
     TranscriptEvent,
 )
 from app.interview.domain.exceptions import InterviewNotFoundError
+from app.interview.domain.rules.feedback import skip_feedback_for_locale
 from app.interview.repositories.uow import InterviewUnitOfWork
 from app.platform.repo.config_composition import (
     get_default_catalog_service,
@@ -474,6 +476,79 @@ class SubmitTheoryAnswer:
             round_num=round_num,
             order=order,
             locale=locale,
+        )
+
+    async def stream_skip_submission(
+        self,
+        interview_id: str,
+        question_id: str,
+    ) -> AsyncIterator[InterviewEvent]:
+        """Skip the open round of ``question_id`` with zero score and advance.
+
+        No AI evaluation runs. Skipping a follow-up round moves on to the next
+        bank question, like a timeout.
+
+        Args:
+            interview_id: The interview UUID.
+            question_id: The question ID whose open round is skipped.
+
+        Yields:
+            One ``AnswerFeedbackEvent`` with ``skipped=True``.
+
+        Raises:
+            InterviewNotFoundError: If the interview does not exist.
+            InterviewNotActiveError: If the interview is already completed.
+            TheorySectionNotFoundError: If the theory section does not exist.
+            UnansweredTaskNotFoundError: If the question has no open round.
+        """
+        try:
+            yield self._skip_open_round(interview_id, question_id)
+            self._commit_submission_workflow()
+        except Exception:
+            self._rollback_submission_workflow()
+            raise
+
+    def _skip_open_round(
+        self,
+        interview_id: str,
+        question_id: str,
+    ) -> AnswerFeedbackEvent:
+        """Persist the skipped round and activate the next task.
+
+        Args:
+            interview_id: The interview UUID.
+            question_id: The question ID whose open round is skipped.
+
+        Returns:
+            Feedback event carrying the next question payload.
+        """
+        self._ensure_interview_active(interview_id)
+
+        section = self._uow.theory_sections.get_aggregate(interview_id)
+        if section is None:
+            raise TheorySectionNotFoundError(interview_id)
+        section.ensure_active()
+
+        current = section.find_unanswered_for_question(question_id)
+        feedback_text = skip_feedback_for_locale(section.locale)
+        updated = section.with_skipped_round(current.id, feedback_text)
+        self._uow.theory_sections.save_aggregate(updated)
+
+        next_question, timer_remaining = self._navigation.advance_to_next_unanswered(
+            interview_id,
+            question_id=question_id,
+            round_num=current.round,
+        )
+        return AnswerFeedbackEvent(
+            question_id=question_id,
+            order=current.order,
+            round=current.round,
+            follow_up_needed=False,
+            follow_up_text=None,
+            next_question=next_question,
+            feedback=feedback_text,
+            timer_remaining_seconds=timer_remaining,
+            skipped=True,
         )
 
     async def stream_answer_submission(
