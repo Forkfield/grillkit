@@ -39,8 +39,8 @@ class TestWhisperStt:
         assert call_kwargs["task"] == "transcribe"
 
     @pytest.mark.asyncio
-    async def test_uses_vad_filter_false(self):
-        """Transcription disables VAD filtering."""
+    async def test_uses_vad_filter(self):
+        """Transcription enables VAD and does not condition on previous text."""
         segment = FakeSegment(" test")
         model = MagicMock()
         model.transcribe.return_value = ([segment], None)
@@ -50,7 +50,8 @@ class TestWhisperStt:
         await transcriber.transcribe(audio, "ru")
 
         call_kwargs = model.transcribe.call_args.kwargs
-        assert call_kwargs["vad_filter"] is False
+        assert call_kwargs["vad_filter"] is True
+        assert call_kwargs["condition_on_previous_text"] is False
 
     @pytest.mark.asyncio
     async def test_normalizes_locale(self):

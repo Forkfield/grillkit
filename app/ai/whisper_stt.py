@@ -46,7 +46,15 @@ class WhisperStt:
                 audio,
                 language=language,
                 task="transcribe",
-                vad_filter=False,
+                # Drop silence/noise before decoding: Whisper hallucinates
+                # text (random phrases, CJK glyphs) on non-speech audio.
+                vad_filter=True,
+                # Treat pauses shorter than 0.7 s as part of speech so
+                # natural hesitations do not split or clip the answer.
+                vad_parameters={"min_silence_duration_ms": 700},
+                # Decode each window independently so one hallucinated
+                # segment is not fed forward and amplified in the next.
+                condition_on_previous_text=False,
             )
             segment_list = list(segments)
             result = "".join((segment.text or "") for segment in segment_list).strip()
